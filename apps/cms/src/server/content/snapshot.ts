@@ -19,9 +19,7 @@ import {
   normalizeBase,
   readLocale,
   resolveChain,
-  servedLocales,
 } from '#/lib/content-locale'
-import type { LocaleCtx } from '#/lib/content-locale'
 import { entryPublicUrl, readEntrySeo, withoutSeo } from '#/lib/seo'
 import type {
   EntryData,
@@ -66,6 +64,8 @@ import {
 } from './locale-validation.ts'
 import {
   entryLinkPath,
+  placeLinkTarget,
+  shippedLocales,
   linkTargetSiteIds,
   loadLinkTargets,
   mapRichTextValues,
@@ -1109,71 +1109,6 @@ function previewLanguageFields(
   return {
     isFallback: expanded.isFallback ?? false,
     localeStatus: previewLocaleStatus(draft, languages, fields),
-  }
-}
-
-/**
- * Languages an entry ships in: the complete ones, in site order. A language
- * with nothing filled in does not ship even when it has no required fields
- * (sections without required fields are complete in every language). The
- * main language always ships when it is complete.
- */
-function shippedLocales(data: EntryData, ctx: LocaleCtx): string[] {
-  return servedLocales(data, ctx).filter(
-    (locale) => locale === ctx.main || localeStatus(data, locale, ctx).started,
-  )
-}
-
-/**
- * Where a link to an entry points in `locale`: the language the target's path
- * is taken from, with that language's view, route and slug. The language is
- * `locale` when its translation ships in `data` (the release rule), else the
- * main language. Go live and draft previews both place links with this, so a
- * link resolves the same way in both. `language` is null on a single-language
- * site.
- */
-function placeLinkTarget(
-  target: {
-    data: EntryData
-    fields: Field[]
-    slug: string
-    routePattern: string
-    localizedRoutes?: Record<string, string> | null
-  },
-  languages: SiteLanguages | null,
-  locale: string | null,
-): {
-  view: EntryData
-  route: string
-  slug: string
-  language: string | null
-} {
-  const main = languages?.main ?? null
-  const ctx = languages ? localeCtxFor(languages, target.fields) : null
-  const wantsTranslation = Boolean(ctx && locale && locale !== main)
-  if (
-    !ctx ||
-    !locale ||
-    !wantsTranslation ||
-    !shippedLocales(target.data, ctx).includes(locale)
-  ) {
-    return {
-      view: target.data,
-      route: target.routePattern,
-      slug: target.slug,
-      language: main,
-    }
-  }
-  const view = readLocale(target.data, locale, ctx)
-  const localSlug = view[SLUG_KEY]
-  return {
-    view,
-    route: target.localizedRoutes?.[locale] ?? target.routePattern,
-    slug:
-      typeof localSlug === 'string' && localSlug !== ''
-        ? localSlug
-        : target.slug,
-    language: locale,
   }
 }
 

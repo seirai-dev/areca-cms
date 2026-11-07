@@ -2,9 +2,16 @@ import { inArray, and, eq } from 'drizzle-orm'
 
 import type { db } from '#/db'
 import { collection, entry, site } from '#/db/schema'
-import { I18N_KEY } from '#/lib/content-locale'
+import {
+  I18N_KEY,
+  localeStatus,
+  readLocale,
+  SLUG_KEY,
+  servedLocales,
+} from '#/lib/content-locale'
+import type { LocaleCtx } from '#/lib/content-locale'
 import { isDevSite } from '#/lib/site-environment'
-import type { EntryData, EntryStatus, Field } from '#/lib/types'
+import type { EntryData, EntryStatus, Field, SiteLanguages } from '#/lib/types'
 import { isAllowedLinkHref } from '#/server/richtext/allowlist'
 import {
   entryLinkTargets,
@@ -12,6 +19,7 @@ import {
 } from '#/server/richtext/entry-links'
 
 import { ValidationError } from './errors.ts'
+import { localeCtxFor } from './locale-validation.ts'
 
 /**
  * Entry links in content: loading the entries they point at, the save check
@@ -29,7 +37,10 @@ export type LinkTargetRow = {
   /** The current (draft) main-language slug. */
   slug: string
   status: EntryStatus
+  /** The approved slug, when the entry has been published (see entryUiStatus). */
+  publishedSlug: string | null
   collectionKey: string
+  collectionLabel: string
   /** Site content sections have kind 'global' and no route. */
   collectionKind: 'collection' | 'global'
   routePattern: string
@@ -96,10 +107,12 @@ export async function loadLinkTargets(
       siteId: entry.siteId,
       slug: entry.slug,
       status: entry.status,
+      publishedSlug: entry.publishedSlug,
       draftData: entry.draftData,
       publishedData: entry.publishedData,
       scheduledData: entry.scheduledData,
       collectionKey: collection.key,
+      collectionLabel: collection.label,
       collectionKind: collection.kind,
       routePattern: collection.routePattern,
       localizedRoutes: collection.localizedRoutes,
@@ -120,6 +133,71 @@ export function entryLinkPath(
 ): string {
   const path = routePattern.split('$slug').join(encodeURIComponent(slug))
   return anchor ? `${path}#${anchor}` : path
+}
+
+/**
+ * Languages an entry ships in: the complete ones, in site order. A language
+ * with nothing filled in does not ship even when it has no required fields
+ * (sections without required fields are complete in every language). The
+ * main language always ships when it is complete.
+ */
+export function shippedLocales(data: EntryData, ctx: LocaleCtx): string[] {
+  return servedLocales(data, ctx).filter(
+    (locale) => locale === ctx.main || localeStatus(data, locale, ctx).started,
+  )
+}
+
+/**
+ * Where a link to an entry points in `locale`: the language the target's path
+ * is taken from, with that language's view, route and slug. The language is
+ * `locale` when its translation ships in `data` (the release rule), else the
+ * main language. Go live and draft previews both place links with this, so a
+ * link resolves the same way in both. `language` is null on a single-language
+ * site.
+ */
+export function placeLinkTarget(
+  target: {
+    data: EntryData
+    fields: Field[]
+    slug: string
+    routePattern: string
+    localizedRoutes?: Record<string, string> | null
+  },
+  languages: SiteLanguages | null,
+  locale: string | null,
+): {
+  view: EntryData
+  route: string
+  slug: string
+  language: string | null
+} {
+  const main = languages?.main ?? null
+  const ctx = languages ? localeCtxFor(languages, target.fields) : null
+  const wantsTranslation = Boolean(ctx && locale && locale !== main)
+  if (
+    !ctx ||
+    !locale ||
+    !wantsTranslation ||
+    !shippedLocales(target.data, ctx).includes(locale)
+  ) {
+    return {
+      view: target.data,
+      route: target.routePattern,
+      slug: target.slug,
+      language: main,
+    }
+  }
+  const view = readLocale(target.data, locale, ctx)
+  const localSlug = view[SLUG_KEY]
+  return {
+    view,
+    route: target.localizedRoutes?.[locale] ?? target.routePattern,
+    slug:
+      typeof localSlug === 'string' && localSlug !== ''
+        ? localSlug
+        : target.slug,
+    language: locale,
+  }
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
