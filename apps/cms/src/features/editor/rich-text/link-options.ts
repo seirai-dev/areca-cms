@@ -1,6 +1,7 @@
 import type {
   LinkHeading,
   LinkTargetOption,
+  LinkTargetSearch,
 } from '#/server/content/link-targets'
 import { isAllowedLinkHref } from '#/server/richtext/allowlist'
 
@@ -114,15 +115,15 @@ export type LinkRow =
   | { kind: 'custom'; id: string; href: string }
   | { kind: 'hint'; id: string }
 
-export type LinkSearchData = {
-  entries: LinkTargetOption[]
-  resolved: { entry: LinkTargetOption; anchor: string | null } | null
-  ownPath: string | null
-}
+/**
+ * The server's answer for one text. `query` is the text it was asked with: the
+ * answer is only for that text (see `pending` in buildLinkRows).
+ */
+export type LinkSearchData = LinkTargetSearch & { query: string }
 
 export type LinkRowsInput = {
   mode: LinkMode
-  /** The server's answer for the mode, when it was asked. */
+  /** The server's answer, when it was asked. */
   search: LinkSearchData | null
   /** `sections` mode: the best matching entry and its headings. */
   sectionEntry: { entry: LinkTargetOption; headings: LinkHeading[] } | null
@@ -132,8 +133,16 @@ export type LinkRowsInput = {
 
 export type LinkRows = {
   rows: LinkRow[]
-  /** The row Enter takes when nothing else is picked. */
+  /** The rows that can be chosen now: arrow keys, the mouse and Enter reach these. */
+  enabled: string[]
+  /** The row Enter takes when nothing else is picked; always one of `enabled`. */
   preselected: string | null
+  /**
+   * The answer is not for the typed text yet. Its rows stay on screen but
+   * cannot be chosen; only an address-like input can still be applied, through
+   * its custom link.
+   */
+  pending: boolean
 }
 
 export const CUSTOM_ROW_ID = 'custom'
@@ -156,6 +165,56 @@ function sectionMatches(heading: LinkHeading, filter: string) {
   )
 }
 
+function entryRow(
+  entry: LinkTargetOption,
+  anchor: string | null,
+  resolved: boolean,
+): LinkRow {
+  return {
+    kind: 'entry',
+    id: entryRowId(entry.entryId),
+    entry,
+    anchor,
+    resolved,
+  }
+}
+
+function headingRow(
+  heading: LinkHeading,
+  entry: LinkTargetOption | null,
+): LinkRow {
+  return { kind: 'heading', id: headingRowId(heading.id), heading, entry }
+}
+
+/**
+ * Decides which rows can be chosen and checks the preselection. While the
+ * answer is pending only an address-like input can be applied, and only
+ * through its custom link.
+ */
+function settle(
+  rows: LinkRow[],
+  preselected: string | null,
+  pending: boolean,
+  mode: LinkMode,
+): LinkRows {
+  const addressTyped = mode.kind === 'address'
+  const enabled = rows
+    .filter(
+      (row) =>
+        row.kind !== 'hint' &&
+        (!pending || (row.kind === 'custom' && addressTyped)),
+    )
+    .map((row) => row.id)
+  let chosen: string | null
+  if (pending) {
+    chosen = enabled.includes(CUSTOM_ROW_ID) ? CUSTOM_ROW_ID : null
+  } else {
+    chosen =
+      preselected !== null && enabled.includes(preselected) ? preselected : null
+  }
+  return { rows, enabled, preselected: chosen, pending }
+}
+
 /**
  * The rows for the typed input and the row Enter takes. A custom row comes
  * last when the input is a valid link, a disabled hint when it is not. What
@@ -163,28 +222,24 @@ function sectionMatches(heading: LinkHeading, filter: string) {
  */
 export function buildLinkRows(input: LinkRowsInput): LinkRows {
   const { mode, search, sectionEntry, pageHeadings } = input
+  // The answer is for the text it was asked with. Until the answer for the
+  // typed text arrives, its rows stay on screen but cannot be chosen, and its
+  // own-domain path is not used for the custom link.
+  const pending = mode.kind !== 'anchor' && search?.query !== mode.text
+  const ownPath = pending ? null : (search?.ownPath ?? null)
 
   if (mode.kind === 'empty') {
     // Nothing typed: the recent pages. No custom row, nothing preselected.
-    const rows: LinkRow[] = (search?.entries ?? []).map((entry) => ({
-      kind: 'entry',
-      id: entryRowId(entry.entryId),
-      entry,
-      anchor: null,
-      resolved: false,
-    }))
-    return { rows, preselected: null }
+    const rows = (search?.entries ?? []).map((entry) =>
+      entryRow(entry, null, false),
+    )
+    return settle(rows, null, pending, mode)
   }
 
   if (mode.kind === 'anchor') {
     const rows: LinkRow[] = pageHeadings
       .filter((heading) => sectionMatches(heading, mode.anchor))
-      .map((heading) => ({
-        kind: 'heading',
-        id: headingRowId(heading.id),
-        heading,
-        entry: null,
-      }))
+      .map((heading) => headingRow(heading, null))
     const firstHeading = rows[0]?.id ?? null
     const href = customLinkHref(mode, null)
     if (href !== null) rows.push({ kind: 'custom', id: CUSTOM_ROW_ID, href })
@@ -193,35 +248,23 @@ export function buildLinkRows(input: LinkRowsInput): LinkRows {
     // preselected. A lone `#` has no custom link, so the first section is.
     const preselected =
       href !== null && mode.anchor !== '' ? CUSTOM_ROW_ID : firstHeading
-    return { rows, preselected }
+    return settle(rows, preselected, false, mode)
   }
 
   if (mode.kind === 'sections') {
     // `word#…`: the best entry, then its sections. Never a custom link.
     const rows: LinkRow[] = []
     if (sectionEntry) {
-      rows.push({
-        kind: 'entry',
-        id: entryRowId(sectionEntry.entry.entryId),
-        entry: sectionEntry.entry,
-        anchor: null,
-        resolved: false,
-      })
+      rows.push(entryRow(sectionEntry.entry, null, false))
       for (const heading of sectionEntry.headings) {
         if (!sectionMatches(heading, mode.filter)) continue
-        rows.push({
-          kind: 'heading',
-          id: headingRowId(heading.id),
-          heading,
-          entry: sectionEntry.entry,
-        })
+        rows.push(headingRow(heading, sectionEntry.entry))
       }
     }
     rows.push({ kind: 'hint', id: HINT_ROW_ID })
-    // The hint is always last, so there is always a row to preselect.
     const preselected = (rows.find((row) => row.kind === 'heading') ?? rows[0])
       .id
-    return { rows, preselected }
+    return settle(rows, preselected, pending, mode)
   }
 
   // Paths and addresses: a typed path or own-domain URL that is an entry's
@@ -230,26 +273,12 @@ export function buildLinkRows(input: LinkRowsInput): LinkRows {
   // the fallback when nothing matches.
   const rows: LinkRow[] = []
   const resolved = search?.resolved ?? null
-  if (resolved) {
-    rows.push({
-      kind: 'entry',
-      id: entryRowId(resolved.entry.entryId),
-      entry: resolved.entry,
-      anchor: resolved.anchor,
-      resolved: true,
-    })
-  }
+  if (resolved) rows.push(entryRow(resolved.entry, resolved.anchor, true))
   for (const entry of search?.entries ?? []) {
     if (resolved && entry.entryId === resolved.entry.entryId) continue
-    rows.push({
-      kind: 'entry',
-      id: entryRowId(entry.entryId),
-      entry,
-      anchor: null,
-      resolved: false,
-    })
+    rows.push(entryRow(entry, null, false))
   }
-  const href = customLinkHref(mode, search?.ownPath ?? null)
+  const href = customLinkHref(mode, ownPath)
   if (href !== null) rows.push({ kind: 'custom', id: CUSTOM_ROW_ID, href })
   else rows.push({ kind: 'hint', id: HINT_ROW_ID })
 
@@ -259,28 +288,22 @@ export function buildLinkRows(input: LinkRowsInput): LinkRows {
   else if (mode.kind === 'words') {
     preselected = rows.find((row) => row.kind === 'entry')?.id ?? customId
   } else preselected = customId
-  return { rows, preselected }
-}
-
-/** Rows that can be chosen (the arrow keys and Enter reach these). */
-export function selectableRows(rows: LinkRow[]): LinkRow[] {
-  return rows.filter((row) => row.kind !== 'hint')
+  return settle(rows, preselected, pending, mode)
 }
 
 /**
- * The row an arrow key moves to, wrapping around. A missing `current` starts
- * at the first row going down and at the last going up.
+ * The row an arrow key moves to among the enabled rows, wrapping around. A
+ * missing `current` starts at the first row going down and at the last going up.
  */
 export function stepRow(
-  rows: LinkRow[],
+  enabled: readonly string[],
   current: string | null,
   direction: 1 | -1,
 ): string | null {
-  const choices = selectableRows(rows)
-  if (choices.length === 0) return null
-  const index = choices.findIndex((row) => row.id === current)
+  if (enabled.length === 0) return null
+  const index = current === null ? -1 : enabled.indexOf(current)
   if (index === -1) {
-    return direction === 1 ? choices[0].id : choices[choices.length - 1].id
+    return direction === 1 ? enabled[0] : enabled[enabled.length - 1]
   }
-  return choices[(index + direction + choices.length) % choices.length].id
+  return enabled[(index + direction + enabled.length) % enabled.length]
 }

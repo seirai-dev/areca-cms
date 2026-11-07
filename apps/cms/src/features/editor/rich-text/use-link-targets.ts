@@ -31,8 +31,14 @@ export function useLinkSearch({
 }) {
   return useQuery({
     queryKey: queryKeys.linkSearch(siteId, locale, query, limit),
-    queryFn: () =>
-      searchLinkTargetsFn({ data: { siteId, query, locale, limit } }),
+    // The answer carries the text it was asked with: the field checks that it
+    // is the answer for the text typed now (see buildLinkRows).
+    queryFn: async () => ({
+      ...(await searchLinkTargetsFn({
+        data: { siteId, query, locale, limit },
+      })),
+      query,
+    }),
     enabled,
     // Keep the rows of the last query while the next one loads: no flicker.
     placeholderData: keepPreviousData,

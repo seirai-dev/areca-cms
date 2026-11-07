@@ -164,7 +164,7 @@ export function LinkPicker({
     [editor, mode.kind],
   )
 
-  const { rows, preselected } = React.useMemo(
+  const { rows, enabled, preselected } = React.useMemo(
     () =>
       buildLinkRows({
         mode,
@@ -175,9 +175,7 @@ export function LinkPicker({
     [mode, searchData, sectionEntry, pageHeadings],
   )
   const activeId =
-    picked !== null && rows.some((row) => row.id === picked)
-      ? picked
-      : preselected
+    picked !== null && enabled.includes(picked) ? picked : preselected
   const activeRow = rows.find((row) => row.id === activeId) ?? null
 
   /* ---------------------------------------------------------------------
@@ -209,7 +207,8 @@ export function LinkPicker({
   }
 
   function choose(row: LinkRow) {
-    if (row.kind === 'hint') return
+    // Rows of an answer for other text, and hints, cannot be chosen.
+    if (row.kind === 'hint' || !enabled.includes(row.id)) return
     if (row.kind === 'custom') {
       applyPlain(row.href)
       onDone()
@@ -344,7 +343,7 @@ export function LinkPicker({
     if (event.nativeEvent.isComposing) return
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
-      setPicked(stepRow(rows, activeId, event.key === 'ArrowDown' ? 1 : -1))
+      setPicked(stepRow(enabled, activeId, event.key === 'ArrowDown' ? 1 : -1))
       return
     }
     if (event.key === 'Enter') {
@@ -520,17 +519,18 @@ export function LinkPicker({
                 )
               : null
           const isHint = row.kind === 'hint'
+          const chooseable = enabled.includes(row.id)
           return (
             <li
               key={row.id}
               id={optionId(listboxId, row.id)}
               role="option"
               aria-selected={active}
-              aria-disabled={isHint || undefined}
+              aria-disabled={!chooseable || undefined}
               data-testid={testId}
               data-active={active || undefined}
               onMouseMove={() => {
-                if (!isHint && picked !== row.id) setPicked(row.id)
+                if (chooseable && picked !== row.id) setPicked(row.id)
               }}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => choose(row)}
@@ -538,8 +538,13 @@ export function LinkPicker({
                 'flex min-w-0 items-center gap-2.5 rounded-[8px] px-2.5 py-2',
                 isHint
                   ? 'cursor-default text-callout text-text-muted'
-                  : 'cursor-pointer',
-                active && !isHint && 'bg-accent-soft text-accent-text',
+                  : chooseable
+                    ? 'cursor-pointer'
+                    : 'cursor-default opacity-60',
+                active &&
+                  chooseable &&
+                  !isHint &&
+                  'bg-accent-soft text-accent-text',
               )}
             >
               {isHint ? null : row.kind === 'heading' ? (

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import type { LinkTargetOption } from '#/server/content/link-targets'
+import type {
+  LinkHeading,
+  LinkTargetOption,
+} from '#/server/content/link-targets'
 
 import {
   buildLinkRows,
@@ -9,7 +12,7 @@ import {
   parseLinkInput,
   stepRow,
 } from './link-options'
-import type { LinkRow } from './link-options'
+import type { LinkRow, LinkSearchData } from './link-options'
 
 function entry(id: string, title: string, path: string): LinkTargetOption {
   return {
@@ -32,16 +35,23 @@ const headings = [
   { id: 'taste', text: 'Taste notes', level: 2 },
 ]
 
+/** A server answer; `query` defaults to the typed text, so it is the answer for it. */
+type SearchInput = Omit<LinkSearchData, 'query'> & { query?: string }
+
 function rowsFor(
   raw: string,
-  extra: Partial<Parameters<typeof buildLinkRows>[0]> = {},
+  extra: {
+    search?: SearchInput
+    sectionEntry?: { entry: LinkTargetOption; headings: LinkHeading[] }
+    pageHeadings?: LinkHeading[]
+  } = {},
 ) {
+  const mode = parseLinkInput(raw)
   return buildLinkRows({
-    mode: parseLinkInput(raw),
-    search: null,
-    sectionEntry: null,
-    pageHeadings: [],
-    ...extra,
+    mode,
+    search: extra.search ? { query: mode.text, ...extra.search } : null,
+    sectionEntry: extra.sectionEntry ?? null,
+    pageHeadings: extra.pageHeadings ?? [],
   })
 }
 
@@ -134,7 +144,9 @@ describe('customLinkHref', () => {
 
 describe('buildLinkRows', () => {
   it('shows only the custom row for words that match nothing', () => {
-    const { rows, preselected } = rowsFor('goo')
+    const { rows, preselected } = rowsFor('goo', {
+      search: { entries: [], resolved: null, ownPath: null },
+    })
     expect(ids(rows)).toEqual(['custom'])
     expect(rows[0]).toEqual({
       kind: 'custom',
@@ -179,7 +191,9 @@ describe('buildLinkRows', () => {
   })
 
   it('keeps a path that matches nothing as a plain custom link', () => {
-    const { rows, preselected } = rowsFor('/coffees')
+    const { rows, preselected } = rowsFor('/coffees', {
+      search: { entries: [], resolved: null, ownPath: null },
+    })
     expect(ids(rows)).toEqual(['custom'])
     expect(preselected).toBe('custom')
   })
@@ -199,6 +213,7 @@ describe('buildLinkRows', () => {
 
   it('lists the sections of the best entry for word#', () => {
     const { rows, preselected } = rowsFor('ethiopia#', {
+      search: { entries: [ethiopia], resolved: null, ownPath: null },
       sectionEntry: { entry: ethiopia, headings },
     })
     expect(ids(rows)).toEqual([
@@ -243,16 +258,80 @@ describe('buildLinkRows', () => {
   })
 })
 
-describe('stepRow', () => {
-  const { rows } = rowsFor('#', { pageHeadings: headings })
-  it('moves through choosable rows and wraps around, skipping hints', () => {
-    expect(stepRow(rows, null, 1)).toBe('heading-origin')
-    expect(stepRow(rows, null, -1)).toBe('heading-taste')
-    expect(stepRow(rows, 'heading-taste', 1)).toBe('heading-origin')
-    expect(stepRow(rows, 'heading-origin', -1)).toBe('heading-taste')
+describe('answers that belong to another text', () => {
+  it('does not let an older answer be chosen or replace the typed link', () => {
+    const { rows, enabled, preselected, pending } = rowsFor(
+      'https://example.com',
+      {
+        search: {
+          query: '/blog/ethiopia',
+          entries: [ethiopia],
+          resolved: { entry: ethiopia, anchor: null },
+          ownPath: '/blog/ethiopia',
+        },
+      },
+    )
+    expect(pending).toBe(true)
+    expect(enabled).toEqual(['custom'])
+    expect(preselected).toBe('custom')
+    expect(rows.find((row) => row.kind === 'custom')).toEqual({
+      kind: 'custom',
+      id: 'custom',
+      href: 'https://example.com',
+    })
   })
 
-  it('has nothing to move to without choosable rows', () => {
-    expect(stepRow(rowsFor('coffee beans').rows, null, 1)).toBeNull()
+  it('waits for the answer to plain words before anything can be chosen', () => {
+    const { enabled, preselected } = rowsFor('goo', {
+      search: {
+        query: 'g',
+        entries: [ethiopia],
+        resolved: null,
+        ownPath: null,
+      },
+    })
+    expect(enabled).toEqual([])
+    expect(preselected).toBeNull()
+  })
+
+  it('waits for the answer to a typed path, which is not a custom link yet', () => {
+    const { enabled, preselected } = rowsFor('/blog/ethiopia', {
+      search: {
+        query: '/blog/ethi',
+        entries: [],
+        resolved: null,
+        ownPath: null,
+      },
+    })
+    expect(enabled).toEqual([])
+    expect(preselected).toBeNull()
+  })
+
+  it('uses the answer once it is for the typed text', () => {
+    const { enabled, preselected, pending } = rowsFor('ethiopia', {
+      search: {
+        query: 'ethiopia',
+        entries: [ethiopia],
+        resolved: null,
+        ownPath: null,
+      },
+    })
+    expect(pending).toBe(false)
+    expect(enabled).toEqual(['entry-e-1', 'custom'])
+    expect(preselected).toBe('entry-e-1')
+  })
+})
+
+describe('stepRow', () => {
+  const { enabled } = rowsFor('#', { pageHeadings: headings })
+  it('moves through the enabled rows and wraps around', () => {
+    expect(stepRow(enabled, null, 1)).toBe('heading-origin')
+    expect(stepRow(enabled, null, -1)).toBe('heading-taste')
+    expect(stepRow(enabled, 'heading-taste', 1)).toBe('heading-origin')
+    expect(stepRow(enabled, 'heading-origin', -1)).toBe('heading-taste')
+  })
+
+  it('has nothing to move to without enabled rows', () => {
+    expect(stepRow(rowsFor('coffee beans').enabled, null, 1)).toBeNull()
   })
 })
