@@ -27,6 +27,9 @@ A section has the same field types as a collection, except `slug`. Its fields ca
 
 - Use `##` for sections and `###` or `####` for subsections. Other heading levels are clamped.
 - Separate paragraphs with a blank line. `**bold**`, `*italic*`, `[link](https://…)`, lists, `>` quotes and tables all work.
+- Links to another page of this site: `[text](entry:<id>)`, the id from `list_entries` or `get_entry`. A section of it: `[text](entry:<id>#heading-slug)`. A site path such as `[text](/coffees/slug)` or a full URL of this site becomes the same entry link when a page matches it. A path that matches no page, or one with a query string, stays a plain link. A same-page `#section` link stays as written.
+- Read-back writes entry links as `entry:<id>` (with `#section` when there is one), so a text read with `get_entry` can be sent again with its links unchanged.
+- An `entry:` id that is not a page of this site is dropped: the text stays and the result's `warnings` names the id.
 - Images: `![alt text](asset:<assetId>)`. The asset must be in this client's Library. Read-back keeps the `asset:` form, so the text can be sent again as is.
 - Inline code goes in backticks, such as `` `parse()` `` or `` `--force` ``. It is saved as inline code and read back the same way.
 - Code, commands, file contents and config go in fenced blocks with a language: a fence named `ts`, `shell`, `json` and so on. Read-back keeps the fences, so the text can be sent again as is. Never paste code as plain paragraphs.

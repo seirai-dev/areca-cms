@@ -79,6 +79,8 @@ Full tool inputs are in [references/tools.md](references/tools.md#development-en
 ## Writing content
 
 - **Rich text = Markdown**, never HTML (HTML tags show up as literal text). Use `##`, `###` and `####` headings, lists, links, tables and `>` quotes. Images go in as `![alt](asset:<assetId>)`.
+- **Links to pages of this site:** write `[text](entry:<id>)`, with the id from `list_entries` or `get_entry`. For a section of that page, add the heading's slug: `[text](entry:<id>#faq)`. The link follows the entry, so it survives a slug change. A site path such as `/coffees/slug` also becomes an entry link when a page matches it; a path with a query string stays plain. Links to other sites use full `https://` URLs.
+- **Read the `warnings`.** A link whose `entry:` id is not a page of this site is removed (the text stays) and the result names the id. Fix it with the current id. A link to a page that is not live yet is plain text on the site until that page goes live; `go_live` warns about it.
 - **Code = backticks or fences.** Put inline code (function names, file paths, CLI flags) in backticks. Put code, commands, file contents and config in a fenced block with a language, such as a fence named `ts` or `shell`. Never paste code as plain paragraphs. Language ids: `ts`, `tsx`, `js`, `jsx`, `html`, `css`, `json`, `shell`, `python`, `php`, `sql`, `yaml`, `markdown`, `go`, `rust`, `diff`, and `plaintext` for plain text. Any other language is saved without colours, and the result lists a warning.
 - **Images:** pick the path by where the image is (JPEG, PNG, WebP, GIF or PDF, up to 20 MB each):
   - A public *direct* file link: `upload_asset_from_url({ url, altText })`.
