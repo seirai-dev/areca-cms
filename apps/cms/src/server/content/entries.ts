@@ -765,7 +765,7 @@ export async function restoreRevision(
       .select({ id: site.id })
       .from(site)
       .where(eq(site.id, initial.site.id))
-      .for('update')
+      .for('no key update')
     const ctx = await loadEntryContext(entryId, tx)
     await assetAttachLock(tx, ctx.site.organizationId)
     const prepared = prepareRevisionRestore(

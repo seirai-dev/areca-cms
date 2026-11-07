@@ -242,7 +242,7 @@ export async function setSiteLanguages(
       .select({ id: site.id })
       .from(site)
       .where(eq(site.id, siteId))
-      .for('update')
+      .for('no key update')
     return applySiteLanguages(tx, siteId, input, actorId)
   })
 }

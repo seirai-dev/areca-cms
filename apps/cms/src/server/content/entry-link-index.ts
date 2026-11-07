@@ -148,8 +148,20 @@ async function insertSourceRows(
 }
 
 /**
- * The entries matching `where`, each with its content, locked in id order (the
- * row lock a save takes), so no save can change them until the transaction ends.
+ * The entries matching `where`, each with its content, locked in id order, so
+ * no save can change them until the transaction ends.
+ *
+ * `FOR NO KEY UPDATE`, not `FOR UPDATE`: the index rows of these entries need
+ * KEY SHARE on their target entries and on the site (foreign keys). FOR UPDATE
+ * conflicts with KEY SHARE, so two saves that link to each other would each
+ * block the other's insert (40P01). FOR NO KEY UPDATE still serializes writers
+ * of the same entry, and does not conflict with KEY SHARE.
+ *
+ * Lock order, for every writer that takes more than one of these locks:
+ *   1. the site row (`FOR NO KEY UPDATE`, see `setSiteLanguages`), then
+ *   2. entry rows in id order (here, and in `syncEntryLinkIndexes`).
+ * A per-entry sync takes no site lock, only KEY SHARE through its foreign key,
+ * which never waits on a NO KEY UPDATE. So no cycle can form.
  */
 async function lockedEntryRows(tx: Tx, where: SQL | undefined) {
   return tx
@@ -167,7 +179,7 @@ async function lockedEntryRows(tx: Tx, where: SQL | undefined) {
     .innerJoin(site, eq(entry.siteId, site.id))
     .where(where)
     .orderBy(entry.id)
-    .for('update', { of: entry })
+    .for('no key update', { of: entry })
 }
 
 async function sourceRowsOf(
@@ -218,6 +230,8 @@ export async function syncEntryLinkIndex(tx: Tx, entryId: string) {
  * do this in SQL (it reads each field's type from the collection), so it is
  * run after such a change, and by `scripts/rebuild-entry-link-index.ts`.
  * Locks every entry of the site first, so no save can run during the rebuild.
+ * The caller holds the site row (`FOR NO KEY UPDATE`) before this runs; see
+ * `lockedEntryRows` for the lock order.
  */
 export async function rebuildEntryLinkIndex(
   tx: Tx,
