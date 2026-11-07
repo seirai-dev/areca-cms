@@ -278,9 +278,15 @@ export function buildLinkRows(input: LinkRowsInput): LinkRows {
     if (resolved && entry.entryId === resolved.entry.entryId) continue
     rows.push(entryRow(entry, null, false))
   }
+  // Plain words get their custom link (or the hint) only when no entry matches,
+  // and only once the answer is in: until then nothing says what they are.
+  // An address, a path or a URL always keeps its custom link last.
   const href = customLinkHref(mode, ownPath)
-  if (href !== null) rows.push({ kind: 'custom', id: CUSTOM_ROW_ID, href })
-  else rows.push({ kind: 'hint', id: HINT_ROW_ID })
+  const wordsOnly = mode.kind === 'words'
+  if (!wordsOnly || (!pending && rows.length === 0)) {
+    if (href !== null) rows.push({ kind: 'custom', id: CUSTOM_ROW_ID, href })
+    else rows.push({ kind: 'hint', id: HINT_ROW_ID })
+  }
 
   const customId = href !== null ? CUSTOM_ROW_ID : null
   let preselected: string | null

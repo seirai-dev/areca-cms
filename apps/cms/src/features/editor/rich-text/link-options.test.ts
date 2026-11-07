@@ -164,12 +164,31 @@ describe('buildLinkRows', () => {
     expect(preselected).toBe('custom')
   })
 
-  it('preselects the best matching entry for plain words and keeps the custom row last', () => {
+  it('preselects the best matching entry for plain words, with no custom row while one matches', () => {
     const { rows, preselected } = rowsFor('ethiopia', {
       search: { entries: [ethiopia, kenya], resolved: null, ownPath: null },
     })
-    expect(ids(rows)).toEqual(['entry-e-1', 'entry-e-2', 'custom'])
+    expect(ids(rows)).toEqual(['entry-e-1', 'entry-e-2'])
     expect(preselected).toBe('entry-e-1')
+  })
+
+  it('offers the custom link for plain words only when no entry matches', () => {
+    const none = rowsFor('goo', {
+      search: { entries: [], resolved: null, ownPath: null },
+    })
+    expect(ids(none.rows)).toEqual(['custom'])
+    expect(none.preselected).toBe('custom')
+    const some = rowsFor('goo', {
+      search: { entries: [ethiopia], resolved: null, ownPath: null },
+    })
+    expect(ids(some.rows)).toEqual(['entry-e-1'])
+  })
+
+  it('keeps the custom link last for an address, next to matching entries', () => {
+    const { rows } = rowsFor('ethiopia.nl', {
+      search: { entries: [ethiopia], resolved: null, ownPath: null },
+    })
+    expect(ids(rows)).toEqual(['entry-e-1', 'custom'])
   })
 
   it('makes a typed path that is an entry address the first row, preselected', () => {
@@ -226,8 +245,10 @@ describe('buildLinkRows', () => {
     expect(preselected).toBe('heading-origin')
   })
 
-  it('offers only a hint when the input is not a link', () => {
-    const { rows, preselected } = rowsFor('coffee beans')
+  it('offers only a hint when the input is not a link and nothing matches', () => {
+    const { rows, preselected } = rowsFor('coffee beans', {
+      search: { entries: [], resolved: null, ownPath: null },
+    })
     expect(ids(rows)).toEqual(['hint'])
     expect(preselected).toBeNull()
   })
@@ -317,7 +338,7 @@ describe('answers that belong to another text', () => {
       },
     })
     expect(pending).toBe(false)
-    expect(enabled).toEqual(['entry-e-1', 'custom'])
+    expect(enabled).toEqual(['entry-e-1'])
     expect(preselected).toBe('entry-e-1')
   })
 })
