@@ -41,3 +41,7 @@ overrides:
   source-map-js: ">=1.2.2"
   "@vitest/mocker": ">=5.0.3"
   vite: ">=8.3.3"
+  # One prosemirror copy workspace-wide. Two copies make TipTap throw "Can not convert ... to a Fragment".
+  prosemirror-model: 1.25.12
+  prosemirror-view: 1.42.9
+  prosemirror-transform: 1.12.5
