@@ -9,7 +9,10 @@ import type { EntryData, SiteLanguages } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { NotFoundError, ValidationError } from '#/server/content/errors'
-import { rebuildEntryLinkIndex } from '#/server/content/entry-link-index'
+import {
+  lockSiteLinkIndex,
+  rebuildEntryLinkIndex,
+} from '#/server/content/entry-link-index'
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -238,6 +241,7 @@ export async function setSiteLanguages(
 ): Promise<{ languages: SiteLanguages; gaps: number }> {
   normalizeSiteLanguages(input)
   return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, siteId)
     await tx
       .select({ id: site.id })
       .from(site)

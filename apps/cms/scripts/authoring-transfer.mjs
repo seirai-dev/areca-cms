@@ -283,6 +283,13 @@ async function main() {
           )
         userMap.set(user.id, existing[0].id)
       }
+      // Link-index locks of the imported sites first, then the asset lock: the
+      // order of `lockSiteLinkIndex` in server/content/entry-link-index.ts.
+      for (const row of bundle.rows.site)
+        await client.query(
+          'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+          ['site-link-index:' + row.id],
+        )
       await client.query(
         'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
         ['assets:' + bundle.rows.organization[0].id],

@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 
 import { db } from '#/db'
@@ -27,6 +27,29 @@ import { linkTargetSiteIds, mapRichTextValues } from './entry-links.ts'
  */
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type Connection = Pick<typeof db, 'select'>
+
+/**
+ * Serializes the link-index writers of one site. Lock order for every
+ * transaction that writes `entry_link` rows, or takes the site row lock and
+ * then changes entries (it can wait on a row that an index insert needs):
+ *
+ *   1. this lock (`lockSiteLinkIndex`), first: before any row write or row lock;
+ *   2. the organization's asset lock (`assets/usage.ts`): shared for saves,
+ *      exclusive for dev-env push, copy, reset and delete;
+ *   3. the site row (`FOR NO KEY UPDATE`, see `setSiteLanguages`);
+ *   4. entry rows, in id order (`lockedEntryRows`).
+ *
+ * Why: an index insert needs KEY SHARE on its source entry, target entry and
+ * site rows (foreign keys). Two saves that each change their slug hold their
+ * own entry row with FOR UPDATE and wait for the other's KEY SHARE: a cycle
+ * (40P01). With this lock, the writers of one site run one at a time, so no
+ * two of them hold a row that the other needs. Other sites are not affected.
+ */
+export async function lockSiteLinkIndex(tx: Tx, siteId: string) {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`site-link-index:${siteId}`}, 0))`,
+  )
+}
 
 /** Ids and rows per query or insert, to stay under the driver's bind-parameter limit. */
 const CHUNK = 1000
@@ -157,11 +180,8 @@ async function insertSourceRows(
  * block the other's insert (40P01). FOR NO KEY UPDATE still serializes writers
  * of the same entry, and does not conflict with KEY SHARE.
  *
- * Lock order, for every writer that takes more than one of these locks:
- *   1. the site row (`FOR NO KEY UPDATE`, see `setSiteLanguages`), then
- *   2. entry rows in id order (here, and in `syncEntryLinkIndexes`).
- * A per-entry sync takes no site lock, only KEY SHARE through its foreign key,
- * which never waits on a NO KEY UPDATE. So no cycle can form.
+ * The lock order is in `lockSiteLinkIndex`: the caller has already taken the
+ * site's link-index lock, then the site row, before this runs.
  */
 async function lockedEntryRows(tx: Tx, where: SQL | undefined) {
   return tx
@@ -230,8 +250,8 @@ export async function syncEntryLinkIndex(tx: Tx, entryId: string) {
  * do this in SQL (it reads each field's type from the collection), so it is
  * run after such a change, and by `scripts/rebuild-entry-link-index.ts`.
  * Locks every entry of the site first, so no save can run during the rebuild.
- * The caller holds the site row (`FOR NO KEY UPDATE`) before this runs; see
- * `lockedEntryRows` for the lock order.
+ * The caller holds `lockSiteLinkIndex` and the site row (`FOR NO KEY UPDATE`)
+ * before this runs; the order is in `lockSiteLinkIndex`.
  */
 export async function rebuildEntryLinkIndex(
   tx: Tx,

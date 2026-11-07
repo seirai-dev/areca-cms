@@ -20,6 +20,7 @@ import {
   planManifestFieldDrops,
   purgeFieldContent,
 } from './field-data.ts'
+import { lockSiteLinkIndex } from './entry-link-index.ts'
 import { ensureGlobalEntry } from './globals.ts'
 import { normalizeRequiredLanguages } from './locale-validation.ts'
 import { NotFoundError, ValidationError } from './errors.ts'
@@ -108,11 +109,18 @@ export async function syncManifest(
   const now = new Date()
 
   await db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, siteId)
+    // NO KEY UPDATE, not FOR UPDATE: entries' foreign keys to the site need KEY
+    // SHARE, which FOR UPDATE blocks, so a save that holds an entry row would
+    // wait on this push while this push waits on that row (see
+    // `lockSiteLinkIndex`). NO KEY UPDATE still conflicts with FOR UPDATE, so
+    // publishing (publishing/worker.ts) and the scheduler (scheduler.ts) still
+    // wait for a manifest push, as before.
     await tx
       .select({ id: site.id })
       .from(site)
       .where(eq(site.id, siteId))
-      .for('update')
+      .for('no key update')
     // Omitted languages leave the site's setting alone.
     if (manifest.languages) {
       await applySiteLanguages(tx, siteId, manifest.languages)
@@ -389,6 +397,7 @@ export async function upsertCollection(
   const now = new Date()
 
   await db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, siteId)
     await tx
       .select({ id: site.id })
       .from(site)
@@ -444,6 +453,7 @@ export async function deleteCollection(
   }
 
   await db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, siteId)
     await tx
       .select({ id: site.id })
       .from(site)

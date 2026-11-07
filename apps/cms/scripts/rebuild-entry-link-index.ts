@@ -13,7 +13,10 @@ import { eq } from 'drizzle-orm'
 
 import { db, pool } from '#/db'
 import { site } from '#/db/schema'
-import { rebuildEntryLinkIndex } from '#/server/content/entry-link-index'
+import {
+  lockSiteLinkIndex,
+  rebuildEntryLinkIndex,
+} from '#/server/content/entry-link-index'
 
 async function main() {
   const flagIndex = process.argv.indexOf('--site')
@@ -29,9 +32,10 @@ async function main() {
     throw new Error(`No site with id ${onlySite}`)
   }
   for (const row of sites) {
-    const written = await db.transaction((tx) =>
-      rebuildEntryLinkIndex(tx, row.id),
-    )
+    const written = await db.transaction(async (tx) => {
+      await lockSiteLinkIndex(tx, row.id)
+      return rebuildEntryLinkIndex(tx, row.id)
+    })
     console.log(`${row.slug}: ${written} entry link rows`)
   }
   await pool.end()

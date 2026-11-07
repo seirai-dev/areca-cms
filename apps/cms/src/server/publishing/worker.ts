@@ -48,7 +48,10 @@ import {
   recordSchedulerFailure,
   clearSchedulerFailure,
 } from './scheduler.ts'
-import { syncEntryLinkIndex } from '#/server/content/entry-link-index'
+import {
+  lockSiteLinkIndex,
+  syncEntryLinkIndex,
+} from '#/server/content/entry-link-index'
 
 // Legacy active/uncertain rows may predate resource keys. Resolve their frozen
 // target (or prior site target) so new releases cannot bypass their quarantine.
@@ -496,6 +499,9 @@ export async function processJob(
 
     const now = new Date()
     await db.transaction(async (tx) => {
+      // Link-index lock first: this release moves scheduled entries to published
+      // and rewrites their link rows (see `lockSiteLinkIndex`).
+      await lockSiteLinkIndex(tx, job.siteId)
       const owned = (
         await tx.select().from(buildJob).where(fence).for('update')
       ).at(0)

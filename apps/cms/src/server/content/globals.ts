@@ -10,7 +10,7 @@ import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 
 import { archiveDeletedContent } from './deletion-archive'
-import { syncEntryLinkIndex } from './entry-link-index.ts'
+import { lockSiteLinkIndex, syncEntryLinkIndex } from './entry-link-index.ts'
 import {
   assertKindsUnchanged,
   assertPreviewPath,
@@ -360,6 +360,7 @@ export async function upsertGlobal(
   const now = new Date()
 
   await db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, siteId)
     await tx
       .select({ id: site.id })
       .from(site)
@@ -462,6 +463,7 @@ export async function deleteGlobal(
   }
 
   await db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, siteId)
     await tx
       .select({ id: site.id })
       .from(site)
@@ -533,6 +535,7 @@ export async function discardGlobalDraft(
   const organizationId = await siteOrganizationId(siteId)
 
   return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, siteId)
     await tx
       .select({ id: site.id })
       .from(site)

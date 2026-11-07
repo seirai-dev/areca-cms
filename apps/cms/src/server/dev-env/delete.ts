@@ -12,6 +12,7 @@ import {
 import { audit } from '#/server/audit'
 import { lockOrganizationForMutation } from '#/server/admin/organization-lock'
 import { assetExclusiveLock } from '#/server/assets/usage'
+import { lockSiteLinkIndex } from '#/server/content/entry-link-index'
 
 import { lockProductionSite } from './lock'
 import {
@@ -61,6 +62,8 @@ export async function deleteDevEnvironment(
 ) {
   const probe = await readDevEnvironment(devSiteId)
   await db.transaction(async (tx) => {
+    // Link-index lock first: deleting the dev env cascades to its entries and link rows.
+    await lockSiteLinkIndex(tx, devSiteId)
     await lockOrganizationForMutation(tx, probe.organizationId, {
       mode: 'no-key-update',
     })

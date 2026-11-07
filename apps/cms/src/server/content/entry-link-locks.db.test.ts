@@ -1,23 +1,34 @@
 import { eq, sql } from 'drizzle-orm'
-import { afterEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import { db } from '#/db'
-import { entry, entryLink } from '#/db/schema'
-import { setSiteLanguages } from '#/server/admin/site-languages'
-import { assetAttachLock } from '#/server/assets/usage'
+import { entryLink } from '#/db/schema'
 
-import { createEntry } from './entries.ts'
-import { syncEntryLinkIndex } from './entry-link-index.ts'
-import { createTestCollection, withTestSite } from './test-utils.ts'
+import { syncManifest } from './collections.ts'
+import { createEntry, getEntry, updateDraft } from './entries.ts'
+import {
+  articleFields,
+  createTestCollection,
+  withTestSite,
+} from './test-utils.ts'
 
 const hasDb = Boolean(process.env.DATABASE_URL)
 
 /**
- * The index write of a save pauses here, while the save holds its entry row
- * lock. The pause runs only in transactions that set `areca.test_pause`, so
- * other tests are not affected.
+ * Entries whose link-index inserts pause. The trigger reads this table, so the
+ * pause reaches saves that run in their own transactions (`updateDraft`,
+ * `syncManifest`), which a test cannot tag with a session setting.
  */
+const PAUSE_TABLE = 'areca_test_pause_entry'
 const PAUSE_TRIGGER = 'areca_test_pause_link_insert'
+const PAUSE_SECONDS = 2
+
+/**
+ * Keeps the failure fast if a lock cycle ever forms: a waiter that is not
+ * resolved by deadlock detection gives up after `lock_timeout`. It is set in
+ * the trigger because the write functions open their own transactions.
+ */
+const LOCK_TIMEOUT = '5s'
 
 function bodyOf(text: string, targetId?: string) {
   return {
@@ -71,13 +82,21 @@ async function seed(ctx: {
   return { a: await make('alpha'), b: await make('beta') }
 }
 
+/** Installs the pause trigger (once per test run) and clears earlier pauses. */
 async function installPauseTrigger() {
+  await db.execute(
+    sql.raw(`CREATE TABLE IF NOT EXISTS ${PAUSE_TABLE} (
+      entry_id text PRIMARY KEY
+    )`),
+  )
+  await db.execute(sql.raw(`DELETE FROM ${PAUSE_TABLE}`))
   await db.execute(
     sql.raw(`
     CREATE OR REPLACE FUNCTION ${PAUSE_TRIGGER}() RETURNS trigger AS $$
     BEGIN
-      IF current_setting('areca.test_pause', true) = 'on' THEN
-        PERFORM pg_sleep(1.5);
+      IF EXISTS (SELECT 1 FROM ${PAUSE_TABLE} p WHERE p.entry_id = NEW.source_entry_id) THEN
+        PERFORM set_config('lock_timeout', '${LOCK_TIMEOUT}', true);
+        PERFORM pg_sleep(${PAUSE_SECONDS});
       END IF;
       RETURN NEW;
     END
@@ -94,41 +113,17 @@ async function installPauseTrigger() {
   )
 }
 
-async function dropPauseTrigger() {
-  await db.execute(
-    sql.raw(`DROP TRIGGER IF EXISTS ${PAUSE_TRIGGER} ON entry_link`),
-  )
-  await db.execute(sql.raw(`DROP FUNCTION IF EXISTS ${PAUSE_TRIGGER}()`))
+/** Pauses the link-index inserts of these entries. */
+async function pauseInsertsOf(entryIds: string[]) {
+  for (const id of entryIds) {
+    await db.execute(
+      sql`INSERT INTO areca_test_pause_entry (entry_id) VALUES (${id}) ON CONFLICT DO NOTHING`,
+    )
+  }
 }
 
-/**
- * A save as the content writes run it: the entry row is updated, the asset
- * lock is taken, and the index rows follow in the same transaction. The
- * lock timeout turns a lock wait into an error instead of a hang.
- */
-async function saveWithLink(
-  organizationId: string,
-  entryId: string,
-  targetId: string,
-) {
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`SET LOCAL lock_timeout = '3s'`)
-    await tx.execute(sql`SELECT set_config('areca.test_pause', 'on', true)`)
-    await assetAttachLock(tx, organizationId)
-    await tx
-      .update(entry)
-      .set({
-        draftData: {
-          title: 'Saved',
-          slug: 'saved',
-          body: bodyOf('Lees', targetId),
-        },
-        draftVersion: sql`${entry.draftVersion} + 1`,
-        contentVersion: sql`${entry.contentVersion} + 1`,
-      })
-      .where(eq(entry.id, entryId))
-    await syncEntryLinkIndex(tx, entryId)
-  })
+async function clearPauses() {
+  await db.execute(sql.raw(`DELETE FROM ${PAUSE_TABLE}`))
 }
 
 /** The driver's message, or the database error under it (a deadlock is 40P01). */
@@ -145,7 +140,7 @@ async function linkTargets(sourceEntryId: string) {
   return rows.map((row) => row.targetEntryId).sort()
 }
 
-/** Waits until `count` index inserts are paused, so their entry rows are locked. */
+/** Waits until `count` link-index inserts are paused, so their entry rows are locked. */
 async function waitForPausedInserts(count: number) {
   for (let attempt = 0; attempt < 400; attempt += 1) {
     const found = await db.execute<{ n: number }>(sql`
@@ -159,21 +154,42 @@ async function waitForPausedInserts(count: number) {
   throw new Error('no save reached its index insert')
 }
 
+const LANGUAGE_MANIFEST = {
+  languages: { main: 'en', all: ['en', 'nl'] },
+  collections: {
+    articles: { route: '/blog/$slug', fields: articleFields() },
+  },
+}
+
 describe.skipIf(!hasDb)('entry link index: locks do not deadlock', () => {
-  afterEach(async () => {
-    await dropPauseTrigger()
+  beforeEach(async () => {
+    await installPauseTrigger()
   })
 
-  it('lets two saves that link to each other both finish', async () => {
+  it('lets two saves that link to each other and both change their slug finish', async () => {
     await withTestSite(async (ctx) => {
       const { a, b } = await seed(ctx)
-      await installPauseTrigger()
-      // Both saves hold their own entry row before either inserts its link,
-      // so each insert needs the row the other save holds.
+      // Both saves hold their own entry row (a slug change takes FOR UPDATE on
+      // it) before either inserts its link, so each insert needs the row the
+      // other save holds.
+      await pauseInsertsOf([a, b])
+      const versionA = (await getEntry(a))!.draftVersion
+      const versionB = (await getEntry(b))!.draftVersion
       const results = await Promise.allSettled([
-        saveWithLink(ctx.org.id, a, b),
-        saveWithLink(ctx.org.id, b, a),
+        updateDraft(
+          a,
+          { title: 'Alpha two', slug: 'alpha-two', body: bodyOf('Lees', b) },
+          ctx.actor.id,
+          versionA,
+        ),
+        updateDraft(
+          b,
+          { title: 'Beta two', slug: 'beta-two', body: bodyOf('Lees', a) },
+          ctx.actor.id,
+          versionB,
+        ),
       ])
+      await clearPauses()
       const failures = results.flatMap((result) =>
         result.status === 'rejected' ? [errorText(result.reason)] : [],
       )
@@ -181,22 +197,27 @@ describe.skipIf(!hasDb)('entry link index: locks do not deadlock', () => {
       expect(await linkTargets(a)).toEqual([b])
       expect(await linkTargets(b)).toEqual([a])
     })
-  })
+  }, 30_000)
 
   it('lets a language change and a save that links to another entry both finish', async () => {
     await withTestSite(async (ctx) => {
       const { a, b } = await seed(ctx)
-      await installPauseTrigger()
       // The save holds its entry row and pauses at its link insert. The
-      // language change then takes the site row and waits for the entry row.
-      // The save's insert needs the site row for its foreign key.
-      const save = saveWithLink(ctx.org.id, a, b)
-      await waitForPausedInserts(1)
-      const language = setSiteLanguages(
-        ctx.site.id,
-        { main: 'en', all: ['en', 'nl'] },
+      // manifest push then takes the site row and reaches the same entry row
+      // in its index rebuild. The save's insert needs KEY SHARE on the site
+      // row for its foreign key, which the manifest push's lock blocks.
+      await pauseInsertsOf([a])
+      const versionA = (await getEntry(a))!.draftVersion
+      const save = updateDraft(
+        a,
+        { title: 'Alpha', slug: 'alpha', body: bodyOf('Lees', b) },
         ctx.actor.id,
+        versionA,
       )
+      await waitForPausedInserts(1)
+      // Only the save's own insert pauses, so the manifest's rebuild runs freely.
+      await clearPauses()
+      const language = syncManifest(ctx.site.id, LANGUAGE_MANIFEST)
       const [saved, changed] = await Promise.allSettled([save, language])
       expect(
         [saved, changed].flatMap((result) =>
@@ -205,5 +226,5 @@ describe.skipIf(!hasDb)('entry link index: locks do not deadlock', () => {
       ).toEqual([])
       expect(await linkTargets(a)).toEqual([b])
     })
-  })
+  }, 30_000)
 })

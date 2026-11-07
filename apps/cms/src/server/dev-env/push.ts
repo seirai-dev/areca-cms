@@ -55,6 +55,7 @@ import type { SlugOwner } from './slug-collisions'
 import { loadPlanContext } from './load-plan'
 import { remapReferences } from './references'
 import {
+  lockSiteLinkIndex,
   rebuildEntryLinkIndex,
   syncEntryLinkIndexes,
 } from '#/server/content/entry-link-index'
@@ -143,7 +144,7 @@ export async function pushDevEnvironment(
 ): Promise<PushResult> {
   const probe = await readDevEnvironment(input.devSiteId)
   const committed = await db.transaction((tx) =>
-    runPush(tx, actor, input, probe.organizationId),
+    runPush(tx, actor, input, probe.organizationId, probe.parentSiteId),
   )
   const publication = input.goLive
     ? await goLiveAfterPush(committed.productionSiteId, actor.id)
@@ -169,7 +170,11 @@ async function runPush(
   actor: DevEnvActor,
   input: PushInput,
   organizationId: string,
+  /** The production site the push writes. Fixed for a dev env, so read before the transaction. */
+  productionSiteId: string,
 ): Promise<CommittedPush> {
+  // Link-index lock first, before any row lock (see `lockSiteLinkIndex`).
+  await lockSiteLinkIndex(tx, productionSiteId)
   await lockOrganizationForMutation(tx, organizationId, {
     mode: 'no-key-update',
   })

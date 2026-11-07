@@ -23,7 +23,10 @@ import { m } from '#/paraglide/messages'
 import { lockProductionSite } from './lock'
 import { deepEqual } from './plan'
 import { remapReferences } from './references'
-import { syncEntryLinkIndexes } from '#/server/content/entry-link-index'
+import {
+  lockSiteLinkIndex,
+  syncEntryLinkIndexes,
+} from '#/server/content/entry-link-index'
 import { relinkProductionEntries } from './relink'
 
 import type { ReferenceWarning } from './references'
@@ -93,7 +96,7 @@ export async function copyEntryToProduction(
   // Anything that is not a dev env is NotFound, as for every dev action.
   const dev = await readDevEnvironment(source.siteId)
   return db.transaction((tx) =>
-    runCopy(tx, actor, input, dev.id, dev.organizationId),
+    runCopy(tx, actor, input, dev.id, dev.organizationId, dev.parentSiteId),
   )
 }
 
@@ -103,10 +106,14 @@ async function runCopy(
   input: CopyInput,
   devSiteId: string,
   organizationId: string,
+  /** The production site the copy writes. Fixed for a dev env, so read before the transaction. */
+  productionSiteId: string,
 ): Promise<CopyResult> {
   const markReady = input.markReady ?? false
   const overwrite = input.overwrite ?? false
 
+  // Link-index lock first, before any row lock (see `lockSiteLinkIndex`).
+  await lockSiteLinkIndex(tx, productionSiteId)
   await lockOrganizationForMutation(tx, organizationId, {
     mode: 'no-key-update',
   })

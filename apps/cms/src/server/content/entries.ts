@@ -29,7 +29,7 @@ import { importExternalImages } from '#/server/assets/external-images'
 import { assetAttachLock } from '#/server/assets/usage'
 
 import { archiveDeletedContent } from './deletion-archive'
-import { syncEntryLinkIndex } from './entry-link-index.ts'
+import { lockSiteLinkIndex, syncEntryLinkIndex } from './entry-link-index.ts'
 import { prepareEntryLinks } from './entry-links.ts'
 import { getCollection } from './collections.ts'
 import { ConflictError, NotFoundError, ValidationError } from './errors.ts'
@@ -512,6 +512,7 @@ export async function createEntry(input: {
   await assertSlugAvailable(ctx.collection.id, slug)
 
   return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, ctx.site.id)
     await assetAttachLock(tx, ctx.site.organizationId)
     await lockSlugClaims(tx, ctx.collection.id, claimedSlugs(slug, parsed.data))
     await assertUrlsAvailable(tx, ctx.collection.id, parsed.data, slug)
@@ -618,6 +619,7 @@ export async function updateDraft(
   }
 
   return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, ctx.site.id)
     await assetAttachLock(tx, ctx.site.organizationId)
     await lockSlugClaims(
       tx,
@@ -761,6 +763,7 @@ export async function restoreRevision(
   }
 
   return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, initial.site.id)
     await tx
       .select({ id: site.id })
       .from(site)
@@ -1011,6 +1014,7 @@ export async function publishEntry(
   }
 
   return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, ctx.site.id)
     await assetAttachLock(tx, ctx.site.organizationId)
     const ownershipErrors = await validateContentOwnership(
       ctx.site.id,
@@ -1079,6 +1083,7 @@ export async function unpublishEntry(id: string, actorId: string) {
   assertCollectionEntry(ctx.collection)
   const now = new Date()
   return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, ctx.site.id)
     const updated = (
       await tx
         .update(entry)
@@ -1199,6 +1204,7 @@ export async function scheduleEntry(
   const draftData = normalizeEntryData(ctx, images.data)
 
   return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, ctx.site.id)
     await assetAttachLock(tx, ctx.site.organizationId)
     const ownershipErrors = await validateContentOwnership(
       ctx.site.id,
@@ -1271,6 +1277,7 @@ export async function cancelSchedule(id: string, actorId: string) {
         : 'draft'
       : ctx.entry.status
   return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, ctx.site.id)
     const updated = (
       await tx
         .update(entry)
@@ -1323,6 +1330,7 @@ export async function deleteEntry(id: string, actorId: string) {
     return
   }
   return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, ctx.site.id)
     await archiveDeletedContent(tx, ctx.site.organizationId, 'entry', id)
     await audit(
       {
