@@ -5,6 +5,7 @@ import type { MarkdownComponents } from '@tanstack/markdown/react'
 
 import { codeHighlighter } from '#/lib/highlight'
 import { m } from '#/paraglide/messages'
+import { isExternalHref } from '#/server/richtext/allowlist'
 import { serializeMarkdown } from '#/server/richtext/markdown'
 
 /** Same highlighter as the published html, so code looks the same here. */
@@ -16,8 +17,13 @@ const highlightCode = createTanStackMarkdownHighlighter(codeHighlighter)
  * neutral stand-in: each site supplies its own component map.
  */
 const previewComponents = {
+  // The same link rule as the published html: external links open in a new tab.
   a(props) {
-    return <a {...props} rel="noopener noreferrer" target="_blank" />
+    return isExternalHref(props.href ?? '') ? (
+      <a {...props} rel="noopener noreferrer" target="_blank" />
+    ) : (
+      <a {...props} />
+    )
   },
   img(props) {
     return <img {...props} loading="lazy" />

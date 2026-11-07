@@ -15,7 +15,7 @@ const CODE_FENCE_LANGUAGE_LIST = CODE_FENCE_LANGUAGES.join(', ')
 
 /** Server instructions, first rich text line: Markdown with code. */
 export const RICH_TEXT_MARKDOWN_INSTRUCTION =
-  'Write rich text fields as Markdown (headings ##, lists, links, ![alt](asset:<assetId>) images, `inline code` in backticks, and fenced code blocks with a language). Do not send HTML.'
+  'Write rich text fields as Markdown (headings ##, lists, links, ![alt](asset:<assetId>) images, `inline code` in backticks, and fenced code blocks with a language). Do not send HTML. Link to pages of this site with site paths like /coffees/slug (the collection route from get_site_info) and to a section with #anchor. Never write a full URL of this site.'
 
 /** Server instructions, second rich text line: code goes in fences. */
 export const CODE_BLOCK_INSTRUCTION =

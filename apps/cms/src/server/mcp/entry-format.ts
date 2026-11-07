@@ -156,6 +156,22 @@ function convertValue(
   return value
 }
 
+/** One warning per Markdown link that was dropped because its href is not allowed. */
+export function linkWarnings(
+  fields: Field[],
+  input: Record<string, unknown>,
+): string[] {
+  const messages = new Set<string>()
+  for (const field of fields) {
+    const value = input[field.key]
+    if (field.type !== 'richtext' || typeof value !== 'string') continue
+    markdownToRichText(value, {
+      onWarning: (message) => messages.add(message),
+    })
+  }
+  return [...messages]
+}
+
 /**
  * One warning per code block language that is not supported. Such a block is
  * saved as written, but it is shown without colours.

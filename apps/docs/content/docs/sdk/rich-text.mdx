@@ -47,12 +47,13 @@ The main `@areca-cms/site-sdk` entry point exports the same functions.
 
 ## Render with React
 
-Pass the document to `Markdown` from `@tanstack/markdown/react`. The example below styles a small set of elements and leaves the rest as the renderer's defaults.
+Pass the document to `Markdown` from `@tanstack/markdown/react`. Wrap your components with `richTextComponents` from `@areca-cms/site-sdk/rich-text-react`. It adds the link rule for external sites and keeps image sizes. The example below styles a small set of elements and leaves the rest as the renderer's defaults.
 
 ```tsx title="components/article-body.tsx"
 import { Markdown } from '@tanstack/markdown/react'
 import type { MarkdownComponents } from '@tanstack/markdown/react'
 import { richTextDocument } from '@areca-cms/site-sdk/rich-text'
+import { richTextComponents } from '@areca-cms/site-sdk/rich-text-react'
 import type { RichTextValue } from '@areca-cms/site-sdk'
 
 const components = {
@@ -63,14 +64,7 @@ const components = {
     return <p {...props} className="mt-5 text-lg leading-8" />
   },
   a(props) {
-    const external = /^https?:\/\//i.test(props.href ?? '')
-    return (
-      <a
-        {...props}
-        rel={external ? 'noopener noreferrer' : props.rel}
-        target={external ? '_blank' : props.target}
-      />
-    )
+    return <a {...props} className="underline" />
   },
   img(props) {
     return <img {...props} loading="lazy" className="h-auto w-full rounded-xl" />
@@ -78,7 +72,11 @@ const components = {
 } satisfies MarkdownComponents
 
 export function ArticleBody({ body }: { body: RichTextValue | null | undefined }) {
-  return <Markdown components={components}>{richTextDocument(body)}</Markdown>
+  return (
+    <Markdown components={richTextComponents(components)}>
+      {richTextDocument(body)}
+    </Markdown>
+  )
 }
 ```
 
@@ -96,7 +94,7 @@ If you are not using React, use `richTextHtml` to insert the static HTML:
 const html = richTextHtml(article.data.body)
 ```
 
-The HTML is generated from the same tree as `document`, so the two always match. It does not go through your components map, so you cannot restyle elements with it. Prefer `richTextDocument` with a renderer whenever you can.
+The HTML is generated from the same tree as `document`, so the two always match. It does not go through your components map, so you cannot restyle elements with it. External links in it already open in a new tab, as described under [Safety](#safety). Prefer `richTextDocument` with a renderer whenever you can.
 
 ## Code blocks
 
@@ -168,6 +166,7 @@ import { createTanStackMarkdownHighlighter } from '@tanstack/highlight/markdown'
 import { js } from '@tanstack/highlight/languages/js'
 import { ts } from '@tanstack/highlight/languages/ts'
 import { richTextDocument } from '@areca-cms/site-sdk/rich-text'
+import { richTextComponents } from '@areca-cms/site-sdk/rich-text-react'
 import type { RichTextValue } from '@areca-cms/site-sdk'
 
 const highlightCode = createTanStackMarkdownHighlighter(
@@ -175,7 +174,11 @@ const highlightCode = createTanStackMarkdownHighlighter(
 )
 
 export function ArticleBody({ body }: { body: RichTextValue | null | undefined }) {
-  return <Markdown highlighter={highlightCode}>{richTextDocument(body)}</Markdown>
+  return (
+    <Markdown highlighter={highlightCode} components={richTextComponents()}>
+      {richTextDocument(body)}
+    </Markdown>
+  )
 }
 ```
 
@@ -185,7 +188,8 @@ Import only the languages you use. The package root imports every grammar, which
 
 - **Editors choose from a fixed set of formatting.** The body can hold headings, lists, block quotes, code blocks, tables, images, bold, italic and links. It cannot hold arbitrary HTML, so there is no `<script>` tag to pass through.
 - **Only render `document`, `markdown` or `html`.** Never render the `json` property. It is the editor's internal format and is not meant for the page.
-- **Check link targets if you need stricter rules.** The SDK does not rewrite or filter link addresses in rich text. Links can be `http`, `https` or `mailto`, and your `a` component receives the `href` as written. If you only accept `https` or relative links, enforce that in your component.
+- **External links open in a new tab, and other links stay in the same tab.** The renderer does not add a `target` by itself. `richTextComponents` adds `target="_blank"` and `rel="noopener noreferrer"` to `http` and `https` links. Links to a page of the site, such as `/coffees/slug`, links to a section, such as `#faq`, and `mailto` links get no `target`. The `html` field follows the same rule. A custom `a` in your components map still gets those two props for external links, so change them there if you need something else.
+- **Check link addresses if you need stricter rules.** The SDK does not rewrite or filter link addresses in rich text. Links can be `http`, `https` or `mailto`, a page of the site, or a section. Your `a` component receives the `href` as written. If you only accept `https` or relative links, enforce that in your component.
 - **Keep the renderer version in step with the SDK.** A renderer at a different version may not understand the document tree. Upgrade the SDK and the renderer together.
 
 ## Related

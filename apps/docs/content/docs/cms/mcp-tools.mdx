@@ -347,7 +347,7 @@ Do not send `null`. The input schema does not accept it for SEO keys.
 Write rich text as Markdown, never as HTML. Areca converts it to the stored format.
 
 - Use `##` for section headings, and `###` or `####` for subsections. Other heading levels are adjusted to these.
-- Separate paragraphs with a blank line. Use `**bold**`, `*italic*` and `[links](https://…)`.
+- Separate paragraphs with a blank line. Use `**bold**`, `*italic*` and links. Link to other sites with `[text](https://…)`, to a page of this site with its path, such as `[coffees](/coffees/slug)`, and to a section with `[FAQ](#faq)`. Do not write full URLs of this site.
 - Use bullet and numbered lists, `>` blockquotes and tables.
 - Put images in the text as `![alt text](asset:<assetId>)`. The asset id must belong to the client's Library, or the write is refused.
 - Raw HTML is dropped. An image written with a full `https` URL is copied into the Library when the entry is saved, and the text then points at the copy. If a copy fails, the image keeps its URL and the result has a `warnings` list that names it. Uploaded assets are still preferred, because you control their alt text.

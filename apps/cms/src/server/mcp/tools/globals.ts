@@ -26,6 +26,7 @@ import {
   mergeSeo,
   seoPatchFromInput,
   codeLanguageWarnings,
+  linkWarnings,
   toStoredFields,
 } from '../entry-format'
 import { McpNotFoundError } from '../errors'
@@ -168,6 +169,7 @@ export function registerGlobalTools(registry: ToolCollector): void {
           }),
           [
             ...codeLanguageWarnings(global.fields, inputs),
+            ...linkWarnings(global.fields, inputs),
             ...updated.importWarnings,
           ],
         ),

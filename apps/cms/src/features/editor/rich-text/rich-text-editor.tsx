@@ -497,7 +497,11 @@ export function RichTextEditor({
       setLinkOpen(false)
       return
     }
-    if (!/^[a-z]+:/i.test(href)) href = `https://${href}`
+    // A bare domain gets https://. Site paths (/page) and anchors (#section)
+    // are stored as typed.
+    if (!/^[a-z]+:/i.test(href) && !/^[/#?.]/.test(href)) {
+      href = `https://${href}`
+    }
     if (!isAllowedLinkHref(href)) {
       setLinkError(m.editor_link_invalid())
       return
@@ -681,7 +685,7 @@ export function RichTextEditor({
                   </Label>
                   <Input
                     id="rich-text-link-url"
-                    placeholder="https://example.com"
+                    placeholder="https://example.com, /page or #section"
                     value={linkHref}
                     onChange={(event) => {
                       setLinkHref(event.target.value)

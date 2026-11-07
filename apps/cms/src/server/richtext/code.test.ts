@@ -114,7 +114,7 @@ describe('inline code in the published document', () => {
       ),
     )
     expect(result.html).toContain(
-      '<a href="https://example.com"><code>parse()</code></a>',
+      '<a href="https://example.com" target="_blank" rel="noopener noreferrer"><code>parse()</code></a>',
     )
   })
 

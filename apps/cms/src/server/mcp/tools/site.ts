@@ -84,6 +84,9 @@ export function languageSummary(languages: SiteLanguages) {
   }
 }
 
+const LINKS_GUIDE =
+  'Links: to a page of this site, use its site path from get_site_info, such as /coffees/slug, built from the collection route and the entry slug. To a section of a page, add #anchor, such as /coffees/slug#origin. Never write a full URL of this site. Other sites use full https:// links.'
+
 const LANGUAGES_GUIDE = [
   'Languages: this site publishes in several languages. The main language is the fallback. To write a translation, call update_entry (or update_global) once per language with locale set to that language: fields, seo and slug apply to that language. Shared fields (translatable false) change in every language, and the response lists them in sharedFieldsUpdated.',
   'Check the other languages with get_entry: translations shows, for each language, whether it is complete and which required fields are missing. Ready is blocked until every required language is complete.',
@@ -108,6 +111,7 @@ function writingGuide(
     IMAGE_UPLOAD_SHORT,
     'Drafts are safe. ' + approval + release,
     STATUS_GUIDE,
+    LINKS_GUIDE,
     DATES_NOTE,
     SEO_GUIDE,
     ...(languages ? [LANGUAGES_GUIDE] : []),

@@ -1,11 +1,43 @@
 import { createTanStackMarkdownHighlighter } from '@tanstack/highlight/markdown'
 import { renderHtml } from '@tanstack/markdown/html'
 import { parseMarkdown } from '@tanstack/markdown/parser'
-import type { MarkdownDocument } from '@tanstack/markdown'
+import type { MarkdownDocument, MarkdownExtension } from '@tanstack/markdown'
 
 import { codeHighlighter } from '#/lib/highlight'
 
+import { isExternalHref } from './allowlist'
+
 const highlightCode = createTanStackMarkdownHighlighter(codeHighlighter)
+
+const ATTRIBUTE_ENTITIES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+  '`': '&#96;',
+}
+
+function escapeAttribute(value: string): string {
+  return value.replace(/[&<>"'`]/g, (char) => ATTRIBUTE_ENTITIES[char] ?? char)
+}
+
+/**
+ * Renders `http(s)` links to other sites in a new tab. Site paths, anchors and
+ * `mailto:` links fall through to TanStack's default output, which has no
+ * target. Matches the SDK's default link component.
+ */
+export const externalLinkExtension: MarkdownExtension = {
+  name: 'areca-external-links',
+  renderHtml(node, context) {
+    if (node.type !== 'link' || !isExternalHref(node.href)) return undefined
+    const title = node.title ? ` title="${escapeAttribute(node.title)}"` : ''
+    const children = node.children
+      .map((child) => context.renderInline(child))
+      .join('')
+    return `<a href="${escapeAttribute(node.href)}"${title} target="_blank" rel="noopener noreferrer">${children}</a>`
+  },
+}
 
 /**
  * Parse serialized rich text markdown into a TanStack Markdown document.
@@ -21,10 +53,12 @@ export function parseRichTextDocument(markdown: string): MarkdownDocument {
 /**
  * Static HTML fallback for sites that do not render the document themselves.
  * Code blocks get `token …` classes only; colours are left to the site's CSS.
+ * External links get `target="_blank" rel="noopener noreferrer"`; site paths,
+ * anchors and `mailto:` links get no target.
  */
 export function renderRichTextHtml(document: MarkdownDocument): string {
-  return renderHtml(document, { highlighter: highlightCode }).replace(
-    /<\/img>/g,
-    '',
-  )
+  return renderHtml(document, {
+    highlighter: highlightCode,
+    extensions: [externalLinkExtension],
+  }).replace(/<\/img>/g, '')
 }

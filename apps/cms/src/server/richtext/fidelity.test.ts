@@ -6,6 +6,7 @@ import { renderHtml } from '@tanstack/markdown/html'
 import { parseMarkdown } from '@tanstack/markdown/parser'
 import type { JSONContent } from '@tiptap/core'
 import { convertRichText } from './index'
+import { externalLinkExtension } from './document'
 import { richTextComponents } from '../../../../../packages/site-sdk/src/rich-text-react'
 
 const text = (value: string, marks?: JSONContent['marks']): JSONContent => ({
@@ -190,7 +191,11 @@ describe('editor fidelity and renderer parity', () => {
           }),
         ),
       ),
-    ).toBe(normalize(renderHtml(value.document)))
+    ).toBe(
+      normalize(
+        renderHtml(value.document, { extensions: [externalLinkExtension] }),
+      ),
+    )
     expect(convertRichText(source)).toEqual(value)
     expect(JSON.parse(JSON.stringify(value.document))).toEqual(value.document)
   })
