@@ -659,8 +659,11 @@ export async function checkLinkTargets(
  * is `entry:<id>[#anchor]` (an entry of this site, or of the production site of
  * a development environment), or a site path or own-domain URL that is the path
  * of an entry of this site (its section from `#…`). Paths with a query stay
- * plain links, as in the editor. Every href is resolved in one batch: two
- * queries whatever the number of links.
+ * plain links, as in the editor. Every href is resolved in one batch: the
+ * queries depend on the kinds of link, not on how many there are. An import
+ * with entry links makes three (the site, its link target sites, the entries
+ * by id), one with paths two (the site, the entries by path), and one with
+ * both four.
  *
  * The result is keyed by the href as the Markdown writes it, and the target's
  * path is in `locale` (the language of the text, null for the main one). An

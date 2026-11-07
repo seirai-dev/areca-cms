@@ -8,6 +8,7 @@ import { archiveEntry, createEntry, publishEntry } from './entries.ts'
 import {
   checkLinkTargets,
   linkTargetHeadings,
+  resolveMarkdownLinkTargets,
   searchLinkTargets,
 } from './link-targets.ts'
 import {
@@ -1000,6 +1001,52 @@ describe.skipIf(!hasDb)('link targets: headings and checks', () => {
         state: 'gone',
         target: null,
       })
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+})
+
+describe.skipIf(!hasDb)('resolveMarkdownLinkTargets: queries', () => {
+  it('makes the same queries whatever the number of links of each kind', async () => {
+    const ctx = await createTestSite({ languages })
+    try {
+      await createTestCollection(ctx.site.id, {
+        key: 'pages',
+        routePattern: '/pages/$slug',
+      })
+      const page = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'pages',
+        data: { title: 'Contact', slug: 'contact', body: doc([]) },
+        actorId: ctx.actor.id,
+      })
+      const countQueries = async (markdown: string) => {
+        const spy = vi.spyOn(db, 'select')
+        try {
+          await resolveMarkdownLinkTargets(ctx.site.id, null, [markdown])
+          return spy.mock.calls.length
+        } finally {
+          spy.mockRestore()
+        }
+      }
+      const oneId = await countQueries(`[a](entry:${page.id})`)
+      const manyIds = await countQueries(
+        `[a](entry:${page.id}) [b](entry:${page.id}#x) [c](entry:${page.id})`,
+      )
+      const onePath = await countQueries('[a](/pages/contact)')
+      const manyPaths = await countQueries(
+        '[a](/pages/contact) [b](/pages/other) [c](/pages/more)',
+      )
+      const mixed = await countQueries(
+        `[a](entry:${page.id}) [b](/pages/contact)`,
+      )
+      expect(manyIds).toBe(oneId)
+      expect(manyPaths).toBe(onePath)
+      // The site, its link target sites and the entries by id; the site and the entries by path.
+      expect(oneId).toBe(3)
+      expect(onePath).toBe(2)
+      expect(mixed).toBe(4)
     } finally {
       await cleanupTestSite(ctx)
     }
