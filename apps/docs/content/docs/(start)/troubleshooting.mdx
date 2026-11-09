@@ -88,6 +88,9 @@ When you ask an agency admin or your hosting team for help, include the exact er
   <Accordion title="Preview opens a 404 page or does not connect">
     The site's **Production URL** must point to a running website that has a preview route. For the local demo site, run the website on port 3001. See [Preview](/docs/cms/preview) and [Preview](/docs/sdk/preview).
   </Accordion>
+  <Accordion title="Preview works locally but shows a 404 page on the deployed site">
+    The site is deployed as static files, for example on Cloudflare, so nothing runs the preview route. The console shows 404s for `/__preview/…` and, on TanStack Start, `/_serverFn/…`, followed by React error #418. The Cloudflare Insights CORS and integrity errors next to them are unrelated. Keep the pages static and add a small Worker for the preview. See [Static sites and Cloudflare](/docs/sdk/preview#static-sites-and-cloudflare).
+  </Accordion>
   <Accordion title="The preview link says the token is invalid or expired">
     Preview links last one hour. Select **Preview** again from the saved entry to get a new link. Check that your website route passes the whole token through to the SDK. See [Preview](/docs/sdk/preview).
   </Accordion>

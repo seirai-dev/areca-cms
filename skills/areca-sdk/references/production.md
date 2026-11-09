@@ -28,7 +28,9 @@ try {
 
 A site content section preview is different. The CMS opens the section's `previewPath` on the site (for example `/about`) with `?arecaPreview=<token>`, not `/__preview`. `getPreviewEntry` returns `{ kind: "global", global, entry }` for that token. Read the token on the page, then call `content.previewGlobals(token)` (or pass the `PreviewGlobalResult`). It returns `{ globals, previewing, complete, issues }`: `globals` has the section replaced by its draft when the draft is complete, and the published section otherwise. Use the draft only when `previewing` is this page's section, and show a note when `complete` is `false`. An expired or mistyped token makes the fetch throw, so catch it and serve the published values. Set `previewHeaders()` on the response as for entries.
 
-`getPreviewEntry` needs `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` at runtime. Exclude `/__preview` from prerendering and CDN caching. In TanStack Start, wrap the fetch in a `createServerFn` handler.
+`getPreviewEntry` needs `ARECA_CMS_URL` at runtime. It doesn't need `ARECA_SITE_TOKEN`: the CMS authorises the call with the signed preview token. Exclude `/__preview` from prerendering and CDN caching. In TanStack Start, wrap the fetch in a `createServerFn` handler.
+
+**The preview route needs code that runs per request in production.** A site deployed as static files (Cloudflare static assets or Pages, Netlify, GitHub Pages, S3) answers `/__preview/*` with its 404 page, and on TanStack Start the `/_serverFn/…` loader call 404s too, even though `pnpm dev` works. Find out how the site is hosted before building the route. For a static site, keep the pages static and serve only the preview from a Worker or function. The `areca-visual-editing` skill has the full recipe in `references/static-sites.md`, including the Cloudflare `wrangler.jsonc`, the TanStack Start shell and the deploy command (`npx wrangler deploy`).
 
 ## Visual editing
 

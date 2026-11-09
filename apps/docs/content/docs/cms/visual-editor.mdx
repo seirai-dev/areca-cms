@@ -121,6 +121,10 @@ The website must allow the CMS to show its preview page inside the editor. Selec
 
 If the preview still doesn't load, an agency admin can check the **Preview URL** in **Settings › General**. It must point to the website. See [Site settings](/docs/cms/site-settings).
 
+### The preview shows a "page not found" page
+
+The website is probably hosted as static files only, so it has nothing to show drafts with. This is a website setting, not a CMS problem. Ask your developer to add the preview handler described in [Static sites and Cloudflare](/docs/sdk/preview#static-sites-and-cloudflare).
+
 ### Parts of the page can't be clicked
 
 The website has not marked which parts of the page belong to which field. Ask your developer to add the visual editing markers. Until then, you can still use the fields and see the preview.

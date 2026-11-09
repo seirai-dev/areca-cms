@@ -46,18 +46,17 @@ For entries, two things are fixed by the CMS and cannot be changed on your side.
 
 Each time an editor opens a preview, the CMS signs a new token. Old tokens do not need to be revoked. They stop working after their expiry time.
 
-The preview token is separate from the site token. The [site token](/docs/security/tokens) reads published content and is used by your build and your preview server. The preview token authorises one draft.
+The preview token is separate from the site token. The [site token](/docs/security/tokens) reads published content and is used by your build. The preview token authorises one draft.
 
 ## Environment variables
 
-The preview helpers use the same client as the build. The client reads two variables, and both must be set on the server that runs your preview route.
+The preview helpers use the same client as the build. A preview needs one variable on the server that runs your preview route, at request time and not only during the build.
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `ARECA_CMS_URL` | Yes | The origin of the CMS, for example `https://cms.example.com`. |
-| `ARECA_SITE_TOKEN` | Yes | The site token. It is required even though the CMS checks the preview token, because `createArecaClient()` will not start without it. |
+| `ARECA_CMS_URL` | Yes | The origin of the CMS, for example `https://cms.example.com`. It is also the origin the visual editor frames the page from. |
 
-If `ARECA_SITE_TOKEN` is missing, `getPreviewEntry()` throws `Missing ARECA_SITE_TOKEN`. Your preview route catches that error and shows a message. The site token is sent as a bearer header on the preview request. The CMS authorises the request with the preview token in the URL. See [the client](/docs/sdk/client) for the full list of options.
+The preview request doesn't need `ARECA_SITE_TOKEN`. The CMS authorises it with the signed preview token in the URL, so a server that only serves previews can run without the site token. See [the client](/docs/sdk/client) for the full list of options.
 
 ## The preview helpers
 
@@ -171,6 +170,130 @@ prerender: {
 
 A prerendered preview page would be a copy of a draft, written to disk and served to anyone who requests the file.
 
+## Static sites and Cloudflare
+
+The preview route must run code on every request, because each preview link carries a new token. A site deployed as plain static files has nothing to run that code. The preview then works with `pnpm dev` but fails once the site is deployed. This happens with Cloudflare static assets (a `wrangler.jsonc` with `assets` and no `main`), Cloudflare Pages without Functions, Netlify, GitHub Pages and S3.
+
+### What editors and developers see
+
+In the CMS, **Preview** and the visual editor show the website's 404 page, a blank frame or **Preview unavailable**. The browser console of the CMS tab shows lines like these:
+
+| Console line | Meaning |
+| --- | --- |
+| `GET https://<site>/__preview/<collection>/<slug>?token=…` with status `404` | No file exists for that path. This is the cause. |
+| `GET https://<site>/_serverFn/<hash>?payload=…` with status `404` | TanStack Start only. The route's server function has no server to run on. Same cause. |
+| `Minified React error #418` | The browser tried to hydrate the 404 page as the preview route. It follows from the 404s. |
+| `Cross-Origin Request Blocked` and `None of the "sha512" hashes in the integrity attribute match` for `static.cloudflareinsights.com/beacon.min.js` | Cloudflare Web Analytics, which Cloudflare adds to the page, is blocked inside the CMS frame. It doesn't affect the preview. To silence it, turn off Web Analytics for the site in the Cloudflare dashboard. |
+| `[tiptap warn]: prosemirror-model is loaded more than once` | A warning from the CMS editor itself. It doesn't affect the preview. |
+
+It isn't a CORS problem and it isn't a CMS bug. Changing CORS settings or the CMS doesn't help.
+
+### The fix: static pages, plus a Worker for the preview
+
+Keep every public page prerendered, exactly as before. Add a small handler that runs only for the preview paths, and let every other request go to the static files:
+
+| Path | What the handler returns |
+| --- | --- |
+| `/__preview/*` | A page shell that renders in the browser, sent with `previewHeaders()` and `visualEditingHeaders({ cmsOrigin })`. |
+| `GET /api/preview?token=…&locale=…` | The saved draft from `content.preview(token, { locale })`, as JSON, with the CMS origin. |
+| `POST /api/preview/live` | The visual editor's unsaved values, rendered with `content.previewFrom(body)`, as JSON. |
+
+The preview page then loads its draft from `/api/preview` in the browser instead of from a server function. The draft can't be fetched from the CMS directly in the browser, because the CMS preview endpoint sends no CORS headers. The request goes through your own handler.
+
+On Cloudflare, the handler is a Worker deployed next to the static assets. `run_worker_first` sends only the preview paths to it:
+
+```jsonc title="wrangler.jsonc"
+{
+  "name": "my-site",
+  "compatibility_date": "2026-11-01",
+  // Lets the SDK read ARECA_CMS_URL from process.env
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "src/worker.ts",
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/__preview/*", "/api/preview", "/api/preview/*"]
+  },
+  "vars": {
+    // Public: drafts are read from this CMS, and only it may frame the preview
+    "ARECA_CMS_URL": "https://cms.example.com"
+  }
+}
+```
+
+```ts title="src/worker.ts"
+import { handlePreviewApi, previewPageHeaders, cmsOriginFrom } from './lib/preview/api'
+
+interface Env {
+  ASSETS: { fetch: (request: Request | string) => Promise<Response> }
+  ARECA_CMS_URL?: string
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    // GET /api/preview and POST /api/preview/live
+    const api = await handlePreviewApi(request, env.ARECA_CMS_URL)
+    if (api) return api
+
+    const url = new URL(request.url)
+    if (url.pathname.startsWith('/__preview/')) {
+      // The client-rendered shell, written by the build (see below)
+      const shell = await env.ASSETS.fetch(new URL('/__preview/shell', url).toString())
+      const headers = new Headers(shell.headers)
+      const extra = previewPageHeaders(cmsOriginFrom(env.ARECA_CMS_URL))
+      for (const [name, value] of Object.entries(extra)) headers.set(name, value)
+      return new Response(shell.body, { status: shell.status, headers })
+    }
+
+    return env.ASSETS.fetch(request)
+  },
+}
+```
+
+`handlePreviewApi` is your own module. Write it as a plain function from `Request` to `Response`, so the same code runs in the Worker and in a Vite middleware for `pnpm dev`. `previewPageHeaders` returns the `X-Robots-Tag` and `Cache-Control` headers from `previewHeaders()`, and the `Content-Security-Policy` from `visualEditingHeaders()` when the CMS origin is known. Send the same `X-Robots-Tag` and `Cache-Control` on the JSON responses too.
+
+In TanStack Start, keep `prerender` and add the `spa` option, which writes the client-rendered shell during the build:
+
+```ts title="vite.config.ts"
+tanstackStart({
+  prerender: {
+    enabled: true,
+    filter: (page) => !page.path.startsWith('/__preview') && !page.path.startsWith('/api'),
+  },
+  spa: {
+    enabled: true,
+    maskPath: '/__preview/shell/shell',
+    prerender: { outputPath: '/__preview/shell' },
+  },
+})
+```
+
+Then set `ssr: false` on the preview route, and make its loader fetch `/api/preview?token=…` instead of calling a server function. With the visual editor, `useLivePreview`'s `resolve` POSTs the result to `/api/preview/live`.
+
+Add `wrangler` as a dev dependency. With pnpm 10, allow `workerd` to run its install script, for example with `allowBuilds: { workerd: true }` in `pnpm-workspace.yaml`.
+
+<Callout type="warn" title="Don't move the whole site into the Worker">
+With Cloudflare's Vite plugin, prerendering runs inside the Workers runtime, which can't read the content that `areca pull` wrote to disk. Pages that read content then fail to prerender. Keep the normal build and add the Worker beside it.
+</Callout>
+
+A Worker has no project files. `content.preview()` and `content.previewFrom()` call the CMS and convert its answer, so they work there. If your preview page also shows data read from the pulled files, such as referenced entries or site content, test it with `wrangler dev` first.
+
+Other hosts follow the same shape: an Astro adapter with `export const prerender = false` on the preview routes, Netlify or Vercel functions, or Cloudflare Pages Functions for the same three paths.
+
+### Deploy the Worker with Go live
+
+Areca's [Cloudflare deployment](/docs/sdk/go-live-builds#cloudflare-builds) starts a Workers Builds build, which runs your build and then the Worker's deploy command. In Cloudflare, open the Worker's **Settings › Builds** and check that the deploy command is plain `npx wrangler deploy`. A command that uploads only the static files deploys the pages without the Worker, and the preview returns 404 again.
+
+`ARECA_CMS_URL` must be available to the Worker at request time. The build variables that `areca pull` uses are not. Put it in `vars` in `wrangler.jsonc`, as above, or set it as a runtime variable on the Worker.
+
+To check a deployed preview, copy a preview link from the CMS and run:
+
+```bash
+curl -sI "<preview link>" | grep -i -E "^HTTP|content-security-policy|cache-control"
+# Expect 200, frame-ancestors with the CMS origin, and no-store
+```
+
 ## Site content previews
 
 A token for a site content section works differently. The CMS opens the section's **preview path** on your site, not `/__preview`. For a section with `previewPath: '/about'`, the link is `<production URL>/about?arecaPreview=<token>`. The page at that path reads the token and shows the draft for that section only.
@@ -217,7 +340,8 @@ Anyone who has the preview URL can read that draft until the token expires. Brow
 
 | Symptom | Likely cause |
 | --- | --- |
-| `Missing ARECA_SITE_TOKEN` | The preview server does not have the site token. Set it as a runtime environment variable. |
+| The preview shows the site's 404 page once deployed, but works with `pnpm dev` | The site is deployed as static files, so the preview route never runs. See [Static sites and Cloudflare](#static-sites-and-cloudflare). |
+| `Missing ARECA_SITE_TOKEN` | An SDK older than 0.6.0, or the route also reads published content through the client. Previews don't need the site token. Upgrade the SDK, or set the token as a runtime variable. |
 | `Failed to fetch preview (401)` | The token expired or was altered. Open the preview again from the CMS. |
 | `Failed to fetch preview (404)` | The entry does not exist any more, or the slug changed. |
 | `Failed to reach CMS at ...` | `ARECA_CMS_URL` is wrong, or the preview server cannot reach the CMS. |

@@ -235,9 +235,6 @@ export async function POST({ request }) {
 
 ## Static sites
 
-A site that only builds static HTML has no server, so it has no draft preview route either, and the visual editor stays unavailable. Both the preview route (`content.preview(token)` per request) and the live render need server code. The usual fix keeps the public pages static and adds server code for previews only:
-
-1. An SSR route for `/__preview/*` that sends `frame-ancestors` and renders the draft. This gives "Updates on save".
-2. A POST endpoint for live results, plus the bridge script. This gives "Live" and click to edit.
+A site that only builds static HTML has no server, so `/__preview/*` returns 404 once deployed, and the visual editor stays unavailable. Keep the public pages static and add server code for the preview only: a Worker or function for `/__preview/*`, `GET /api/preview` and `POST /api/preview/live`. The full recipe, with Cloudflare Workers and TanStack Start code, the console errors to expect and the deploy settings, is in [static-sites.md](static-sites.md).
 
 On Astro that is an adapter with `export const prerender = false` on those routes. Ask the user before changing how the site is built or hosted.

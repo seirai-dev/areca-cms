@@ -346,6 +346,7 @@ Only when the user wants drafts. The CMS opens `<productionUrl>/__preview/<colle
 - Read the token from the search params. Call `content.preview(token)` in a server function. Check `result.complete` before you render the entry. When it is false, show `result.issues`.
 - Set the preview headers with `previewHeaders()` and add `<meta name="robots" content="noindex, nofollow">` in the head.
 - Exclude `/__preview` from prerendering and caching. In the Vite config, use a `filter` on the prerender (the demo does this).
+- **Check the hosting first.** The server function only runs where the site has a server. If the site deploys as static files (for example Cloudflare static assets, `wrangler.jsonc` without `main`), the preview 404s in production. Follow `references/static-sites.md` in the `areca-visual-editing` skill instead: the pages stay static and a small Worker serves the preview.
 
 ```ts
 tanstackStart({
