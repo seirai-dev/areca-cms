@@ -50,8 +50,8 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: echo "name=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
       - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@v1
-      - uses: docker/login-action@v4.7.0
+        uses: useblacksmith/setup-docker-builder@v2
+      - uses: docker/login-action@v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -81,8 +81,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@v1
-      - uses: docker/login-action@v4.7.0
+        uses: useblacksmith/setup-docker-builder@v2
+      - uses: docker/login-action@v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
