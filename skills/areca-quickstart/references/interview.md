@@ -116,6 +116,7 @@ D. Build and preview
 2. Connect the home page and the about page to their sections? [yes, when the plan has them]
 3. Draft preview route (so editors can see drafts in the site)? [yes]
    It needs the production URL in the CMS. A localhost URL is fine for development.
+   Where is the site hosted? A static host (for example Cloudflare static assets or Pages) needs a small Worker or function for the preview. I add it; the pages stay static.
    b. Visual editor support (live preview while editors type, and click a part of the page to edit it)? [yes, when 3 is yes and the framework can run server code per request]
       It adds a header and a small bridge to the preview route and the section pages. Public pages do not change.
 4. Run a content pull before every build and before the dev server? [yes, prebuild only; predev only after the first release]

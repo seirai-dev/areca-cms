@@ -219,7 +219,7 @@ Read [references/api.md](references/api.md) for every export, type and signature
 - Change the schema in `areca.config.ts` and then `manifest push`, then go live and pull. Confirm a field removal or a language removal with the user first: both can delete content or stop a language being served. Don't hand-edit generated content or `areca.gen.ts`; a pull rewrites both.
 - Commit `areca.gen.ts`. Keep the pulled JSON out of Git.
 - Never import the content object, `@areca-cms/site-sdk/pull` or a client with tokens into browser bundles.
-- Exclude `/__preview/*` from prerendering and caching.
+- Exclude `/__preview/*` from prerendering and caching. On a site deployed as static files, the preview route needs a Worker or function of its own (see [references/production.md](references/production.md)).
 - Never render `data-areca-*` markers or send `frame-ancestors` headers on public pages. Only preview routes do.
 - The SDK doesn't create CMS sites or tokens. An agency admin creates the site in the CMS. Ask the user for the URL, site key and tokens instead of guessing them.
 - To edit content (not code) through an AI, use the Areca MCP server (see the `areca-mcp` skill).

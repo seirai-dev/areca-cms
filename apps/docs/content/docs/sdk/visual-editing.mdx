@@ -261,6 +261,7 @@ You only need this if you write your own bridge. The bridge in `@areca-cms/site-
 | Symptom | Likely cause and fix |
 | --- | --- |
 | The preview is blank | The browser refused to frame the page. Check that the preview response sends `frame-ancestors` with the CMS origin. Remove any `X-Frame-Options` header from that response. Browsers that support `frame-ancestors` ignore it when both are present, but other tools may not. |
+| The preview shows the site's 404 page once deployed, and the console shows 404s for `/__preview/…` (and `/_serverFn/…` on TanStack Start) | The site is deployed as static files, so nothing runs the preview route. Keep the pages static and add a Worker or function for the preview only. See [Static sites and Cloudflare](/docs/sdk/preview#static-sites-and-cloudflare). |
 | The preview is blank, and the Preview URL is `http://` | The production CMS only frames `https:` addresses, plus `localhost` and `127.0.0.1`. Use HTTPS, or a local address. |
 | The status stays on "Updates on save" | The bridge is not running, or it does not accept the CMS. Check that the preview page loads `useLivePreview` or `createVisualBridge`. Check that `cmsOrigin` is the exact CMS origin, with the same scheme and port. A `cmsOrigin` of `null` usually means `ARECA_CMS_URL` is not set on the server. |
 | Live updates arrive but the page does not change | The result is for another section, or the page does not read the draft. For a site content page, check that `previewing` equals that page's section. |

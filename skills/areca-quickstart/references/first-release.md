@@ -178,5 +178,6 @@ If the schema was written in code, `areca pull` works after the release.
 | `areca manifest pull` says "Remove … Re-run with --yes to confirm" | The pull would remove a collection, section, field, or language. It is not a terminal, so it cannot ask. Show the user the diff (run it in their terminal), then confirm. Use `--yes` only after the yes. |
 | `areca manifest pull` says it "already defines N collection(s). Re-run with --yes" | The config was not written by `manifest pull` (no header) and it has collections. N counts the site content sections too. Show the user the diff, then confirm as above. After the one-time `--yes`, the header is there and only removals ask. |
 | Preview link shows "expired" or "invalid" | Preview links last about an hour. Create a new link with `get_preview_url`. |
+| Preview works locally but shows the 404 page once deployed (404s for `/__preview/…` and `/_serverFn/…` in the console) | The site is deployed as static files, so the preview route never runs. Follow `references/static-sites.md` in the `areca-visual-editing` skill. |
 | `Something went wrong on the Areca server (ref …)` | Nothing is confirmed saved. Retry once, then report the ref to the user. |
 | Pages show no content after the pull | The dev server started before the pull. Restart it. Check that `src/generated/content/manifest.json` has a `publicationId`. |

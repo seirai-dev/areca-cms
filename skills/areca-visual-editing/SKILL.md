@@ -44,8 +44,8 @@ Check each item. Fix or ask about the ones that fail before writing code.
 2. **A draft preview route already works.** `/__preview/$collection/$slug?token=` must render a draft with `content.preview(token)`. If it does not exist, build it first from the `areca-sdk` skill (`references/production.md`). Visual editing is added on top of it.
 3. **Site content pages** (globals) that should be visual need `previewPath` on the section (in `areca.config.ts`, then `areca manifest push`), and the page at that path must read `?arecaPreview=`. A section without `previewPath` cannot open in Visual mode.
 4. **Where the CMS loads the preview from.** The CMS uses the site's **Preview URL** (Settings › General, agency admins only), or the **Production URL** when it is empty. It must be an origin only (`https://staging.example.com`, no path). A production CMS frames only `https:` addresses plus `http://localhost` and `http://127.0.0.1`. An `http://` LAN or staging address shows a blank preview. Ask the user which URL the CMS uses; don't guess it.
-5. **The CMS origin.** The site must know the exact CMS origin (scheme, host and port). Use the origin of `ARECA_CMS_URL`, read on the server at request time. Make sure that variable (and `ARECA_SITE_TOKEN`) reach the **runtime** environment of the server that serves previews, not only the build. A Docker image that sets them only in the build stage has no `cmsOrigin` at run time.
-6. **The framework can run server code per request** for the preview route and for live renders. A fully static site cannot go past "Updates on save" without an SSR route or server endpoint. Ask before changing a project's output mode (for example Astro `output`).
+5. **The CMS origin.** The site must know the exact CMS origin (scheme, host and port). Use the origin of `ARECA_CMS_URL`, read on the server at request time. Make sure that variable reaches the **runtime** environment of the server that serves previews, not only the build. A Docker image that sets it only in the build stage has no `cmsOrigin` at run time. (Previews don't need `ARECA_SITE_TOKEN`; the CMS checks the signed preview token.)
+6. **Where the site is hosted, and whether it runs server code per request.** The preview route and live renders need it. A site deployed as static files (Cloudflare static assets or Pages, Netlify, GitHub Pages, S3, `output: "export"`) returns 404 for `/__preview/*` in production even when `pnpm dev` works. Check `wrangler.jsonc` and the build output, or ask the user. For a static site, follow [references/static-sites.md](references/static-sites.md): pages stay static and a small Worker or function serves the preview only. Ask before changing a project's output mode or hosting.
 
 ## Steps
 
@@ -53,6 +53,7 @@ Follow the steps in order. Framework code is in the references:
 
 - React with TanStack Start or Next.js: [references/react.md](references/react.md).
 - Astro, SvelteKit, Vue, Express, Hono or plain Node: [references/other-frameworks.md](references/other-frameworks.md).
+- A site deployed as static files (for example on Cloudflare): [references/static-sites.md](references/static-sites.md), on top of the framework reference.
 
 ### Step 1: let the CMS frame the preview page
 
