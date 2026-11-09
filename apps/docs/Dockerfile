@@ -18,7 +18,7 @@ COPY apps/docs ./apps/docs
 COPY packages/site-sdk/package.json ./packages/site-sdk/package.json
 RUN pnpm --filter @areca/docs build
 
-FROM nginx:1.29-alpine AS runner
+FROM nginx:1.31-alpine AS runner
 LABEL org.opencontainers.image.source="https://github.com/seirai-dev/areca-cms"
 COPY apps/docs/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/docs/dist/client /usr/share/nginx/html
