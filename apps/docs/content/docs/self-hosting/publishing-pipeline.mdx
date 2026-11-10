@@ -1,6 +1,6 @@
 ---
 title: Publishing pipeline
-description: How a Go live request moves through the queue, build leases, deployment (Dokploy or Cloudflare) and health check, and how to recover a stuck or uncertain release.
+description: How a Go live request moves through the queue, build leases, Dokploy or Cloudflare deployment and health check, and how to recover a stuck release.
 ---
 
 Editors press **Go live** in the CMS, but the release itself is carried out by the publishing worker that runs inside your CMS instances. This page follows a release from the operator's side: what the worker does at each stage, what each outcome means for the live site, and what to do when a release stops moving. For the editor's view, see [going live](/docs/cms/going-live).

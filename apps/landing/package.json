@@ -5,7 +5,9 @@
   "sideEffects": false,
   "scripts": {
     "dev": "vite dev --port 3200 --strictPort",
-    "build": "vite build",
+    "build": "vite build && node scripts/seo.mjs",
+    "seo": "node scripts/seo.mjs",
+    "seo:check": "vite build && node scripts/seo.mjs --report",
     "preview": "node scripts/serve-static.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint",

@@ -7,6 +7,8 @@ import { fumadocsMdx } from 'fumadocs-mdx/vite'
 import { getSlugs } from 'fumadocs-core/source'
 import { getPageMarkdownUrl } from './src/lib/shared'
 
+// sitemap.xml, robots.txt and llms.txt are written after the build by
+// scripts/seo.mjs, from the prerendered pages.
 // HTML pages are found by crawling links, but nothing links to the raw
 // markdown variants (used by "Copy Markdown" and LLM tools), so list them.
 const markdownPages = globSync('**/*.{md,mdx}', { cwd: 'content/docs' }).map(
@@ -28,7 +30,6 @@ export default defineConfig({
         { path: '/docs' },
         { path: '/404' },
         { path: '/api/search' },
-        { path: '/llms.txt' },
         { path: '/llms-full.txt' },
         ...markdownPages,
       ],

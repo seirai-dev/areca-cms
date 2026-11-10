@@ -8,20 +8,15 @@ import { RootProvider } from 'fumadocs-ui/provider/tanstack'
 import appCss from '@/styles/app.css?url'
 import StaticSearchDialog from '@/components/search'
 
-const description =
-  'Documentation for Areca, the CMS for agency-managed websites, and its site SDK.'
-
 export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'Areca Docs' },
-      { name: 'description', content: description },
-      { property: 'og:site_name', content: 'Areca Docs' },
-      { property: 'og:type', content: 'website' },
       { name: 'theme-color', content: '#5856d6' },
     ],
+    // Title, description, canonical, Open Graph and JSON-LD come from each
+    // route's head: seo({...}) in src/lib/seo.
     links: [
       { rel: 'stylesheet', href: appCss },
       { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },

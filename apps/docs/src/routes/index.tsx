@@ -1,64 +1,13 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { HomeLayout } from 'fumadocs-ui/layouts/home'
-import {
-  BookOpen,
-  Code,
-  GraduationCap,
-  type LucideIcon,
-  Server,
-  ShieldCheck,
-} from 'lucide-react'
+import { sections } from '@/lib/home-sections'
 import { baseOptions } from '@/lib/layout.shared'
+import { homeHead } from '@/lib/seo/pages/home'
 
 export const Route = createFileRoute('/')({
+  head: homeHead,
   component: Home,
 })
-
-const sections: Array<{
-  title: string
-  description: string
-  href: string
-  icon: LucideIcon
-  /** Spans both columns of the grid. */
-  wide?: boolean
-}> = [
-  {
-    title: 'Guides',
-    description:
-      'Step-by-step: connect your first website to Areca, from empty folder to live site.',
-    href: '/docs/guides',
-    icon: GraduationCap,
-    wide: true,
-  },
-  {
-    title: 'Use the CMS',
-    description:
-      'Write and review content, preview it, and go live. Covers both editors and agency admins.',
-    href: '/docs/cms',
-    icon: BookOpen,
-  },
-  {
-    title: 'Build with the SDK',
-    description:
-      'Connect a website to Areca: define content, pull snapshots, render rich text, preview drafts.',
-    href: '/docs/sdk',
-    icon: Code,
-  },
-  {
-    title: 'Self-host Areca',
-    description:
-      'Install with Docker, configure, deploy customer sites, operate, upgrade and recover.',
-    href: '/docs/self-hosting',
-    icon: Server,
-  },
-  {
-    title: 'Security',
-    description:
-      'Roles and permissions, two-factor authentication, tokens, secrets and rate limits.',
-    href: '/docs/security',
-    icon: ShieldCheck,
-  },
-]
 
 function Home() {
   return (

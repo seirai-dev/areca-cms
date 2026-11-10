@@ -8,6 +8,7 @@
     "test": "pnpm -r test",
     "test:e2e": "pnpm --filter @areca/cms test:e2e",
     "typecheck": "pnpm -r typecheck",
+    "seo:check": "pnpm --filter @areca/landing --filter @areca/docs seo:check",
     "db:generate": "pnpm --filter @areca/cms db:generate",
     "db:migrate": "pnpm --filter @areca/cms db:migrate",
     "db:push": "pnpm --filter @areca/cms db:push",

@@ -5,7 +5,9 @@
   "sideEffects": false,
   "scripts": {
     "dev": "vite dev --port 3100 --strictPort",
-    "build": "vite build && node scripts/check-anchors.mjs && node scripts/check-install-versions.mjs",
+    "build": "vite build && node scripts/seo.mjs && node scripts/check-anchors.mjs && node scripts/check-install-versions.mjs",
+    "seo": "node scripts/seo.mjs",
+    "seo:check": "vite build && node scripts/seo.mjs --report",
     "preview": "node scripts/serve-static.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --test scripts/*.test.mjs",
