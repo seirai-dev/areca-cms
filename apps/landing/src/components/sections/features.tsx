@@ -25,7 +25,7 @@ type Feature = {
   alt: () => string
 }
 
-const FEATURES: Array<Feature> = [
+export const FEATURES: Array<Feature> = [
   {
     key: 'visual',
     shot: 'visual',

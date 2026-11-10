@@ -16,6 +16,8 @@ import { docs, source } from '@/lib/source'
 import { baseOptions } from '@/lib/layout.shared'
 import { getPageMarkdownUrl, gitConfig } from '@/lib/shared'
 import { useMDXComponents } from '@/components/mdx'
+import { seo } from '@/lib/seo'
+import { docPageSeo } from '@/lib/seo/pages/doc'
 
 export const Route = createFileRoute('/docs/$')({
   component: Page,
@@ -25,21 +27,7 @@ export const Route = createFileRoute('/docs/$')({
     await docs.getPage(data.path)?.preload()
     return data
   },
-  head: ({ loaderData }) => {
-    if (!loaderData) return {}
-    const title = `${loaderData.title} · Areca CMS Docs`
-    const meta: Array<Record<string, string>> = [
-      { title },
-      { property: 'og:title', content: title },
-    ]
-    if (loaderData.description) {
-      meta.push(
-        { name: 'description', content: loaderData.description },
-        { property: 'og:description', content: loaderData.description },
-      )
-    }
-    return { meta }
-  },
+  head: ({ loaderData }) => (loaderData ? seo(docPageSeo(loaderData)) : {}),
 })
 
 // staticFunctionMiddleware bakes each result into a JSON file at build time,
@@ -53,10 +41,13 @@ const serverLoader = createServerFn({ method: 'GET' })
 
     return {
       path: page.path,
+      url: page.url,
       title: page.data.title,
       description: page.data.description,
       markdownUrl: getPageMarkdownUrl(page).url,
       pageTree: await source.serializePageTree(source.getPageTree()),
+      // Server only: reads git and the processed Markdown at build time.
+      seo: await (await import('@/lib/seo/pages/doc-facts')).docSeoFacts(page),
     }
   })
 

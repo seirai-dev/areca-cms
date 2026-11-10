@@ -2,7 +2,7 @@
   "$schema": "https://inlang.com/schema/inlang-message-format",
 
   "meta_title": "Areca CMS: the open-source, self-hosted CMS for agencies",
-  "meta_description": "Areca CMS is an MIT-licensed CMS for agency-run websites. Clients write and approve, you ship. Releases are frozen snapshots your site pulls at build time, so published pages never call the CMS.",
+  "meta_description": "Areca CMS is an MIT-licensed, self-hosted CMS for agency-run websites. Clients write and approve; releases are frozen snapshots your site pulls at build time.",
 
   "skip_to_content": "Skip to content",
   "nav_label": "Main",

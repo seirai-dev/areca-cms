@@ -122,8 +122,20 @@ Link to other pages with absolute paths, e.g. `[the CLI](/docs/sdk/cli)` or `[ra
 
 - An HTML page for every doc, plus the landing page (`src/routes/index.tsx`) and a 404 page.
 - `/docs/<page>.md`: the raw Markdown of each page, behind the "Copy Markdown" button.
-- `/llms.txt` and `/llms-full.txt` for AI tools.
+- `/llms.txt` and `/llms-full.txt` for AI tools, plus `/sitemap.xml` and `/robots.txt` (see [SEO](#seo)).
 - `/api/search`: a static search index, searched in the browser (⌘K).
+
+## SEO
+
+Every route sets its head with one call to `seo()` from `src/lib/seo`: title, description, canonical, link previews and structured data. Site-wide facts are in `src/lib/seo/config.ts`.
+
+For doc pages, the frontmatter `title` and `description` become the meta tags, so write the description as a real sentence of 70–160 characters.
+
+`sitemap.xml`, `robots.txt` and `llms.txt` are generated on build from the built pages by `scripts/seo.mjs`, which also fails the build on SEO errors (a missing title, description or canonical). To see every page and the generated files:
+
+```bash
+pnpm --filter @areca/docs seo:check
+```
 
 ## Configuration
 

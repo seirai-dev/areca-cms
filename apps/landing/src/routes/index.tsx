@@ -1,5 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { m } from '@/paraglide/messages'
+import { seo } from '@/lib/seo'
+import { homeSeo } from '@/lib/seo/pages/home'
 import { Nav } from '@/components/sections/nav'
 import { Hero } from '@/components/sections/hero'
 import { How } from '@/components/sections/how'
@@ -13,7 +15,10 @@ import { OpenSource } from '@/components/sections/open-source'
 import { Faq } from '@/components/sections/faq'
 import { Footer } from '@/components/sections/footer'
 
-export const Route = createFileRoute('/')({ component: Home })
+export const Route = createFileRoute('/')({
+  head: () => seo(homeSeo()),
+  component: Home,
+})
 
 function Home() {
   return (

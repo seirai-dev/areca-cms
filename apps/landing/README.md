@@ -37,3 +37,9 @@ See [`video/README.md`](video/README.md).
 ## Deploying
 
 The site is static, so any static host works. The official site at [arecacms.com](https://arecacms.com) runs on Cloudflare Workers with static assets, configured in [`wrangler.jsonc`](wrangler.jsonc). Maintainers deploy it from the repository root with `pnpm cf:build:landing`, then `pnpm cf:preview:landing` for a preview version or `pnpm cf:deploy:landing` to publish.
+
+## SEO
+
+Every route sets its head with one call to `seo()` from `src/lib/seo` (title, description, canonical, Open Graph and JSON-LD). Site-wide facts live in `src/lib/seo/config.ts`; page-specific structured data lives in `src/lib/seo/pages/`.
+
+`pnpm build` runs `scripts/seo.mjs` after Vite. It reads the prerendered pages, writes `sitemap.xml`, `robots.txt` and `llms.txt`, and fails on missing or broken SEO tags. Run `pnpm seo:check` to build and print every page's tags and the generated files before a release.
