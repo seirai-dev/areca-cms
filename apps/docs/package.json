@@ -19,22 +19,22 @@
     "@tanstack/react-router": "1.170.46",
     "@tanstack/react-start": "1.169.4",
     "@tanstack/start-static-server-functions": "1.167.44",
-    "fumadocs-core": "16.17.10",
-    "fumadocs-mdx": "15.4.10",
+    "fumadocs-core": "16.18.1",
+    "fumadocs-mdx": "15.5.0",
     "fumadocs-ui": "npm:@fumadocs/base-ui@16.17.1",
-    "lucide-react": "^1.67.0",
+    "lucide-react": "^1.70.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.4",
+    "@tailwindcss/vite": "^4.3.5",
     "@types/mdx": "^2.0.14",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.2.1",
-    "tailwindcss": "^4.3.4",
+    "tailwindcss": "^4.3.5",
     "typescript": "^6.0.3",
-    "vite": "^8.3.5"
+    "vite": "^8.3.6"
   }
 }
