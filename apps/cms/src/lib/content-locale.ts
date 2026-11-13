@@ -5,11 +5,8 @@
  * Every read or write of `$i18n` / `$locale` goes through this module.
  * See docs/design/content-languages.md.
  */
-import { z } from '#/lib/zod'
-
-import { LOCALE_TAG_MAX_LENGTH } from './content-limits.ts'
 import { isEmptyRichText } from './rich-text-empty.ts'
-import { SEO_KEY } from './seo.ts'
+import { SEO_KEY } from './seo-key.ts'
 import type { EntryData, Field, FieldType } from './types.ts'
 import { isPlainObject } from '#/lib/is-plain-object'
 
@@ -299,10 +296,3 @@ export function canonicalLocale(tag: string): string | null {
 export function isValidLocaleTag(tag: string): boolean {
   return canonicalLocale(tag) !== null
 }
-
-/** A language code as accepted in manifests and settings. */
-export const localeTagSchema = z
-  .string()
-  .min(1)
-  .max(LOCALE_TAG_MAX_LENGTH)
-  .refine(isValidLocaleTag, 'Invalid language code')

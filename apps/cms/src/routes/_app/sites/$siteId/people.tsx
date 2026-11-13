@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { z } from '#/lib/zod'
+import { optionalParam, z } from '#/lib/search-params'
 
 import { PeopleScreen } from '#/features/people/people-screen'
 import { canManageSite } from '#/lib/site-nav'
@@ -10,7 +10,7 @@ import { canManageSite } from '#/lib/site-nav'
  */
 export const Route = createFileRoute('/_app/sites/$siteId/people')({
   validateSearch: z.object({
-    invite: z.coerce.number().optional().catch(undefined),
+    invite: optionalParam(z.coerce.number()),
   }),
   beforeLoad: ({ context, params }) => {
     if (!canManageSite(context.me, context.site.organizationId)) {

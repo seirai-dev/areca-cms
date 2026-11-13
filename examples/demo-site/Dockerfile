@@ -1,11 +1,15 @@
 ARG NODE_VERSION=24.22.1
 FROM node:${NODE_VERSION}-alpine AS deps
+ARG PNPM_VERSION=12.8.1
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
 WORKDIR /app
-RUN corepack enable && corepack prepare pnpm@11.18.0 --activate
+RUN npm install --global pnpm@${PNPM_VERSION}
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY examples/demo-site/package.json ./examples/demo-site/
 COPY packages/site-sdk/package.json ./packages/site-sdk/
-RUN pnpm install --frozen-lockfile --filter @areca/demo-site...
+RUN --mount=type=cache,id=demo-site-pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile --filter @areca/demo-site... --store-dir=/pnpm/store
 
 FROM deps AS build
 COPY packages/site-sdk ./packages/site-sdk
@@ -25,7 +29,8 @@ FROM node:${NODE_VERSION}-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
-COPY --from=build /app/examples/demo-site/.output ./.output
-COPY --from=build /app/examples/demo-site/src/generated ./src/generated
+COPY --from=build --chown=node:node /app/examples/demo-site/.output ./.output
+COPY --from=build --chown=node:node /app/examples/demo-site/src/generated ./src/generated
+USER node
 EXPOSE 3000
 CMD ["node", ".output/server/index.mjs"]

@@ -2,8 +2,6 @@
  * Whitelabel branding shared by server and client: defaults, the curated font
  * list, and the accent-colour → palette derivation. Pure, no I/O.
  */
-import { z } from '#/lib/zod'
-
 export const DEFAULT_APP_NAME = 'Areca'
 
 export const FONTS = {
@@ -211,26 +209,6 @@ export function loginTaglineFor(
   if (!isLoginTaglineLocale(locale)) return null
   return normalizeLoginTagline(branding.loginTagline[locale])
 }
-
-/** One tagline: trimmed, at most 80 characters, a single line. Empty → null. */
-const loginTaglineValue = z
-  .string()
-  .trim()
-  .max(LOGIN_TAGLINE_MAX_LENGTH)
-  .refine((value) => !/[\r\n]/.test(value), 'Use a single line')
-  .transform((value) => value || null)
-  .nullable()
-  .optional()
-
-/** Request body for the sign-in taglines, per language. */
-export const loginTaglinesSchema = z
-  .object({
-    en: loginTaglineValue,
-    nl: loginTaglineValue,
-    tr: loginTaglineValue,
-  })
-  .nullable()
-  .optional()
 
 /** What the client needs to render the brand. Image URLs are site-relative. */
 export type BrandingView = {

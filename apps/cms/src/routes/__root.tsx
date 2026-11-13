@@ -17,7 +17,9 @@ import { Toaster } from '#/components/ui/sonner'
 import { TooltipProvider } from '#/components/ui/tooltip'
 import {
   DEFAULT_BRANDING,
+  FONTS,
   brandingCss,
+  fontEntry,
   fontStylesheetUrl,
 } from '#/lib/branding'
 import type { RouterContext } from '#/lib/router-context'
@@ -25,6 +27,7 @@ import { getLocale } from '#/paraglide/runtime'
 import { getBrandingFn } from '#/server/fn/branding'
 
 import appCss from '../styles.css?url'
+import interLatinUrl from '@fontsource-variable/inter/files/inter-latin-opsz-normal.woff2?url'
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async () => {
@@ -69,6 +72,19 @@ export const Route = createRootRouteWithContext<RouterContext>()({
           href: appCss,
         },
         ...(fontUrl ? [{ rel: 'stylesheet', href: fontUrl }] : []),
+        // The default font is only discovered once styles.css has loaded;
+        // fetch its Latin file alongside the stylesheet instead.
+        ...(fontEntry(branding.font) === FONTS.inter
+          ? [
+              {
+                rel: 'preload',
+                href: interLatinUrl,
+                as: 'font',
+                type: 'font/woff2',
+                crossOrigin: 'anonymous' as const,
+              },
+            ]
+          : []),
         branding.faviconUrl
           ? {
               rel: 'icon',

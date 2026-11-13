@@ -1,5 +1,6 @@
 import * as React from 'react'
-import { LayoutGroup, motion, useReducedMotion } from 'motion/react'
+import { LayoutGroup, useReducedMotion } from 'motion/react'
+import * as motion from 'motion/react-m'
 
 import { SPRING_SMALL } from '#/lib/motion'
 import { cn } from '#/lib/utils'

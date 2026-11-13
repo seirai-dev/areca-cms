@@ -1,9 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { z } from '#/lib/zod'
+import { localeTagParam, optionalParam, z } from '#/lib/search-params'
 
 import { resolveLanguage } from '#/features/editor/use-content-language'
 import { LibraryScreen } from '#/features/library/library-screen'
-import { localeTagSchema } from '#/lib/content-locale'
 
 /**
  * `/sites/$siteId/library`: media shared by the client's sites (brief §3.8).
@@ -14,9 +13,9 @@ import { localeTagSchema } from '#/lib/content-locale'
  */
 export const Route = createFileRoute('/_app/sites/$siteId/library')({
   validateSearch: z.object({
-    upload: z.coerce.number().optional().catch(undefined),
-    alt: z.literal('missing').optional().catch(undefined),
-    lang: localeTagSchema.optional().catch(undefined),
+    upload: optionalParam(z.coerce.number()),
+    alt: optionalParam(z.literal('missing')),
+    lang: optionalParam(localeTagParam),
   }),
   component: LibraryPage,
 })

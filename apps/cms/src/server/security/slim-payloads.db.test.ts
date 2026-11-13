@@ -6,6 +6,7 @@ import { buildJob } from '#/db/schema'
 import { publishEntry } from '#/server/content/entries'
 import {
   getEntryFn,
+  getEntryTitleFn,
   getGlobalFn,
   updateDraftFn,
   updateGlobalDraftFn,
@@ -208,6 +209,16 @@ describe.skipIf(!hasDb)('polled and autosave payloads stay small', () => {
         w.sessions.editorX,
       ),
     ).rejects.toThrow(/DRAFT_CONFLICT/)
+  })
+
+  it('gives a reference field the chosen entry title only', async () => {
+    const created = await w.fresh.entry('X')
+    const title = await call<Row>(
+      getEntryTitleFn,
+      { id: created.id },
+      w.sessions.editorX,
+    )
+    expect(title).toEqual({ id: created.id, title: `Entry ${created.slug}` })
   })
 
   it('answers a site content save without the other copies', async () => {

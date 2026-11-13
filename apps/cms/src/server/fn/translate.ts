@@ -2,11 +2,8 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from '#/lib/zod'
 
 import { ID_MAX_LENGTH } from '#/lib/content-limits'
-import {
-  canonicalLocale,
-  localeTagSchema,
-  readLocale,
-} from '#/lib/content-locale'
+import { canonicalLocale, readLocale } from '#/lib/content-locale'
+import { localeTagSchema } from '#/lib/locale-tag-schema'
 import { m } from '#/paraglide/messages'
 import { loadAssetLookup } from '#/server/assets'
 import { richTextAssetRefs } from '#/server/assets/richtext-ownership'

@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { z } from '#/lib/zod'
+import { optionalParam, z } from '#/lib/search-params'
 
 import { SiteSettingsScreen } from '#/features/site-settings/site-settings-screen'
 import { SETTINGS_TABS } from '#/features/site-settings/settings-tabs'
@@ -7,7 +7,7 @@ import { SETTINGS_TABS } from '#/features/site-settings/settings-tabs'
 /** `/sites/$siteId/settings?tab=…` (agency admins, brief §3.10). */
 export const Route = createFileRoute('/_app/sites/$siteId/settings')({
   validateSearch: z.object({
-    tab: z.enum(SETTINGS_TABS).optional().catch(undefined),
+    tab: optionalParam(z.enum(SETTINGS_TABS)),
   }),
   beforeLoad: ({ context, params }) => {
     if (!context.me.user.isAgencyAdmin) {

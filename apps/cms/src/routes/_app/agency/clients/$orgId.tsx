@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { z } from '#/lib/zod'
+import { optionalParam, z } from '#/lib/search-params'
 
 import { ClientScreen } from '#/features/agency/client-screen'
 import { CLIENT_TABS } from '#/features/agency/client-tabs'
@@ -11,8 +11,8 @@ import { CLIENT_TABS } from '#/features/agency/client-tabs'
  */
 export const Route = createFileRoute('/_app/agency/clients/$orgId')({
   validateSearch: z.object({
-    tab: z.enum(CLIENT_TABS).optional().catch(undefined),
-    new: z.coerce.number().optional().catch(undefined),
+    tab: optionalParam(z.enum(CLIENT_TABS)),
+    new: optionalParam(z.coerce.number()),
   }),
   component: ClientPage,
 })

@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 
-import { localeTagSchema } from '#/lib/content-locale'
+import { localeTagSchema } from '#/lib/locale-tag-schema'
 import { ID_MAX_LENGTH } from '#/lib/content-limits'
 import { z } from '#/lib/zod'
 import { requireSiteAccess } from '#/server/content/access'

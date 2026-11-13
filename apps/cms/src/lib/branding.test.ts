@@ -11,11 +11,11 @@ import {
   hexToOklch,
   isFontKey,
   loginTaglineFor,
-  loginTaglinesSchema,
   normalizeHex,
   normalizeAdvancedColors,
   normalizeLoginTaglines,
 } from './branding.ts'
+import { loginTaglinesSchema } from './branding-schema.ts'
 
 describe('normalizeHex', () => {
   it('expands short hex and lowercases', () => {

@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
+import { useRouteContext } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import { authClient } from '#/lib/auth-client'
 import { publishingRequestIdentity } from './request-identity'
 
 import { queryKeys } from '#/lib/content/query-keys'
@@ -65,7 +65,7 @@ export function useInvalidateGoLive(siteId: string) {
  */
 export function useGoLive(siteId: string) {
   const queryClient = useQueryClient()
-  const actorId = authClient.useSession().data?.user.id
+  const actorId = useRouteContext({ from: '/_app' }).me.user.id
   const invalidate = useInvalidateGoLive(siteId)
 
   const errorsQuery = useQuery({
@@ -120,7 +120,7 @@ export function useGoLive(siteId: string) {
 
 /** Restore a previously live release ("Restore this version"). */
 export function useRollback(siteId: string) {
-  const actorId = authClient.useSession().data?.user.id
+  const actorId = useRouteContext({ from: '/_app' }).me.user.id
   const invalidate = useInvalidateGoLive(siteId)
   return useMutation({
     mutationFn: async (publicationId: string) => {

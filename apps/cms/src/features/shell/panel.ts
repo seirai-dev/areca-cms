@@ -1,5 +1,5 @@
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { z } from '#/lib/zod'
+import { optionalParam, z } from '#/lib/search-params'
 
 /**
  * Site overlays addressable by search param (brief §2): `?panel=golive` and
@@ -10,8 +10,8 @@ const SITE_PANELS = ['golive', 'activity'] as const
 export type SitePanel = (typeof SITE_PANELS)[number]
 
 export const sitePanelSearchSchema = z.object({
-  panel: z.enum(SITE_PANELS).optional().catch(undefined),
-  release: z.string().optional().catch(undefined),
+  panel: optionalParam(z.enum(SITE_PANELS)),
+  release: optionalParam(z.string()),
 })
 
 export function usePanel() {

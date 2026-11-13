@@ -7,7 +7,6 @@ import {
 import { CaretUpDown, Check, LinkSimple, X } from '@phosphor-icons/react'
 
 import { queryKeys } from '#/lib/content/query-keys'
-import { entryTitle } from '#/lib/content/utils'
 import { Button } from '#/components/ui/button'
 import {
   Command,
@@ -30,11 +29,7 @@ import { ENTRY_STATUS } from '#/lib/status'
 import type { Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
-import {
-  getEntryFn,
-  listCollectionsFn,
-  listEntriesFn,
-} from '#/server/fn/content'
+import { getEntryTitleFn, listEntriesFn } from '#/server/fn/content'
 
 import { referencePickerUiStatus } from './reference-picker-status'
 
@@ -71,16 +66,6 @@ export function ReferencePicker({
   const selectedId = typeof value === 'string' && value ? value : ''
   const release = useReleaseStatus(siteId)
   const live = release.liveMembership
-  const collectionsQuery = useQuery({
-    queryKey: queryKeys.collections(siteId),
-    queryFn: () => listCollectionsFn({ data: { siteId } }),
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-  })
-  const targetFields: Field[] =
-    collectionsQuery.data?.find((item) => item.key === collectionKey)?.fields ??
-    []
-
   const entriesQuery = useInfiniteQuery({
     queryKey: [
       ...queryKeys.entries(siteId, collectionKey, {
@@ -118,21 +103,15 @@ export function ReferencePicker({
   const inList = items.find((item) => item.id === selectedId)
 
   const selectedQuery = useQuery({
-    queryKey: queryKeys.entry(selectedId),
-    queryFn: () => getEntryFn({ data: { id: selectedId } }),
+    queryKey: queryKeys.entryTitle(selectedId),
+    queryFn: () => getEntryTitleFn({ data: { id: selectedId } }),
     enabled: Boolean(selectedId) && !inList,
   })
-  // The chosen entry's title: from the page when it is there, else from the
-  // full record fetched for it.
+  // The chosen entry's title: from the page when it is there, else fetched
+  // for it.
   const selectedTitle = inList
     ? inList.title
-    : selectedQuery.data
-      ? entryTitle(
-          selectedQuery.data.draftData,
-          targetFields,
-          selectedQuery.data.slug,
-        )
-      : null
+    : (selectedQuery.data?.title ?? null)
 
   const label =
     selectedTitle !== null

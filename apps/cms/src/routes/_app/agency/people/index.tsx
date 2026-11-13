@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { z } from '#/lib/zod'
+import { optionalParam, z } from '#/lib/search-params'
 
 import { AgencyPeopleScreen } from '#/features/agency/agency-people-screen'
 import {
@@ -16,10 +16,10 @@ import type { PeopleFilters } from '#/features/agency/people-list'
  */
 export const Route = createFileRoute('/_app/agency/people/')({
   validateSearch: z.object({
-    q: z.string().max(200).optional().catch(undefined),
-    status: z.enum(STATUS_FILTERS).optional().catch(undefined),
-    role: z.enum(ROLE_FILTERS).optional().catch(undefined),
-    client: z.string().max(100).optional().catch(undefined),
+    q: optionalParam(z.string().check(z.maxLength(200))),
+    status: optionalParam(z.enum(STATUS_FILTERS)),
+    role: optionalParam(z.enum(ROLE_FILTERS)),
+    client: optionalParam(z.string().check(z.maxLength(100))),
   }),
   component: AgencyPeoplePage,
 })

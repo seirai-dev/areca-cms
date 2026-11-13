@@ -18,8 +18,10 @@ RUN --mount=type=cache,id=cms-pnpm,target=/pnpm/store \
 FROM deps AS build
 COPY apps/cms ./apps/cms
 ENV SKIP_ENV_VALIDATION=true
+# Browser source maps are never served: drop any a build left in public/.
 RUN pnpm --filter @areca/cms build \
-    && pnpm --filter @areca/cms exec node scripts/build-docker-entrypoint.mjs
+    && pnpm --filter @areca/cms exec node scripts/build-docker-entrypoint.mjs \
+    && find apps/cms/.output/public -name '*.map' -delete
 
 FROM base AS runner
 ENV NODE_ENV=production PORT=3000 HOST=0.0.0.0

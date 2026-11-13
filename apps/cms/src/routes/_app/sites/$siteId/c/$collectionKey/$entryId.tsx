@@ -1,7 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { z } from '#/lib/zod'
-
-import { localeTagSchema } from '#/lib/content-locale'
+import { localeTagParam, optionalParam, z } from '#/lib/search-params'
 
 /**
  * Edit an entry: the editor in focus mode (no sidebar), rendered by the
@@ -12,9 +10,9 @@ export const Route = createFileRoute(
 )({
   /** Content language shown in the editor, e.g. `?lang=en`. Optional. */
   validateSearch: z.object({
-    lang: localeTagSchema.optional().catch(undefined),
+    lang: optionalParam(localeTagParam),
     /** Visual mode (docs/design/visual-editor.md). Below 1280 px it is ignored. */
-    view: z.enum(['visual']).optional().catch(undefined),
+    view: optionalParam(z.enum(['visual'])),
   }),
   staticData: { shell: 'focus' },
   component: () => null,

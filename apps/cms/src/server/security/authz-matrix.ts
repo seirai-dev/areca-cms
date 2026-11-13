@@ -609,6 +609,13 @@ export const ROWS: Row[] = [
     prepare: (w) => ({ data: { id: w.X.entry.id } }),
   },
   {
+    name: 'getEntryTitleFn',
+    hidden: true,
+    fn: contentFns.getEntryTitleFn,
+    policy: 'org-editor',
+    prepare: (w) => ({ data: { id: w.X.entry.id } }),
+  },
+  {
     name: 'getActivityEntriesFn',
     note: 'Missing, foreign and hidden ids are omitted, not refused: the other tenant gets an empty list.',
     hidden: true,

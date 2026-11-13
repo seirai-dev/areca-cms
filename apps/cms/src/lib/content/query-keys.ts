@@ -27,6 +27,8 @@ export const queryKeys = {
     ['inbound-references', entryId] as const,
   linkedFrom: (entryId: string) => ['linked-from', entryId] as const,
   entry: (id: string) => ['entry', id] as const,
+  /** Under `entry(id)`, so whatever refreshes the entry refreshes its title. */
+  entryTitle: (id: string) => ['entry', id, 'title'] as const,
   /**
    * Rich text link targets: the link field's search, headings and checks. All
    * under `['link-targets', siteId]`, so a save can refresh them together.

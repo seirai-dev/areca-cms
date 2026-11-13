@@ -10,7 +10,8 @@ import {
   SEARCH_MAX_LENGTH,
 } from '#/lib/content-limits'
 
-import { canonicalLocale, localeTagSchema } from '#/lib/content-locale'
+import { canonicalLocale } from '#/lib/content-locale'
+import { localeTagSchema } from '#/lib/locale-tag-schema'
 import {
   requireOrgMember,
   requireOrgMemberOrNotFound,
