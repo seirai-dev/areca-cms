@@ -44,4 +44,14 @@ describe('hasAgencyWideAccess', () => {
       }),
     ).toBe(true)
   })
+
+  it('still waits for the code when an admin has two-factor on without the requirement', () => {
+    expect(
+      hasAgencyWideAccess({
+        ...admin,
+        adminMfaRequired: false,
+        localMfaVerified: false,
+      }),
+    ).toBe(false)
+  })
 })
