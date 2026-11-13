@@ -81,7 +81,7 @@ export function useAiSettings() {
         queryKey: queryKeys.aiAvailability(),
       })
     },
-    // Only the confirm dialog removes the key; it shows the error.
+    onError: (err) => toast.error(errorMessage(err)),
   })
 
   const removeKey = useMutation({
@@ -94,7 +94,7 @@ export function useAiSettings() {
         queryKey: queryKeys.aiAvailability(),
       })
     },
-    onError: (err) => toast.error(errorMessage(err)),
+    // Only the confirm dialog removes the key; it shows the error.
   })
 
   const promptEmpty = prompt.trim().length === 0

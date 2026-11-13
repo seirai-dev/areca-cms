@@ -18,7 +18,8 @@ import type {
 } from '#/adapters/deployment/cloudflare-api'
 import { cloudflareChecksPassed } from '#/adapters/deployment/cloudflare-api'
 import { useStepUp } from '#/features/security/step-up'
-import { adminQueryKeys, errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
+import { queryKeys } from '#/lib/query-keys'
 import { formatRelativeTime } from '#/lib/relative-time'
 import { cn } from '#/lib/utils'
 import { Button } from '#/components/ui/button'
@@ -240,14 +241,7 @@ type CloudflareSaved = Awaited<
 type CloudflareStatus = UseQueryResult<CloudflareSaved>
 
 function CloudflareLoadError({ status }: { status: CloudflareStatus }) {
-  return (
-    <QueryError
-      title={m.agency_cloudflare_load_error()}
-      error={status.error}
-      onRetry={() => void status.refetch()}
-      retrying={status.isFetching}
-    />
-  )
+  return <QueryError title={m.agency_cloudflare_load_error()} query={status} />
 }
 
 /**
@@ -286,7 +280,7 @@ function CloudflareConnection({
 
   const refresh = () =>
     queryClient.invalidateQueries({
-      queryKey: adminQueryKeys.cloudflareCredentials(organizationId),
+      queryKey: queryKeys.cloudflareCredentials(organizationId),
     })
 
   const save = useMutation({
@@ -316,7 +310,7 @@ function CloudflareConnection({
       const { checks: verifiedChecks, ...verifiedStatus } = result
       notifyChecks(verifiedChecks, m.agency_cloudflare_verified())
       queryClient.setQueryData(
-        adminQueryKeys.cloudflareCredentials(organizationId),
+        queryKeys.cloudflareCredentials(organizationId),
         verifiedStatus,
       )
     },
@@ -337,7 +331,7 @@ function CloudflareConnection({
       setFields(seededCloudflareFields(null))
       await refresh()
     },
-    onError: (err) => toast.error(errorMessage(err)),
+    // Only the remove dialog runs it; the dialog shows the error.
   })
 
   const busy = save.isPending || verify.isPending || remove.isPending

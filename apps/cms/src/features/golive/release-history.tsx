@@ -146,9 +146,7 @@ export function ReleaseHistory({
       {publications.isError ? (
         <QueryError
           title={m.golive_releases_load_error()}
-          error={publications.error}
-          onRetry={() => void publications.refetch()}
-          retrying={publications.isFetching}
+          query={publications}
         />
       ) : publications.isLoading ? (
         <div className="grid gap-4">
@@ -251,7 +249,9 @@ export function ReleaseHistory({
         }
         confirmLabel={m.golive_restore()}
         onConfirm={async () => {
-          if (restoreTarget) await rollback.mutateAsync(restoreTarget.id)
+          // The mutation shows its own error toast.
+          if (restoreTarget)
+            await rollback.mutateAsync(restoreTarget.id).catch(() => undefined)
         }}
       />
       <ConfirmDialog
@@ -265,7 +265,8 @@ export function ReleaseHistory({
         cancelLabel={m.sites_keep_job()}
         variant="destructive"
         onConfirm={async () => {
-          if (cancelTarget) await cancelJob.mutateAsync(cancelTarget.id)
+          if (cancelTarget)
+            await cancelJob.mutateAsync(cancelTarget.id).catch(() => undefined)
         }}
       />
       <BuildLogSheet jobId={logJobId} onClose={() => setLogJobId(null)} />
@@ -322,14 +323,12 @@ function UncertainDeploymentCard({
             confirmText={job.id}
             confirmLabel={m.golive_resolve_uncertain()}
             variant="destructive"
-            onConfirm={() =>
-              resolveUncertain
-                .mutateAsync({
-                  id: job.id,
-                  reason,
-                })
-                .then(() => undefined)
-            }
+            onConfirm={async () => {
+              // The mutation shows its own error toast.
+              await resolveUncertain
+                .mutateAsync({ id: job.id, reason })
+                .catch(() => undefined)
+            }}
           >
             <Button
               type="button"

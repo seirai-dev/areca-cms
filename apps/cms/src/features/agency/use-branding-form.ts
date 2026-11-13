@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import { errorMessage } from '#/lib/admin/helpers'
 import {
   BRAND_COLOR_KEYS,
   DEFAULT_APP_NAME,
@@ -19,6 +18,8 @@ import type {
   FontKey,
   LoginTaglineLocale,
 } from '#/lib/branding'
+import { errorMessage } from '#/lib/errors'
+import { queryKeys } from '#/lib/query-keys'
 import { m } from '#/paraglide/messages'
 import {
   clearBrandingImageFn,
@@ -26,8 +27,6 @@ import {
   resetBrandingFn,
   updateBrandingFn,
 } from '#/server/fn/branding'
-
-const brandingQueryKey = ['branding'] as const
 
 export type ImageKind = 'logo' | 'favicon'
 
@@ -93,7 +92,7 @@ function draftFrom(view: BrandingView): BrandingDraft {
 
 export function useBrandingQuery() {
   return useQuery({
-    queryKey: brandingQueryKey,
+    queryKey: queryKeys.branding(),
     queryFn: () => getBrandingFn(),
   })
 }
@@ -126,7 +125,7 @@ export function useBrandingForm(saved: BrandingView) {
   } = draft
 
   async function applySaved(next: BrandingView) {
-    queryClient.setQueryData(brandingQueryKey, next)
+    queryClient.setQueryData(queryKeys.branding(), next)
     await router.invalidate()
   }
 
@@ -185,7 +184,7 @@ export function useBrandingForm(saved: BrandingView) {
       toast.success(m.admin_branding_toast_reset())
       await applySaved(next)
     },
-    onError: (err) => toast.error(errorMessage(err)),
+    // Only the reset dialog runs it; the dialog shows the error.
   })
 
   const accentHex = accent.trim() ? normalizeHex(accent) : null

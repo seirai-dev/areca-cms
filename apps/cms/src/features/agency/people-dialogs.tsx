@@ -1,6 +1,5 @@
 import { toast } from 'sonner'
 
-import { errorMessage } from '#/lib/admin/helpers'
 import { BlockPersonDialog } from '#/features/agency/person/block-person-dialog'
 import type { usePeopleMutations } from '#/features/agency/use-people-mutations'
 import { RegeneratedLinkDialog } from '#/features/people/regenerated-link-dialog'
@@ -284,12 +283,8 @@ export function PeopleDialogs({
       confirmLabel={config.confirm(target)}
       variant={config.variant}
       onConfirm={async () => {
-        try {
-          const success = await config.run(mutations, target)
-          if (success) toast.success(success)
-        } catch (error) {
-          toast.error(errorMessage(error))
-        }
+        const success = await config.run(mutations, target)
+        if (success) toast.success(success)
       }}
       testId={config.testId}
     />

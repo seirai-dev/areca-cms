@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { MagnifyingGlass, Plus, Users } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { ClientPicker } from '#/features/agency/client-picker'
 import { InvitePersonSheet } from '#/features/agency/invite-person-sheet'
 import { usePeopleMutations } from '#/features/agency/use-people-mutations'
@@ -135,13 +135,7 @@ export function AgencyPeopleScreen({
     action: () => Promise<BulkResult>,
     done: (count: number) => string,
   ) {
-    let result: BulkResult
-    try {
-      result = await action()
-    } catch (error) {
-      toast.error(errorMessage(error))
-      return
-    }
+    const result = await action()
     if (result.done.length > 0) toast.success(done(result.done.length))
     if (result.skipped.length > 0) {
       toast.warning(m.agency_people_bulk_skipped(), {
@@ -196,12 +190,7 @@ export function AgencyPeopleScreen({
       />
 
       {accounts.isError ? (
-        <QueryError
-          title={m.agency_people_load_error()}
-          error={accounts.error}
-          onRetry={() => void accounts.refetch()}
-          retrying={accounts.isFetching}
-        />
+        <QueryError title={m.agency_people_load_error()} query={accounts} />
       ) : accounts.isPending ? (
         <PeopleSkeleton />
       ) : allAccounts.length === 0 && allInvitations.length === 0 ? (
@@ -265,9 +254,7 @@ export function AgencyPeopleScreen({
           {invitations.isError ? (
             <QueryError
               title={m.people_invitations_load_error()}
-              error={invitations.error}
-              onRetry={() => void invitations.refetch()}
-              retrying={invitations.isFetching}
+              query={invitations}
             />
           ) : null}
 
@@ -363,7 +350,7 @@ export function AgencyPeopleScreen({
                   m.agency_people_toast_added_one,
                   m.agency_people_toast_added,
                 ),
-            )
+            ).catch((error) => toast.error(errorMessage(error)))
           }}
           align="start"
         >

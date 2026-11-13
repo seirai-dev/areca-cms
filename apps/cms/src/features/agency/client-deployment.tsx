@@ -4,7 +4,8 @@ import { CheckCircle, CloudArrowUp, Trash } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 import { useStepUp } from '#/features/security/step-up'
-import { adminQueryKeys, errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
+import { queryKeys } from '#/lib/query-keys'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { FormField } from '#/components/ui/form-field'
@@ -42,7 +43,7 @@ function useDokploy(organizationId: string) {
   const [failure, setFailure] = React.useState<string | null>(null)
   const refresh = () =>
     queryClient.invalidateQueries({
-      queryKey: adminQueryKeys.dokployCredentials(organizationId),
+      queryKey: queryKeys.dokployCredentials(organizationId),
     })
 
   const save = useMutation({
@@ -89,7 +90,7 @@ function useDokploy(organizationId: string) {
       setFailure(null)
       await refresh()
     },
-    onError: (err) => toast.error(errorMessage(err)),
+    // Only the remove dialog runs it; the dialog shows the error.
   })
 
   return { status, applications, failure, save, verify, remove }
@@ -111,12 +112,7 @@ export function ClientDeployment({
         description={m.agency_dokploy_description()}
       >
         {status.isError ? (
-          <QueryError
-            title={m.agency_dokploy_load_error()}
-            error={status.error}
-            onRetry={() => void status.refetch()}
-            retrying={status.isFetching}
-          />
+          <QueryError title={m.agency_dokploy_load_error()} query={status} />
         ) : status.isPending ? (
           <div className="grid gap-4" aria-busy="true">
             <Skeleton className="h-10 w-48" />

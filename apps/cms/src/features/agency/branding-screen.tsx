@@ -117,14 +117,7 @@ export function BrandingScreen() {
 type BrandingQuery = ReturnType<typeof useBrandingQuery>
 
 function BrandingLoadError({ query }: { query: BrandingQuery }) {
-  return (
-    <QueryError
-      title={m.agency_branding_load_error()}
-      error={query.error}
-      onRetry={() => void query.refetch()}
-      retrying={query.isFetching}
-    />
-  )
+  return <QueryError title={m.agency_branding_load_error()} query={query} />
 }
 
 /** The form, mounted once the branding has loaded; the draft starts from it. */
