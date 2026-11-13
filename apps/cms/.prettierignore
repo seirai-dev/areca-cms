@@ -2,6 +2,7 @@ package-lock.json
 pnpm-lock.yaml
 yarn.lock
 src/paraglide
+src/lib/cn-tables.gen.ts
 drizzle/meta
 project.inlang
 .cta.json

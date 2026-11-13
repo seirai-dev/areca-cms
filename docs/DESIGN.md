@@ -55,7 +55,7 @@ Instance branding ([`lib/branding.ts`](../apps/cms/src/lib/branding.ts), edited 
 
 ## 3. Type
 
-Inter Variable everywhere (optical sizing on, `cv11` + `ss03`), IBM Plex Mono for code-like text, tabular figures (`tnum`) for counts and times. The scale is a set of `@utility` classes that carry family, size, line height, weight and tracking together; `cn()` in `lib/utils.ts` knows them, so they merge correctly with `text-*` colours.
+Inter Variable everywhere (optical sizing on, `cv11` + `ss03`), IBM Plex Mono for code-like text, tabular figures (`tnum`) for counts and times. The scale is a set of `@utility` classes that carry family, size, line height, weight and tracking together; `cn()` knows them through `lib/cn.config.ts` (compiled into `lib/cn-tables.gen.ts` with `pnpm cn:tables`), so they merge correctly with `text-*` colours.
 
 | Class | Size/line, weight, tracking | Use |
 | --- | --- | --- |

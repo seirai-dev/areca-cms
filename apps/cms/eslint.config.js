@@ -20,6 +20,7 @@ export default [
       'eslint.config.js',
       'prettier.config.js',
       'src/paraglide/**',
+      'src/lib/cn-tables.gen.ts',
       '.output/**',
       // Standalone Node/k6 tooling is outside the application TS project.
       // CI checks its syntax and runs the offline benchmark tests separately.
