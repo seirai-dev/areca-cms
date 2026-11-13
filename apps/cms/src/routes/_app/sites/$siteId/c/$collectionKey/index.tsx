@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { z } from '#/lib/zod'
+import { optionalParam, z } from '#/lib/search-params'
 
 import { CollectionScreen } from '#/features/collection/collection-screen'
 
@@ -7,7 +7,7 @@ import { CollectionScreen } from '#/features/collection/collection-screen'
 export const Route = createFileRoute('/_app/sites/$siteId/c/$collectionKey/')({
   validateSearch: z.object({
     /** "Missing translation" filter: a language tag, in `?missing=`. */
-    missing: z.string().min(1).max(40).optional().catch(undefined),
+    missing: optionalParam(z.string().check(z.minLength(1), z.maxLength(40))),
   }),
   component: CollectionPage,
 })

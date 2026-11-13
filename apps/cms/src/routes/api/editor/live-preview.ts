@@ -3,7 +3,7 @@ import '@tanstack/react-start'
 
 import { ID_MAX_LENGTH, ENTRY_DATA_MAX_BYTES } from '#/lib/content-limits'
 import { withRequiredSlugField } from '#/lib/collection-fields'
-import { localeTagSchema } from '#/lib/content-locale'
+import { localeTagSchema } from '#/lib/locale-tag-schema'
 import { SLUG_PATTERN } from '#/lib/slug'
 import { z } from '#/lib/zod'
 import { securityErrorCode } from '#/lib/security-errors'

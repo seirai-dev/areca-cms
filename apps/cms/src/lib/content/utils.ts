@@ -1,5 +1,5 @@
 import { I18N_KEY, LOCALE_KEY } from '#/lib/content-locale'
-import { SEO_KEY } from '#/lib/seo'
+import { SEO_KEY } from '#/lib/seo-key'
 import type { EntryData, Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 

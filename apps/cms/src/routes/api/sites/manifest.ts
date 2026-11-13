@@ -18,7 +18,7 @@ import {
   MAX_SITE_LANGUAGES,
   ROUTE_PATTERN_MAX_LENGTH,
 } from '#/lib/content-limits'
-import { localeTagSchema } from '#/lib/content-locale'
+import { localeTagSchema } from '#/lib/locale-tag-schema'
 import type { FieldType, SiteManifest } from '#/lib/types'
 import { listCollections, syncManifest } from '#/server/content/collections'
 import { FieldDropsUnconfirmedError } from '#/server/content/field-data'

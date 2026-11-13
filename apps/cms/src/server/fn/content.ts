@@ -1,5 +1,5 @@
 import { isSafeIdentifier } from '#/lib/content-identifiers'
-import { localeTagSchema } from '#/lib/content-locale'
+import { localeTagSchema } from '#/lib/locale-tag-schema'
 import {
   GLOBAL_GROUP_MAX_LENGTH,
   GLOBAL_PREVIEW_PATH_MAX_LENGTH,

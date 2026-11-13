@@ -1,7 +1,8 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from '#/lib/zod'
 
-import { canonicalLocale, localeTagSchema } from '#/lib/content-locale'
+import { canonicalLocale } from '#/lib/content-locale'
+import { localeTagSchema } from '#/lib/locale-tag-schema'
 import { ID_MAX_LENGTH } from '#/lib/content-limits'
 import {
   requireAgencyAdmin,
