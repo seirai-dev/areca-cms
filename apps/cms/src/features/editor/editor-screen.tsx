@@ -461,6 +461,32 @@ function EntryEditorView({
     save: editor.save,
   })
 
+  // A development environment has no releases: no "unreleased changes" dot.
+  const editedSinceReady = React.useMemo(
+    () =>
+      entry && !isDev
+        ? isEditedSinceReady({
+            status: entry.status,
+            updatedAt: entry.updatedAt,
+            draftData: initialEntryData(fields, entry.draftData),
+            publishedData: entry.publishedData
+              ? initialEntryData(fields, entry.publishedData)
+              : entry.publishedData,
+          })
+        : false,
+    [entry, isDev, fields],
+  )
+  const linkLocale = ctx ? active : null
+  const linkContext = React.useMemo(
+    () => ({
+      siteId,
+      entryId: editor.entryId ?? null,
+      locale: linkLocale,
+      devSite: isDev,
+    }),
+    [siteId, editor.entryId, linkLocale, isDev],
+  )
+
   if (routeEntryId && editor.entryQuery.isError && !entry) {
     return (
       <div
@@ -496,18 +522,6 @@ function EntryEditorView({
       ? (view[titleField.key] as string)
       : m.editor_untitled()
   const uiStatus = entry ? entryUiStatus(entry, live, isDev) : 'draft'
-  // A development environment has no releases: no "unreleased changes" dot.
-  const editedSinceReady =
-    entry && !isDev
-      ? isEditedSinceReady({
-          status: entry.status,
-          updatedAt: entry.updatedAt,
-          draftData: initialEntryData(fields, entry.draftData),
-          publishedData: entry.publishedData
-            ? initialEntryData(fields, entry.publishedData)
-            : entry.publishedData,
-        })
-      : false
   const primary: PrimaryState = editor.isNew
     ? 'new'
     : editor.markable
@@ -664,12 +678,7 @@ function EntryEditorView({
       errors={editor.fieldErrors}
       onChange={onLocaleChange}
       organizationId={site.organizationId}
-      linkContext={{
-        siteId,
-        entryId: editor.entryId ?? null,
-        locale: ctx ? active : null,
-        devSite: isDev,
-      }}
+      linkContext={linkContext}
       previewing={previewing}
       titleRef={titleRef}
       transitionName={

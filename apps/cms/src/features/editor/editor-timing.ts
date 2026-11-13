@@ -21,6 +21,12 @@ export function autosaveDelay(now: number, firstChangeAt: number): number {
   return Math.max(0, Math.min(AUTOSAVE_DELAY, untilMaxWait))
 }
 
+/**
+ * The browser copy of unsaved edits (crash recovery) is written this long after
+ * the last change. Hiding or closing the tab and leaving the editor write it at once.
+ */
+export const DRAFT_WRITE_DELAY = 500
+
 /** Polling of a scheduled entry, while the worker has not published it yet. */
 export const SCHEDULED_POLL_FAST = 2000
 /** Polling of a scheduled entry that is still well away from its time. */

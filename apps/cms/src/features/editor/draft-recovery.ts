@@ -30,3 +30,25 @@ export function persistDraft(
     JSON.stringify({ data, version, savedAt: new Date().toISOString() }),
   )
 }
+
+/**
+ * Runs `write` once, `delay` ms after the last `schedule()`. `flush()` runs a
+ * scheduled write now; with nothing scheduled it does nothing.
+ */
+export function createDraftWriter(write: () => void, delay: number) {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const run = () => {
+    if (timer) clearTimeout(timer)
+    timer = null
+    write()
+  }
+  return {
+    schedule() {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(run, delay)
+    },
+    flush() {
+      if (timer) run()
+    },
+  }
+}
