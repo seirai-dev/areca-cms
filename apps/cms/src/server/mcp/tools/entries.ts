@@ -42,7 +42,7 @@ import type { LocaleTarget } from '../locales'
 import type { AssetLookup, LinkLookup } from '../entry-format'
 import {
   AGENT_STATUSES,
-  collectAssetIds,
+  collectAssetRefs,
   formatEntry,
   formatGlobal,
   formatSnapshotFields,
@@ -97,9 +97,9 @@ export async function assetLookupFor(
   inputs: Record<string, unknown>,
   seo: Record<string, unknown> | null | undefined,
 ): Promise<AssetLookup> {
-  const ids = collectAssetIds(fields, inputs, seo ?? undefined)
-  const lookup = await siteAssetLookup(actor.organizationId, actor.siteId)
-  const missing = ids.find((id) => !lookup.byId.has(id))
+  const refs = collectAssetRefs(fields, inputs, seo ?? undefined)
+  const lookup = await siteAssetLookup(actor.organizationId, actor.siteId, refs)
+  const missing = refs.ids.find((id) => !lookup.byId.has(id))
   if (missing)
     throw new ValidationError([
       {
