@@ -2,6 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbReader, Tx } from '#/db'
 import { collection, entry, entryLink, site } from '#/db/schema'
 import { baseLocale } from '#/lib/content-locale'
 import { entryTitle } from '#/lib/content/utils'
@@ -25,8 +26,6 @@ import { linkTargetSiteIds, mapRichTextValues } from './entry-links.ts'
  * A transaction. The index is written only inside the transaction that changes
  * the content it is computed from, so a failure cannot leave the two apart.
  */
-export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
-type Connection = Pick<typeof db, 'select'>
 
 /**
  * Serializes the link-index writers of one site. The rule for every
@@ -111,7 +110,7 @@ function chunksOf<T>(items: T[]): T[][] {
  * `linkTargetSiteIds`). The foreign key needs them to exist.
  */
 async function existingTargets(
-  connection: Connection,
+  connection: DbReader,
   siteId: string,
   ids: string[],
 ): Promise<Set<string>> {

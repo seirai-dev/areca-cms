@@ -1,6 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbExecutor } from '#/db'
 import { collection, entry, site } from '#/db/schema'
 import { entryTitle } from '#/lib/content/utils'
 import type { EntryData, SchemaSnapshotItem } from '#/lib/types'
@@ -16,8 +17,6 @@ import {
 } from './plan'
 import type { Plan, PlanInput } from './plan'
 import { schemaSnapshot } from './schema-snapshot'
-
-type Reader = Pick<typeof db, 'select' | 'execute'>
 
 /**
  * Row title of a dev entry: a section shows its label, an entry its main-language
@@ -43,7 +42,7 @@ export type PlanContext = {
  * (the database, or the push transaction, which holds the locks).
  */
 export async function loadPlanContext(
-  connection: Reader,
+  connection: DbExecutor,
   devSiteId: string,
 ): Promise<PlanContext> {
   const devRow = (
@@ -168,7 +167,7 @@ export async function loadPlanContext(
 
 /** The push plan of a dev env, computed from the database now. */
 export async function loadPlan(
-  connection: Reader,
+  connection: DbExecutor,
   devSiteId: string,
 ): Promise<Plan> {
   const context = await loadPlanContext(connection, devSiteId)

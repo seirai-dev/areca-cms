@@ -1,12 +1,11 @@
 import { eq } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import { site } from '#/db/schema'
 import { isDevSite } from '#/server/security/site-visibility'
 import { m } from '#/paraglide/messages'
 import { NotFoundError } from '#/server/content/errors'
-
-export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 export type SiteRow = typeof site.$inferSelect
 

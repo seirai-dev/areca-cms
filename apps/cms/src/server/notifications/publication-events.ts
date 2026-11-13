@@ -9,6 +9,7 @@
 import { and, asc, eq, inArray, lte, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbExecutor } from '#/db'
 import { notificationEvent } from '#/db/schema'
 import { createLogger, redactString } from '#/server/log'
 
@@ -19,7 +20,6 @@ import {
   scheduleFailedSubject,
 } from './triggers.ts'
 
-type Connection = Pick<typeof db, 'insert'>
 type NotificationEventRow = typeof notificationEvent.$inferSelect
 
 const log = createLogger('notifications')
@@ -41,7 +41,7 @@ export function eventRetryDelayMs(attempt: number) {
  * publication and kind is ignored.
  */
 export async function queuePublicationEvent(
-  connection: Connection,
+  connection: DbExecutor,
   input: {
     kind: 'publication.live' | 'publication.failed'
     siteId: string
@@ -64,7 +64,7 @@ export async function queuePublicationEvent(
  * repeat for the same approval is ignored.
  */
 export async function queueScheduleFailedEvent(
-  connection: Connection,
+  connection: DbExecutor,
   input: { siteId: string; fingerprint: string; scheduledBy: string[] },
 ) {
   await insertEvent(connection, {
@@ -77,7 +77,7 @@ export async function queueScheduleFailedEvent(
 }
 
 async function insertEvent(
-  connection: Connection,
+  connection: DbExecutor,
   input: {
     kind: NotificationEventRow['kind']
     siteId: string

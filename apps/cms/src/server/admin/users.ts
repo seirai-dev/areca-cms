@@ -12,6 +12,7 @@
 import { and, eq, ilike, inArray, isNull, or } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import {
   invitation,
   mcpConnection,
@@ -41,7 +42,6 @@ import {
   lockAgencyAdminRoster,
 } from './agency-admin-roster.ts'
 import { countOwners, lockOrganization } from './members.ts'
-import type { Tx } from './members.ts'
 
 /** Longest internal block note an agency admin can write. */
 export const BLOCK_REASON_MAX_LENGTH = 500

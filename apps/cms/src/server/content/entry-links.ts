@@ -1,6 +1,6 @@
 import { inArray, and, eq } from 'drizzle-orm'
 
-import type { db } from '#/db'
+import type { DbReader } from '#/db'
 import { collection, entry, site } from '#/db/schema'
 import {
   I18N_KEY,
@@ -27,8 +27,6 @@ import { localeCtxFor } from './locale-validation.ts'
  * entry (the base and each `$i18n` language slot). See
  * docs/design/rich-text-links.md, decisions 6 and 7.
  */
-
-type Connection = Pick<typeof db, 'select'>
 
 /** What a link needs to know about its target. */
 export type LinkTargetRow = {
@@ -58,7 +56,7 @@ export type LinkTargetRow = {
  * is why a push passes it through (docs/design/dev-environments.md).
  */
 export async function linkTargetSiteIds(
-  connection: Connection,
+  connection: DbReader,
   siteId: string,
 ): Promise<string[]> {
   const row = (
@@ -93,7 +91,7 @@ export async function linkTargetSiteIds(
  * Missing ids are absent from the map.
  */
 export async function loadLinkTargets(
-  connection: Connection,
+  connection: DbReader,
   siteIds: string | string[],
   ids: Iterable<string>,
 ): Promise<Map<string, LinkTargetRow>> {
@@ -254,7 +252,7 @@ export async function mapRichTextValues(
  * Throws a validation error that names each bad link.
  */
 export async function prepareEntryLinks(
-  connection: Connection,
+  connection: DbReader,
   siteId: string,
   fields: Field[],
   data: EntryData,

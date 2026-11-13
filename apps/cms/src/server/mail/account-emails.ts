@@ -9,6 +9,7 @@ import { randomInt } from 'node:crypto'
 import { and, eq, inArray } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbExecutor } from '#/db'
 import { account, user, verification } from '#/db/schema'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
@@ -44,9 +45,6 @@ export type AccountEmailKind =
 
 export type QueuedEmail = { status: 'queued'; id: string }
 
-/** The database, or the transaction an email is queued in. */
-type Connection = Pick<typeof db, 'select' | 'insert'>
-
 /** Better Auth's reset token lifetime, mirrored for the admin-triggered reset. */
 const RESET_TTL_MS = 60 * 60 * 1000
 const RESET_TOKEN_LENGTH = 24
@@ -74,7 +72,7 @@ export async function sendAccountEmail(input: {
   params?: Record<string, unknown>
   renderParams?: Record<string, unknown>
   immediate?: boolean
-  connection?: Connection
+  connection?: DbExecutor
 }): Promise<SendResult | QueuedEmail | null> {
   const queued = await queueAccountEmail({
     ...input,
@@ -100,7 +98,7 @@ async function queueAccountEmail(input: {
   params?: Record<string, unknown>
   renderParams?: Record<string, unknown>
   immediate?: boolean
-  connection?: Connection
+  connection?: DbExecutor
 }): Promise<EnqueuedEmail | null> {
   if (!(await isMailConfigured())) {
     log.info('account email skipped: mail is not configured', {
@@ -109,7 +107,7 @@ async function queueAccountEmail(input: {
     })
     return null
   }
-  const reader: Pick<typeof db, 'select'> = input.connection ?? db
+  const reader = input.connection ?? db
   const [recipient] = await reader
     .select({ email: user.email, locale: user.locale })
     .from(user)

@@ -8,6 +8,7 @@
 import { and, count, desc, eq, gt, isNull } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import {
   account,
   invitation,
@@ -28,7 +29,6 @@ import {
   applyMemberRole,
   lockOrganization,
 } from './members'
-import type { Tx } from './members'
 import { lockPerson, runBulk } from './users'
 import type { BulkResult } from './users'
 

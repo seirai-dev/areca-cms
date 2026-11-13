@@ -6,7 +6,8 @@ import { user } from '#/db/schema'
 import { m } from '#/paraglide/messages'
 
 import { MailRenderError } from '../types.ts'
-import type { Executor, MailLocale } from '../types.ts'
+import type { DbExecutor } from '#/db'
+import type { MailLocale } from '../types.ts'
 
 export type Recipient = {
   id: string
@@ -18,7 +19,7 @@ export type Recipient = {
 /** Reads the account an email is about. Fails when it no longer exists. */
 export async function loadRecipient(
   userId: unknown,
-  connection?: Executor,
+  connection?: DbExecutor,
 ): Promise<Recipient> {
   const [row] = await (connection ?? db)
     .select({

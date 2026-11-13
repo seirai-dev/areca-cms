@@ -1,6 +1,7 @@
 import { asc, eq } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbReader } from '#/db'
 import { organization, site } from '#/db/schema'
 
 import { McpNotFoundError } from './errors'
@@ -22,7 +23,7 @@ export type AgencySite = typeof site.$inferSelect & {
 
 /** Every site the user may reach through the agency connector, client by client. */
 export async function agencyReachableSites(
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
   user: AgencyAccessUser,
 ): Promise<AgencySite[]> {
   if (!user.isAgencyAdmin || user.blockedAt) return []

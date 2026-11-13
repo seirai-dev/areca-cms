@@ -6,6 +6,7 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbExecutor } from '#/db'
 import { notificationPreference, notificationRule } from '#/db/schema'
 import { EVENT_CATALOG } from '#/lib/notifications'
 import type { EventKey, NotificationRole } from '#/lib/notifications'
@@ -25,9 +26,6 @@ export type ResolvedPreference = {
     | 'agency'
     | 'builtin'
 }
-
-/** The database, or a transaction on it. */
-export type Connection = Pick<typeof db, 'select' | 'insert' | 'delete'>
 
 /**
  * Pure. Spec order: agency lock → org lock → user → org default → agency
@@ -95,7 +93,7 @@ export function choiceKey(
 }
 
 /** Agency defaults and locks, keyed by `ruleKey`. */
-export async function loadAgencyRules(connection: Connection = db) {
+export async function loadAgencyRules(connection: DbExecutor = db) {
   const rows = await connection
     .select()
     .from(notificationRule)
@@ -111,7 +109,7 @@ export async function loadAgencyRules(connection: Connection = db) {
 /** Organization defaults and locks for one org, keyed by `ruleKey`. */
 export async function loadOrganizationRules(
   organizationId: string,
-  connection: Connection = db,
+  connection: DbExecutor = db,
 ) {
   const rows = await connection
     .select()
@@ -128,7 +126,7 @@ export async function loadOrganizationRules(
 /** Choices of the given users across orgs (and agency alerts), keyed by `choiceKey`. */
 export async function loadUserChoices(
   userIds: string[],
-  connection: Connection = db,
+  connection: DbExecutor = db,
 ) {
   if (userIds.length === 0) return new Map<string, boolean>()
   const rows = await connection
@@ -153,7 +151,7 @@ export async function writeRule(
     locked: boolean
     updatedBy: string
   },
-  connection: Connection = db,
+  connection: DbExecutor = db,
 ) {
   const scope = input.organizationId ? 'organization' : 'agency'
   const now = new Date()
@@ -192,7 +190,7 @@ export async function clearRule(
     event: EventKey
     role: NotificationRole
   },
-  connection: Connection = db,
+  connection: DbExecutor = db,
 ) {
   await connection
     .delete(notificationRule)
@@ -219,7 +217,7 @@ export async function writeChoice(
     event: EventKey
     enabled: boolean
   },
-  connection: Connection = db,
+  connection: DbExecutor = db,
 ) {
   await connection
     .insert(notificationPreference)

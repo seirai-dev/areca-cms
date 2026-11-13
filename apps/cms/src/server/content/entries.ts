@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { and, desc, eq, ilike, isNotNull, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbExecutor, DbReader } from '#/db'
 import { collection, entry, entryRevision, site, user } from '#/db/schema'
 import {
   isIanaTimeZone,
@@ -1423,7 +1424,7 @@ export async function writeRevision(
   data: EntryData,
   actorId: string,
   note: string,
-  connection: Pick<typeof db, 'insert' | 'execute'> = db,
+  connection: DbExecutor = db,
 ) {
   if (note !== 'update') {
     await connection.insert(entryRevision).values({
@@ -1472,7 +1473,7 @@ export async function writeRevision(
  * before a concurrent push or save committed; this one reads them after.
  */
 async function assertUrlsAvailable(
-  tx: Pick<typeof db, 'select'>,
+  tx: DbReader,
   collectionId: string,
   data: EntryData,
   slug: string | null,
@@ -1490,7 +1491,7 @@ async function assertSlugAvailable(
   collectionId: string,
   slug: string,
   excludeId?: string,
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ) {
   const existing = (
     await connection
@@ -1531,10 +1532,7 @@ type EntryContext = {
   site: SiteCore
 }
 
-async function loadEntryContext(
-  id: string,
-  connection: Pick<typeof db, 'select'> = db,
-) {
+async function loadEntryContext(id: string, connection: DbReader = db) {
   const row = (
     await connection
       .select({ entry, collection, site })

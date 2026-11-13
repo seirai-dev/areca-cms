@@ -1,6 +1,7 @@
 import { and, eq, ne, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbExecutor, DbReader } from '#/db'
 import { collection, entry, site } from '#/db/schema'
 import {
   I18N_KEY,
@@ -28,7 +29,7 @@ export function normalizeRequiredLanguages(codes: readonly string[]): string[] {
 /** Languages of a site, or null when it is single-language. */
 export async function loadSiteLanguages(
   siteId: string,
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ): Promise<SiteLanguages | null> {
   const row = (
     await connection
@@ -150,7 +151,7 @@ export function claimedSlugs(
  * shared asset attach lock first (server/assets/usage.ts).
  */
 export async function lockSlugClaims(
-  tx: Pick<typeof db, 'execute'>,
+  tx: DbExecutor,
   collectionId: string,
   slugs: readonly string[],
 ) {
@@ -170,7 +171,7 @@ export async function lockSlugClaims(
  */
 export async function validateLocaleSlugs(
   input: { collectionId: string; entryId?: string; data: EntryData },
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ): Promise<FieldError[]> {
   const errors: FieldError[] = []
   const slugs = localeSlugs(input.data)
@@ -224,7 +225,7 @@ export async function validateLocaleSlugs(
 export async function siteLocaleCtx(
   siteId: string,
   fields: Field[],
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ): Promise<LocaleCtx | null> {
   const languages = await loadSiteLanguages(siteId, connection)
   return languages ? localeCtxFor(languages, fields) : null

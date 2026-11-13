@@ -8,6 +8,7 @@ import {
 import type { DevEnvWarning } from '#/lib/dev-env'
 import { entryTitle } from '#/lib/content/utils'
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import { collection, entry, environmentPush, site } from '#/db/schema'
 import type { EntryData } from '#/lib/types'
 import { audit } from '#/server/audit'
@@ -37,7 +38,7 @@ import {
   lockProductionRow,
   readDevEnvironment,
 } from './rows'
-import type { DevEnvActor, Tx } from './rows'
+import type { DevEnvActor } from './rows'
 import { schemaSnapshot } from './schema-snapshot'
 import {
   keepDraftRevision,

@@ -4,6 +4,7 @@ import type { AnyColumn, InferSelectModel, SQL } from 'drizzle-orm'
 import { getStorage } from '#/adapters'
 import { isValidLogicalKey } from '#/adapters/storage/s3-namespace.mjs'
 import { db } from '#/db'
+import type { DbReader, Tx } from '#/db'
 import {
   asset,
   deletedContentArchive,
@@ -28,7 +29,6 @@ import {
   compensateObjectUpload,
   drainStorageObjectDeletions,
 } from './storage-cleanup'
-import type { AssetTransaction } from './usage'
 
 export { AssetValidationError } from './errors'
 export { drainStorageObjectDeletions } from './storage-cleanup'
@@ -198,7 +198,7 @@ export async function listAssets(
 export async function getAsset(
   id: string,
   organizationId: string,
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ): Promise<Asset | undefined> {
   const [row] = await connection
     .select()
@@ -276,10 +276,7 @@ function mayReferenceAsset(
   return or(...conditions) as SQL
 }
 
-async function retainedAssetUsage(
-  tx: AssetTransaction,
-  existing: Asset,
-): Promise<number> {
+async function retainedAssetUsage(tx: Tx, existing: Asset): Promise<number> {
   const organizationId = existing.organizationId
   const entries = await tx
     .select({
@@ -404,7 +401,7 @@ function toResolvedAssetValue(
 export async function resolveAssetValue(
   assetId: string,
   organizationId: string,
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
   locale?: string | null,
 ): Promise<ResolvedAssetValue | null> {
   const row = await getAsset(assetId, organizationId, connection)
@@ -426,7 +423,7 @@ const LOOKUP_CHUNK = 5000
 export async function loadAssetLookup(
   organizationId: string,
   refs: { ids: Iterable<string>; storageKeys: Iterable<string> },
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ): Promise<AssetLookup> {
   const lookup: AssetLookup = { byId: new Map(), byStorageKey: new Map() }
   const fetch = async (

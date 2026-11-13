@@ -1,6 +1,7 @@
 import { eq, inArray } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import {
   collection,
   entry,
@@ -20,7 +21,7 @@ import {
   lockProductionRow,
   readDevEnvironment,
 } from './rows'
-import type { DevEnvActor, Tx } from './rows'
+import type { DevEnvActor } from './rows'
 
 /**
  * Deletes a dev env's entry revisions, entries and collections. Nothing is

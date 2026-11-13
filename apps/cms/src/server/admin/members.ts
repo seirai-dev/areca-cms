@@ -4,6 +4,7 @@ import { and, eq, gt, isNull, like, sql } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import {
   invitation,
   membership,
@@ -83,8 +84,6 @@ export class InvitationDeliveryError extends AppError {
     this.reason = reason
   }
 }
-
-export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /**
  * Serialises every owner-changing operation of one organization: concurrent

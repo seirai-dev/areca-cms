@@ -6,6 +6,7 @@ import { and, eq, inArray, or } from 'drizzle-orm'
 import { z } from '#/lib/zod'
 
 import { db } from '#/db'
+import type { DbReader } from '#/db'
 import { asset, collection, entry } from '#/db/schema'
 import {
   ENTRY_DATA_MAX_BYTES,
@@ -460,7 +461,7 @@ export async function validateReferences(
   fields: Field[],
   data: EntryData,
   options: { requirePublished?: boolean } = {},
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ): Promise<FieldError[]> {
   const errors: FieldError[] = []
 
@@ -576,7 +577,7 @@ export async function validateContentOwnership(
   organizationId: string,
   fields: Field[],
   data: EntryData,
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ) {
   const scopes: { data: EntryData; prefix: string }[] = [{ data, prefix: '' }]
   const translations = data[I18N_KEY]

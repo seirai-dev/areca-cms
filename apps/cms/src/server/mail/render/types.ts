@@ -1,8 +1,5 @@
-import type { db } from '#/db'
+import type { DbExecutor } from '#/db'
 import type { BrandingView } from '#/lib/branding'
-
-/** The database or a transaction on it. */
-export type Executor = typeof db
 
 export const MAIL_LOCALES = ['en', 'nl', 'tr'] as const
 export type MailLocale = (typeof MAIL_LOCALES)[number]
@@ -22,7 +19,7 @@ export type RenderContext = {
   locale: MailLocale
   brand: MailBrand
   /** Read through this when enqueueing inside a transaction. */
-  connection?: Executor
+  connection?: DbExecutor
 }
 
 export type RenderedMail = {

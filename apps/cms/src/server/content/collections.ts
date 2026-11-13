@@ -2,6 +2,7 @@ import { archiveDeletedContent } from './deletion-archive'
 import { and, eq, notInArray } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbReader, Tx } from '#/db'
 import { collection, site } from '#/db/schema'
 import type { Field, SiteManifest } from '#/lib/types'
 import { withRequiredSlugField } from '#/lib/collection-fields'
@@ -29,7 +30,7 @@ import { siteCoreColumns } from './site-core.ts'
 export async function listCollections(
   siteId: string,
   options: { enabledOnly?: boolean } = {},
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ) {
   const filters = [
     eq(collection.siteId, siteId),
@@ -52,7 +53,7 @@ export async function listCollections(
 export async function getCollection(
   siteId: string,
   key: string,
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ) {
   const row = (
     await connection
@@ -267,8 +268,6 @@ export async function syncManifest(
     targetId: siteId,
   })
 }
-
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 export type CollectionUpsertInput = {
   key: string

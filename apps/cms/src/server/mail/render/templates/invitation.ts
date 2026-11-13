@@ -9,12 +9,8 @@ import { decryptSecret } from '#/server/security/secret-encryption'
 import { secretsEncryptionKey } from '#/server/security/secrets-key'
 
 import { MailRenderError } from '../types.ts'
-import type {
-  Executor,
-  MailLocale,
-  RenderContext,
-  RenderedMail,
-} from '../types.ts'
+import type { DbExecutor } from '#/db'
+import type { MailLocale, RenderContext, RenderedMail } from '../types.ts'
 import { renderLayout } from '../layout.ts'
 
 import { PARAMS_SECRET_CONTEXT } from './password-reset.ts'
@@ -71,7 +67,7 @@ export async function render(
  */
 export async function loadInvitationMail(
   params: Record<string, unknown>,
-  connection?: Executor,
+  connection?: DbExecutor,
 ): Promise<InvitationMailData> {
   const executor = connection ?? db
   const invitationId = String(params.invitationId ?? '')

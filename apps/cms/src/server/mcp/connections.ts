@@ -5,6 +5,7 @@ import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { Pool } from 'pg'
 
 import { db, pool } from '#/db'
+import type { Tx } from '#/db'
 import { registerPool } from '#/db/pool-registry'
 import {
   mcpConnection,
@@ -360,7 +361,7 @@ async function revokeRow(
  * connection, its consent and every token it issued are revoked.
  */
 export async function revokeMemberMcpConnections(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tx: Tx,
   input: { userId: string; siteIds: string[]; now?: Date },
 ): Promise<number> {
   if (input.siteIds.length === 0) return 0
@@ -387,7 +388,7 @@ export async function revokeMemberMcpConnections(
  * admin role). Same effect as `revokeMemberMcpConnections`, for agency scope.
  */
 export async function revokeAgencyMcpConnections(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tx: Tx,
   input: { userId: string; now?: Date },
 ): Promise<number> {
   const now = input.now ?? new Date()
@@ -421,7 +422,7 @@ export function connectionRefs(row: {
 
 /** Consent and every token of one connection, in the caller's transaction. */
 async function revokeConnectionTokens(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tx: Tx,
   row: Pick<McpConnectionRow, 'id' | 'siteId' | 'clientId' | 'userId'>,
   now: Date,
 ) {
@@ -440,7 +441,7 @@ async function revokeConnectionTokens(
 
 /** Clear replay caches too: a disconnected rotated token must never return 200. */
 async function revokeGenerationTokens(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tx: Tx,
   row: { clientId: string; userId: string },
   refs: string[],
   now: Date,

@@ -1,8 +1,6 @@
 import { sql } from 'drizzle-orm'
 
-import type { db } from '#/db'
-
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+import type { Tx } from '#/db'
 
 /**
  * Serializes every development-environment operation (fork, reset, delete,

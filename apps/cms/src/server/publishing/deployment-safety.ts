@@ -1,14 +1,12 @@
 import { and, eq, inArray, or } from 'drizzle-orm'
 
-import type { db } from '#/db'
+import type { DbReader, Tx } from '#/db'
 import { buildJob, site } from '#/db/schema'
 import { ConflictError } from '#/server/content/errors'
 
-type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
-
 /** Whether a site has a release queued, running, or with an uncertain dispatch. */
 export async function siteHasPendingDeployment(
-  executor: Pick<typeof db, 'select'>,
+  executor: DbReader,
   siteId: string,
 ) {
   const pending = (
@@ -23,7 +21,7 @@ export async function siteHasPendingDeployment(
 
 // Callers hold the organization and/or site mutation lock before checking.
 export async function assertSiteHasNoPendingDeployment(
-  tx: Transaction,
+  tx: Tx,
   siteId: string,
   action = 'deleting this site',
 ) {
@@ -34,7 +32,7 @@ export async function assertSiteHasNoPendingDeployment(
 }
 
 export async function assertOrganizationHasNoPendingDeployment(
-  tx: Transaction,
+  tx: Tx,
   organizationId: string,
   connection = 'the Dokploy connection',
 ) {

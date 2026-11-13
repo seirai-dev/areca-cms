@@ -1,4 +1,4 @@
-import type { db } from '#/db'
+import type { DbReader } from '#/db'
 import type { Snapshot, SnapshotAsset } from '#/lib/types'
 
 import { assetUrl, loadAssetLookup } from './index'
@@ -36,7 +36,7 @@ export function referencedStorageKeys(value: unknown): Set<string> {
 export async function snapshotAssets(
   organizationId: string,
   collections: Snapshot['collections'],
-  connection?: Pick<typeof db, 'select'>,
+  connection?: DbReader,
 ): Promise<SnapshotAsset[]> {
   const keys = referencedStorageKeys(collections)
   if (keys.size === 0) return []

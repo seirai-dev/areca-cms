@@ -22,7 +22,8 @@ import type { PlanEntry } from './plan'
 import type { SlugCollision } from './slug-collisions'
 import { referenceLookup, referenceTargets } from './references'
 import type { ReferenceLookup, ReferenceWarning } from './references'
-import type { SiteRow, Tx } from './rows'
+import type { SiteRow } from './rows'
+import type { Tx } from '#/db'
 
 export type ProductionCollection = typeof collection.$inferSelect
 

@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { and, count, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbReader, Tx } from '#/db'
 import type { McpScope } from '#/db/schema'
 import { membership, mcpKey, site, user } from '#/db/schema'
 import { env } from '#/env'
@@ -98,10 +99,7 @@ function toSummary(row: KeyRow, userName: string | null): McpKeySummary {
   }
 }
 
-async function userNameOf(
-  userId: string,
-  connection: Pick<typeof db, 'select'> = db,
-) {
+async function userNameOf(userId: string, connection: DbReader = db) {
   const [found] = await connection
     .select({ name: user.name })
     .from(user)
@@ -227,7 +225,7 @@ export async function listMcpKeys(input: {
  * Returns the number of keys revoked.
  */
 export async function revokeMemberMcpKeys(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tx: Tx,
   input: { userId: string; siteIds: string[]; now?: Date },
 ): Promise<number> {
   if (input.siteIds.length === 0) return 0
@@ -607,7 +605,7 @@ export async function revokeAgencyMcpKey(input: {
  * (docs/design/agency-mcp.md, Decision 12). Returns the number of keys revoked.
  */
 export async function revokeAgencyMcpCredentials(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tx: Tx,
   input: { userId: string; now?: Date },
 ): Promise<number> {
   const now = input.now ?? new Date()

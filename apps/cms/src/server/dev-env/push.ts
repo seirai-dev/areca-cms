@@ -5,6 +5,7 @@ import {
   SCHEDULED_IN_PRODUCTION_MESSAGE,
 } from '#/lib/dev-env'
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import { collection, entry, environmentPush, site } from '#/db/schema'
 import { entryTitle } from '#/lib/content/utils'
 import { carryFieldValues, withoutFieldKeys } from '#/lib/field-content'
@@ -65,7 +66,7 @@ import {
   lockProductionRow,
   readDevEnvironment,
 } from './rows'
-import type { DevEnvActor, SiteRow, Tx } from './rows'
+import type { DevEnvActor, SiteRow } from './rows'
 import {
   keepDraftRevision,
   nextOriginBaseline,

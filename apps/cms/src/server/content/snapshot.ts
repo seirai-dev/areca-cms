@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto'
 import { and, eq, inArray, or } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbReader } from '#/db'
 import { collection, entry, site } from '#/db/schema'
 import {
   GLOBAL_ENTRY_SLUG,
@@ -137,7 +138,7 @@ export type LinkResolver = {
 
 export async function buildSnapshot(
   siteId: string,
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
   options: SnapshotOptions = {},
 ): Promise<
   | {
@@ -1171,7 +1172,7 @@ async function convertFields(
   options: {
     includedById: Map<string, IncludedEntry>
     siteId: string
-    connection?: Pick<typeof db, 'select'>
+    connection?: DbReader
     /** Preloaded assets (snapshot builds); otherwise each asset is queried. */
     assets?: AssetLookup
     organizationId: string

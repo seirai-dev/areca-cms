@@ -1,13 +1,12 @@
 import { eq, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbExecutor } from '#/db'
 import { auditLog, site } from '#/db/schema'
 import { isDevSite } from '#/lib/site-environment'
 import type { AuditMeta } from '#/lib/types'
 
 import { currentAuditContext } from './audit-context.ts'
-
-type AuditConnection = Pick<typeof db, 'insert' | 'select'>
 
 /**
  * Autosaves by one person on one entry this close together share one
@@ -31,7 +30,7 @@ export async function audit(
     targetId: string
     meta?: AuditMeta
   },
-  connection: AuditConnection = db,
+  connection: DbExecutor = db,
   knownSite?: { id: string; environment: string },
 ) {
   await connection.insert(auditLog).values({
@@ -61,7 +60,7 @@ export async function auditAutosave(
     actorId: string
     entryId: string
   },
-  connection: AuditConnection & Pick<typeof db, 'execute'> = db,
+  connection: DbExecutor = db,
   knownSite?: { id: string; environment: string },
 ) {
   const row = {
@@ -114,7 +113,7 @@ export async function auditAutosave(
  */
 async function isAgencyOnlyAudit(
   input: { siteId?: string | null; action: string },
-  connection: AuditConnection,
+  connection: DbExecutor,
   knownSite: { id: string; environment: string } | undefined,
 ): Promise<boolean> {
   if (input.action.startsWith('dev_env.')) return true
