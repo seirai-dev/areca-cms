@@ -9,6 +9,7 @@ import { NotFoundError } from '#/server/content/errors'
 import { assertSiteVisibleTo } from '#/server/security/site-visibility'
 
 import type { McpRole } from './keys'
+import { siteCoreColumns } from '#/server/content/site-core'
 
 /**
  * Site access for the Connect AI pages and their server functions. Answers
@@ -18,7 +19,7 @@ import type { McpRole } from './keys'
 export async function requireMcpSiteAccess(siteId: string) {
   await requireUser()
   const [found] = await db
-    .select()
+    .select(siteCoreColumns)
     .from(site)
     .where(eq(site.id, siteId))
     .limit(1)

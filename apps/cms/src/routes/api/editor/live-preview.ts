@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import '@tanstack/react-start'
 
 import { ID_MAX_LENGTH, ENTRY_DATA_MAX_BYTES } from '#/lib/content-limits'
+import { withRequiredSlugField } from '#/lib/collection-fields'
 import { localeTagSchema } from '#/lib/content-locale'
 import { SLUG_PATTERN } from '#/lib/slug'
 import { z } from '#/lib/zod'
@@ -11,7 +12,6 @@ import {
   requireEntryAccess,
   requireGlobalAccess,
 } from '#/server/content/access'
-import { getCollection } from '#/server/content/collections'
 import { normalizeEntryData } from '#/server/content/entries'
 import {
   buildPreviewEntryFromDraft,
@@ -105,12 +105,20 @@ async function readCappedText(request: Request): Promise<string | null> {
  */
 async function previewUnsaved(body: LiveBody) {
   if (body.entryId !== undefined) {
-    const { site, entry: existing } = await requireEntryAccess(body.entryId)
+    const {
+      site,
+      entry: existing,
+      collection: entryCollection,
+    } = await requireEntryAccess(body.entryId)
     // Same answer for an entry of another site as for a missing one.
     if (existing.siteId !== body.siteId) throw new NotFoundError()
     if (existing.collectionKey !== body.collection) throw new NotFoundError()
-    const col = await getCollection(site.id, existing.collectionKey)
-    if (!col) throw new NotFoundError()
+    // A section entry is not previewed as a collection entry.
+    if (entryCollection.kind !== 'collection') throw new NotFoundError()
+    const col = {
+      ...entryCollection,
+      fields: withRequiredSlugField(entryCollection.fields),
+    }
 
     const slugField = col.fields.find((field) => field.type === 'slug')
     let data = normalizeEntryData({ site, collection: col }, body.data)

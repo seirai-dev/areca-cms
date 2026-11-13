@@ -24,7 +24,7 @@ import {
 import { SEO_KEY } from '#/lib/seo'
 import { isDevSite } from '#/server/security/site-visibility'
 import { m } from '#/paraglide/messages'
-import { audit } from '#/server/audit'
+import { audit, auditAutosave } from '#/server/audit'
 import { importExternalImages } from '#/server/assets/external-images'
 import { assetAttachLock } from '#/server/assets/usage'
 
@@ -40,6 +40,7 @@ import { SLUG_PATTERN } from '#/lib/slug'
 import { summaryFromParts, toEntrySummary } from '#/lib/content/entry-summary'
 import { firstTextField } from '#/lib/content/utils'
 import { isMultilingual } from '#/lib/site-languages'
+import type { SiteCore } from './site-core.ts'
 import type { EntrySummary } from '#/lib/content/entry-summary'
 import {
   claimedSlugs,
@@ -702,18 +703,31 @@ export async function updateDraft(
 
     await syncEntryLinkIndex(tx, id)
     await writeRevision(id, parsed.data, actorId, 'update', tx)
-    await audit(
-      {
-        organizationId: ctx.site.organizationId,
-        siteId: ctx.site.id,
-        actorId,
-        action: 'entry.update',
-        targetType: 'entry',
-        targetId: id,
-      },
-      tx,
-      ctx.site,
-    )
+    if (options.explicit) {
+      await audit(
+        {
+          organizationId: ctx.site.organizationId,
+          siteId: ctx.site.id,
+          actorId,
+          action: 'entry.update',
+          targetType: 'entry',
+          targetId: id,
+        },
+        tx,
+        ctx.site,
+      )
+    } else {
+      await auditAutosave(
+        {
+          organizationId: ctx.site.organizationId,
+          siteId: ctx.site.id,
+          actorId,
+          entryId: id,
+        },
+        tx,
+        ctx.site,
+      )
+    }
 
     return {
       ...updated,
@@ -1514,7 +1528,7 @@ async function loadCollectionContext(siteId: string, collectionKey: string) {
 type EntryContext = {
   entry: typeof entry.$inferSelect
   collection: typeof collection.$inferSelect
-  site: typeof site.$inferSelect
+  site: SiteCore
 }
 
 async function loadEntryContext(
@@ -1554,7 +1568,7 @@ function assertCollectionEntry(target: { kind: ContentKind }) {
 
 function importEntryImages(
   ctx: {
-    site: typeof site.$inferSelect
+    site: SiteCore
     collection: typeof collection.$inferSelect
   },
   data: EntryData,

@@ -34,6 +34,8 @@ import {
 } from '#/server/content/errors'
 import { diffApprovedRelease } from '#/server/publishing/release-diff'
 import { isDevSite } from '#/server/security/site-visibility'
+import { siteCoreColumns } from '#/server/content/site-core'
+import type { SiteCore } from '#/server/content/site-core'
 
 export function dbActorId(actorId: string | null | undefined) {
   if (!actorId || actorId === 'system') return null
@@ -45,7 +47,7 @@ export function dbActorId(actorId: string | null | undefined) {
  * The publish transaction refuses without one; release status reports the same
  * message as a blocker, so the tray, panel and overview disable Go live up front.
  */
-export function deploymentBlockers(row: typeof site.$inferSelect): string[] {
+export function deploymentBlockers(row: SiteCore): string[] {
   if (row.publishingMode === 'demo') return []
   return hasCompleteDeploymentTarget(row.deploymentTarget)
     ? []
@@ -54,7 +56,11 @@ export function deploymentBlockers(row: typeof site.$inferSelect): string[] {
 
 export async function getSiteOrThrow(siteId: string) {
   const row = (
-    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
+    await db
+      .select(siteCoreColumns)
+      .from(site)
+      .where(eq(site.id, siteId))
+      .limit(1)
   ).at(0)
   if (!row) {
     throw new NotFoundError(m.server_site_not_found())
@@ -142,7 +148,7 @@ async function assertDispatchResolved(tx: RequestTx, siteId: string) {
 }
 
 /** Dev envs have no releases and no builds (docs/design/dev-environments.md, Decision 7). */
-function assertNotDevSite(row: typeof site.$inferSelect) {
+function assertNotDevSite(row: SiteCore) {
   if (isDevSite(row)) {
     throw new ConflictError(m.server_dev_env_no_releases())
   }
@@ -182,7 +188,7 @@ export async function requestPublication(input: {
     if (replay) return { ok: true as const, ...replay }
     const lockedSite = (
       await tx
-        .select()
+        .select(siteCoreColumns)
         .from(site)
         .where(eq(site.id, input.siteId))
         .for('update')
@@ -414,7 +420,7 @@ export async function requestRollback(input: {
 
     const lockedSite = (
       await tx
-        .select()
+        .select(siteCoreColumns)
         .from(site)
         .where(eq(site.id, input.siteId))
         .for('update')
@@ -810,7 +816,7 @@ async function dispatchConnectionUrl(
 /** Freeze the hosting destination when a release is requested. */
 export async function deploymentIdentity(
   tx: RequestTx,
-  existingSite: typeof site.$inferSelect,
+  existingSite: SiteCore,
 ) {
   if (existingSite.publishingMode === 'demo') return {}
   const connectionUrl = await dispatchConnectionUrl(

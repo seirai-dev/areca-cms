@@ -4,7 +4,7 @@ import {
   richTextAssetsAuthorizedFrom,
 } from '#/server/assets/richtext-ownership'
 import { createHash } from 'node:crypto'
-import { and, eq, or } from 'drizzle-orm'
+import { and, eq, inArray, or } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { collection, entry, site } from '#/db/schema'
@@ -74,6 +74,8 @@ import type { LinkTargetRow } from './entry-links.ts'
 import { buildEntrySeo } from './seo.ts'
 import { buildSnapshotSchema } from './snapshot-schema.ts'
 import { pickDeclaredFields, validateEntryData } from './validation.ts'
+import { siteCoreColumns } from './site-core.ts'
+import type { SiteCore } from './site-core.ts'
 
 type IncludedEntry = {
   collectionKey: string
@@ -148,7 +150,11 @@ export async function buildSnapshot(
   | { ok: false; errors: string[] }
 > {
   const existingSite = (
-    await connection.select().from(site).where(eq(site.id, siteId)).limit(1)
+    await connection
+      .select(siteCoreColumns)
+      .from(site)
+      .where(eq(site.id, siteId))
+      .limit(1)
   ).at(0)
   if (!existingSite) {
     throw new NotFoundError(m.server_site_not_found())
@@ -380,30 +386,13 @@ export async function buildSnapshot(
       : [item.data]
 
   // One batched lookup replaces a query per embedded/linked asset.
-  const assetIds = new Set<string>()
-  const assetKeys = new Set<string>()
+  const assetRefs: AssetRefs = { ids: new Set(), storageKeys: new Set() }
   for (const item of everything) {
-    for (const scope of scopesOf(item)) {
-      const ogImage = readEntrySeo(scope).ogImage
-      if (ogImage) assetIds.add(ogImage)
-      for (const field of item.fields) {
-        const value = scope[field.key]
-        if (field.type === 'richtext') {
-          for (const key of richTextAssetRefs(value).storageKeys)
-            assetKeys.add(key)
-        } else if (
-          field.type === 'image' &&
-          typeof value === 'string' &&
-          value !== ''
-        ) {
-          assetIds.add(value)
-        }
-      }
-    }
+    collectAssetRefs(item.fields, scopesOf(item), assetRefs)
   }
   const assets = await loadAssetLookup(
     existingSite.organizationId,
-    { ids: assetIds, storageKeys: assetKeys },
+    assetRefs,
     connection,
   )
 
@@ -880,7 +869,7 @@ function previewLocaleStatus(
   )
 }
 
-type PreviewSite = typeof site.$inferSelect
+type PreviewSite = SiteCore
 type PreviewCollection = NonNullable<Awaited<ReturnType<typeof getCollection>>>
 type PreviewGlobalRow = NonNullable<
   Awaited<ReturnType<typeof getGlobalEntry>>
@@ -897,7 +886,11 @@ export async function buildPreviewGlobal(
 ): Promise<PreviewGlobal | null> {
   const found = await getGlobalEntry(siteId, key)
   const existingSite = (
-    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
+    await db
+      .select(siteCoreColumns)
+      .from(site)
+      .where(eq(site.id, siteId))
+      .limit(1)
   ).at(0)
   if (!found || !existingSite) return null
   return buildPreviewGlobalFromDraft({
@@ -930,6 +923,11 @@ export async function buildPreviewGlobalFromDraft(input: {
     await draftLinkTargets(existingSite.id, global.fields, draftData),
     languages,
   )
+  const { assets, references } = await loadPreviewLookups(
+    existingSite,
+    global.fields,
+    draftData,
+  )
 
   const expanded = await expandAcrossLanguages(
     languages,
@@ -940,6 +938,8 @@ export async function buildPreviewGlobalFromDraft(input: {
         includedById: new Map(),
         siteId: existingSite.id,
         organizationId: existingSite.organizationId,
+        assets,
+        references,
         strict: false,
         locale: loc ?? undefined,
         links,
@@ -957,10 +957,7 @@ export async function buildPreviewGlobalFromDraft(input: {
             ),
             title: global.label,
             site: existingSite,
-            ogImage: await resolveOgImageValue(
-              view,
-              existingSite.organizationId,
-            ),
+            ogImage: resolveOgImage(view, assets),
             publishedAt: row.publishedAt,
           })
         : undefined
@@ -991,7 +988,11 @@ export async function buildPreviewEntry(
 ): Promise<PreviewEntry | null> {
   const col = await getCollection(siteId, collectionKey)
   const existingSite = (
-    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
+    await db
+      .select(siteCoreColumns)
+      .from(site)
+      .where(eq(site.id, siteId))
+      .limit(1)
   ).at(0)
   if (!col || !existingSite) return null
 
@@ -1033,6 +1034,11 @@ export async function buildPreviewEntryFromDraft(input: {
     await draftLinkTargets(existingSite.id, col.fields, draftData),
     languages,
   )
+  const { assets, references } = await loadPreviewLookups(
+    existingSite,
+    col.fields,
+    draftData,
+  )
 
   const expanded = await expandAcrossLanguages(
     languages,
@@ -1050,18 +1056,15 @@ export async function buildPreviewEntryFromDraft(input: {
         includedById: new Map(),
         siteId: existingSite.id,
         organizationId: existingSite.organizationId,
+        assets,
+        references,
         strict: false,
         locale: loc ?? undefined,
         links,
       })
       const ogImageId = readEntrySeo(shown).ogImage
       const ogImage: ImageValue | null = ogImageId
-        ? ((await resolveAssetValue(
-            ogImageId,
-            existingSite.organizationId,
-            db,
-            loc,
-          )) ?? null)
+        ? resolveAssetFromLookup(assets, ogImageId, loc)
         : null
       const routePattern =
         (isTranslation ? col.localizedRoutes?.[loc!] : undefined) ??
@@ -1177,6 +1180,8 @@ async function convertFields(
     locale?: string
     /** Entry links in rich text resolve through this. Absent: links are kept as stored. */
     links?: LinkResolver
+    /** Preloaded reference targets of the site (previews); otherwise each is queried. */
+    references?: Map<string, ReferenceValue>
   },
 ): Promise<Record<string, unknown>> {
   const out: Record<string, unknown> = withoutSeo(
@@ -1269,7 +1274,10 @@ async function convertFields(
         continue
       }
       out[field.key] = null
-      if (!options.strict && field.collection) {
+      if (!options.strict && field.collection && options.references) {
+        const ref = options.references.get(value)
+        if (ref && ref.collection === field.collection) out[field.key] = ref
+      } else if (!options.strict && field.collection) {
         const refRow = (
           await db
             .select({
@@ -1318,12 +1326,94 @@ function resolveOgImage(
   return id ? resolveAssetFromLookup(assets, id) : null
 }
 
-async function resolveOgImageValue(
-  data: EntryData,
-  organizationId: string,
-): Promise<ImageValue | null> {
-  const id = readEntrySeo(data).ogImage
-  return id ? await resolveAssetValue(id, organizationId) : null
+type AssetRefs = { ids: Set<string>; storageKeys: Set<string> }
+
+/** The asset ids and storage keys `scopes` (language views of one item) use. */
+function collectAssetRefs(
+  fields: Field[],
+  scopes: EntryData[],
+  refs: AssetRefs,
+) {
+  for (const scope of scopes) {
+    const ogImage = readEntrySeo(scope).ogImage
+    if (ogImage) refs.ids.add(ogImage)
+    for (const field of fields) {
+      const value = scope[field.key]
+      if (field.type === 'richtext') {
+        for (const key of richTextAssetRefs(value).storageKeys)
+          refs.storageKeys.add(key)
+      } else if (
+        field.type === 'image' &&
+        typeof value === 'string' &&
+        value !== ''
+      ) {
+        refs.ids.add(value)
+      }
+    }
+  }
+}
+
+/**
+ * The assets and reference targets a draft preview uses, in every language,
+ * read once instead of one query per image and per reference.
+ */
+async function loadPreviewLookups(
+  previewSite: PreviewSite,
+  fields: Field[],
+  draftData: EntryData,
+): Promise<{ assets: AssetLookup; references: Map<string, ReferenceValue> }> {
+  const languages = previewSite.languages ?? null
+  const scopes = languages
+    ? languages.all.map((locale) =>
+        readLocale(draftData, locale, localeCtxFor(languages, fields)),
+      )
+    : [draftData]
+  const assetRefs: AssetRefs = { ids: new Set(), storageKeys: new Set() }
+  collectAssetRefs(fields, scopes, assetRefs)
+
+  const referenceIds = new Set<string>()
+  for (const scope of scopes) {
+    for (const field of fields) {
+      const value = scope[field.key]
+      if (
+        field.type === 'reference' &&
+        field.collection &&
+        typeof value === 'string' &&
+        value !== ''
+      ) {
+        referenceIds.add(value)
+      }
+    }
+  }
+
+  const [assets, referenceRows] = await Promise.all([
+    loadAssetLookup(previewSite.organizationId, assetRefs),
+    referenceIds.size === 0
+      ? []
+      : db
+          .select({
+            id: entry.id,
+            slug: entry.slug,
+            collectionKey: collection.key,
+          })
+          .from(entry)
+          .innerJoin(collection, eq(entry.collectionId, collection.id))
+          .where(
+            and(
+              inArray(entry.id, [...referenceIds]),
+              eq(entry.siteId, previewSite.id),
+            ),
+          ),
+  ])
+  const references = new Map<string, ReferenceValue>()
+  for (const row of referenceRows) {
+    references.set(row.id, {
+      collection: row.collectionKey,
+      slug: row.slug,
+      id: row.id,
+    })
+  }
+  return { assets, references }
 }
 
 function sortValue(value: unknown): unknown {

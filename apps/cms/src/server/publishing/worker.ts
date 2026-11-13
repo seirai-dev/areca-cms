@@ -52,6 +52,7 @@ import {
   lockSiteLinkIndex,
   syncEntryLinkIndex,
 } from '#/server/content/entry-link-index'
+import { siteCoreColumns } from '#/server/content/site-core'
 
 // Legacy active/uncertain rows may predate resource keys. Resolve their frozen
 // target (or prior site target) so new releases cannot bypass their quarantine.
@@ -322,7 +323,11 @@ export async function processJob(
 
   try {
     const existingSite = (
-      await db.select().from(site).where(eq(site.id, job.siteId)).limit(1)
+      await db
+        .select(siteCoreColumns)
+        .from(site)
+        .where(eq(site.id, job.siteId))
+        .limit(1)
     ).at(0)
     if (!existingSite) {
       await failJob(
@@ -823,7 +828,7 @@ export async function resolveUncertainDeploymentJob(input: {
     if (!candidate) throw new Error('Build job not found')
     const existingSite = (
       await tx
-        .select()
+        .select(siteCoreColumns)
         .from(site)
         .where(eq(site.id, candidate.siteId))
         .for('update')
@@ -1411,7 +1416,7 @@ async function resourceIdentity(
 ) {
   if (job.deploymentResourceKey) return {}
   const existingSite = (
-    await tx.select().from(site).where(eq(site.id, job.siteId))
+    await tx.select(siteCoreColumns).from(site).where(eq(site.id, job.siteId))
   ).at(0)
   const pub = (
     await tx

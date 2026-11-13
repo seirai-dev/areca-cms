@@ -24,6 +24,7 @@ import { NotFoundError, ValidationError } from '#/server/content/errors'
 import { assertSiteVisibleTo } from '#/server/security/site-visibility'
 import { languageName } from '#/server/content/locale-validation'
 import { allowUserAction } from '#/server/http/rate-limit.server'
+import { siteCoreColumns } from '#/server/content/site-core'
 
 /**
  * Same paid-AI quota as generateEntrySeoFn (one bucket, so suggestions and
@@ -59,7 +60,11 @@ export const translateContentFn = createServerFn({
   .handler(async ({ data }) => {
     await requireUser()
     const found = (
-      await db.select().from(site).where(eq(site.id, data.siteId)).limit(1)
+      await db
+        .select(siteCoreColumns)
+        .from(site)
+        .where(eq(site.id, data.siteId))
+        .limit(1)
     ).at(0)
     if (!found) throw new NotFoundError(m.server_site_not_found())
     const session = await requireOrgMemberOrNotFound(

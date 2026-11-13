@@ -1,15 +1,17 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { db } from '#/db'
 import { asset, entry, entryRevision } from '#/db/schema'
 import { env } from '#/env'
+import { withRequiredSlugField } from '#/lib/collection-fields'
+import type { EntryData, Field } from '#/lib/types'
 import { assetUsage, loadAssetLookup, resolveAssetValue } from '#/server/assets'
 import {
   richTextAssetsAuthorized,
   richTextAssetsAuthorizedFrom,
 } from '#/server/assets/richtext-ownership'
 
-import { buildSnapshot } from './snapshot.ts'
+import { buildPreviewEntryFromDraft, buildSnapshot } from './snapshot.ts'
 import {
   createTestCollection,
   createTestSite,
@@ -26,7 +28,11 @@ function doc(...content: unknown[]) {
   return { type: 'doc', content }
 }
 
-async function makeAsset(organizationId: string, name: string) {
+async function makeAsset(
+  organizationId: string,
+  name: string,
+  altI18n: Record<string, string> = {},
+) {
   const [row] = await db
     .insert(asset)
     .values({
@@ -38,6 +44,7 @@ async function makeAsset(organizationId: string, name: string) {
       width: 10,
       height: 20,
       altText: `alt ${name}`,
+      altI18n,
     })
     .returning()
   return row
@@ -305,6 +312,133 @@ describe.skipIf(!hasDb)('asset usage pre-filter', () => {
       // 2 entries + 1 percent-encoded revision reference the asset.
       expect(await assetUsage(used.id, ctx.org.id)).toBe(3)
       expect(await assetUsage(unused.id, ctx.org.id)).toBe(0)
+    })
+  })
+})
+
+describe.skipIf(!hasDb)('draft preview asset resolution (batched)', () => {
+  it('reads assets and references once per preview, in every language', async () => {
+    const ctx = await createTestSite({
+      languages: { main: 'nl', all: ['nl', 'en'] },
+    })
+    try {
+      const fields: Field[] = [
+        { key: 'title', label: 'Title', type: 'text', translatable: true },
+        { key: 'slug', label: 'Slug', type: 'slug', required: true },
+        { key: 'body', label: 'Body', type: 'richtext' },
+        { key: 'heroImage', label: 'Hero image', type: 'image' },
+        {
+          key: 'related',
+          label: 'Related',
+          type: 'reference',
+          collection: 'articles',
+        },
+        {
+          key: 'wrongKind',
+          label: 'Wrong kind',
+          type: 'reference',
+          collection: 'pages',
+        },
+      ]
+      const col = await createTestCollection(ctx.site.id, { fields })
+      const previewCollection = {
+        ...col,
+        fields: withRequiredSlugField(col.fields),
+      }
+      const hero = await makeAsset(ctx.org.id, 'hero', { en: 'English hero' })
+      const og = await makeAsset(ctx.org.id, 'og')
+      const target = await publishRaw(ctx.site.id, col.id, 'target', {
+        title: 'Target',
+        slug: 'target',
+      })
+
+      const preview = async (imageCount: number) => {
+        const inline = []
+        for (let index = 0; index < imageCount; index++) {
+          const row = await makeAsset(
+            ctx.org.id,
+            `inline-${imageCount}-${index}`,
+          )
+          inline.push(image(`/api/assets/file/${row.storageKey}`))
+        }
+        const draftData: EntryData = {
+          title: 'Hallo',
+          slug: 'hallo',
+          body: doc(...inline),
+          heroImage: hero.id,
+          related: target.id,
+          wrongKind: target.id,
+          $seo: { ogImage: og.id },
+          $i18n: { en: { title: 'Hello' } },
+        }
+        const spy = vi.spyOn(db, 'select')
+        try {
+          const result = await buildPreviewEntryFromDraft({
+            site: ctx.site,
+            collection: previewCollection,
+            entryRow: { id: 'draft', slug: 'hallo', publishedAt: null },
+            draftData,
+          })
+          return { result, queries: spy.mock.calls.length }
+        } finally {
+          spy.mockRestore()
+        }
+      }
+
+      const few = await preview(1)
+      const many = await preview(6)
+      expect(many.queries).toBe(few.queries)
+      // The link-target site lookup, assets by id, assets by key, references.
+      expect(few.queries).toBe(4)
+
+      const { result } = many
+      const en = result.locales?.en
+      expect(result.data.heroImage).toEqual(
+        await resolveAssetValue(hero.id, ctx.org.id, db, 'nl'),
+      )
+      expect(en?.data.heroImage).toEqual(
+        await resolveAssetValue(hero.id, ctx.org.id, db, 'en'),
+      )
+      expect((en?.data.heroImage as { alt?: string }).alt).toBe('English hero')
+      expect(result.data.related).toEqual({
+        collection: 'articles',
+        slug: 'target',
+        id: target.id,
+      })
+      expect(result.data.wrongKind).toBeNull()
+      expect(result.data.body).not.toBeNull()
+      expect(result.seo?.openGraph.image).toEqual(
+        await resolveAssetValue(og.id, ctx.org.id, db, 'nl'),
+      )
+      // SEO is per language: without its own og:image, English uses the hero.
+      expect(en?.seo?.openGraph.image).toEqual(
+        await resolveAssetValue(hero.id, ctx.org.id, db, 'en'),
+      )
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('drops rich text whose embedded asset belongs to another organization', async () => {
+    await withTestSite(async (ctx) => {
+      const col = await createTestCollection(ctx.site.id)
+      const other = await createTestSite()
+      try {
+        const foreign = await makeAsset(other.org.id, 'foreign')
+        const result = await buildPreviewEntryFromDraft({
+          site: ctx.site,
+          collection: { ...col, fields: withRequiredSlugField(col.fields) },
+          entryRow: { id: 'draft', slug: 'x', publishedAt: null },
+          draftData: {
+            title: 'x',
+            slug: 'x',
+            body: doc(image(`/api/assets/file/${foreign.storageKey}`)),
+          },
+        })
+        expect(result.data.body).toBeNull()
+      } finally {
+        await cleanupTestSite(other)
+      }
     })
   })
 })
