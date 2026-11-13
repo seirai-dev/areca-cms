@@ -6,14 +6,15 @@
  */
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 
 import { db } from '#/db'
-import { membership, organization } from '#/db/schema'
+import { organization } from '#/db/schema'
 import { env } from '#/env'
 import { isEventKey } from '#/lib/notifications'
 import type { EventKey, NotificationRole } from '#/lib/notifications'
 import { audit } from '#/server/audit'
+import { membershipRole } from '#/server/security/org-role'
 
 import {
   choiceKey,
@@ -118,17 +119,7 @@ async function roleFor(
   target: UnsubscribeTarget,
 ): Promise<NotificationRole | null> {
   if (target.organizationId === null) return 'agency'
-  const [member] = await db
-    .select({ role: membership.role })
-    .from(membership)
-    .where(
-      and(
-        eq(membership.userId, target.userId),
-        eq(membership.organizationId, target.organizationId),
-      ),
-    )
-    .limit(1)
-  return member?.role ?? null
+  return membershipRole(target.userId, target.organizationId)
 }
 
 /** Effective state for the token's event. Null when the person has no role there. */

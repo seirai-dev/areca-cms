@@ -323,6 +323,20 @@ describe('invitation accepted', () => {
     expect(row?.payload).toMatchObject({ recipientRole: 'agency' })
   })
 
+  it('tells an agency admin who is also a member under their membership role', async () => {
+    const { org } = await setup()
+    const memberAdmin = await makeUser({ name: 'Mia Member', agencyAdmin: true })
+    const invitee = await makeUser({ name: 'Ivo Invitee' })
+    cleanups.push(() => removeUsers([memberAdmin.id, invitee.id]))
+    await addMember(memberAdmin.id, org.id, 'owner')
+    const invite = await createInvitation(org.id, memberAdmin.id)
+
+    await notifyInviteAccepted(invite.id, invitee.id)
+
+    const row = await rowFor('invite.accepted', invite.id, memberAdmin.id)
+    expect(row?.payload).toMatchObject({ recipientRole: 'owner' })
+  })
+
   it('does nothing when the invitation has no recorded sender', async () => {
     const { org } = await setup()
     const invitee = await makeUser({ name: 'Otto Orphan' })

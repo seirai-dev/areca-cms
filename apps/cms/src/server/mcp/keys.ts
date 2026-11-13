@@ -4,7 +4,7 @@ import { and, count, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import type { McpScope } from '#/db/schema'
-import { membership, mcpKey, site, user } from '#/db/schema'
+import { mcpKey, site, user } from '#/db/schema'
 import { env } from '#/env'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
@@ -14,6 +14,7 @@ import {
   NotFoundError,
   ValidationError,
 } from '#/server/content/errors'
+import { orgRoleOf } from '#/server/security/org-role'
 import { hashToken } from '#/server/security/token-hash'
 import { revokeAgencyMcpConnections } from './connections'
 
@@ -303,26 +304,14 @@ export async function liveRoleFor(
 ): Promise<LiveRoleResult> {
   // Suspended, not revoked: keys and connections work again once unblocked.
   if (owner.blockedAt) return { ok: false, reason: 'invalid' }
-  if (owner.isAgencyAdmin) {
-    // Mirrors assertAdminMfa in lib/session.server.ts. Not imported, because
-    // that module pulls in request-only APIs.
-    if (env.ADMIN_MFA_REQUIRED && !owner.twoFactorEnabled) {
-      return { ok: false, reason: 'mfa_required' }
-    }
-    return { ok: true, role: 'agency' }
+  const role = await orgRoleOf(owner, organizationId)
+  if (!role) return { ok: false, reason: 'invalid' }
+  // Mirrors assertAdminMfa in lib/session.server.ts. Not imported, because
+  // that module pulls in request-only APIs.
+  if (role === 'agency' && env.ADMIN_MFA_REQUIRED && !owner.twoFactorEnabled) {
+    return { ok: false, reason: 'mfa_required' }
   }
-  const [member] = await db
-    .select({ role: membership.role })
-    .from(membership)
-    .where(
-      and(
-        eq(membership.userId, owner.id),
-        eq(membership.organizationId, organizationId),
-      ),
-    )
-    .limit(1)
-  if (!member) return { ok: false, reason: 'invalid' }
-  return { ok: true, role: member.role }
+  return { ok: true, role }
 }
 
 /**

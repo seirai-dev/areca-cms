@@ -4,7 +4,7 @@
  * caller's own commit and never throws: a notification problem must not fail
  * a release or an invitation.
  */
-import { and, asc, desc, eq, isNotNull, lte, ne } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNotNull, lte, ne } from 'drizzle-orm'
 
 import { db } from '#/db'
 import {
@@ -19,6 +19,7 @@ import {
 import type { NotificationPayload, NotificationRole } from '#/lib/notifications'
 import type { PublicationStatus, Snapshot } from '#/lib/types'
 import { createLogger } from '#/server/log'
+import { membershipRoles } from '#/server/security/org-role'
 import { diffSnapshotCollections } from '#/server/publishing/release-diff'
 import type { ReleaseDiffEntry } from '#/server/publishing/release-diff'
 
@@ -55,41 +56,34 @@ async function siteContext(siteId: string) {
   return row ?? null
 }
 
-/** Membership role, or 'agency' for an agency admin who is not a member. */
-async function roleFor(
-  userId: string,
-  organizationId: string,
-): Promise<NotificationRole | null> {
-  const [member] = await db
-    .select({ role: membership.role })
-    .from(membership)
-    .where(
-      and(
-        eq(membership.userId, userId),
-        eq(membership.organizationId, organizationId),
-      ),
-    )
-    .limit(1)
-  if (member) return member.role
-  const [person] = await db
-    .select({ isAgencyAdmin: user.isAgencyAdmin })
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1)
-  return person?.isAgencyAdmin ? 'agency' : null
-}
-
+/**
+ * Each person's membership role, or 'agency' for an agency admin who is not a
+ * member. Unlike `orgRoleOf`, membership wins here: an agency admin who is
+ * also a member gets the org's events under that role, with the org's rules
+ * and the per-org choices their Notifications settings show for it.
+ */
 async function recipientsFor(
   userIds: Array<string | null>,
   organizationId: string,
 ): Promise<NotificationRecipient[]> {
-  const recipients: NotificationRecipient[] = []
-  for (const userId of new Set(userIds)) {
-    if (!userId) continue
-    const role = await roleFor(userId, organizationId)
-    if (role) recipients.push({ userId, role })
-  }
-  return recipients
+  const ids = [...new Set(userIds)].filter((id): id is string => Boolean(id))
+  const roles = await membershipRoles(organizationId, ids)
+  const others = ids.filter((id) => !roles.has(id))
+  const agencyAdmins = new Set(
+    others.length === 0
+      ? []
+      : (
+          await db
+            .select({ id: user.id })
+            .from(user)
+            .where(and(inArray(user.id, others), eq(user.isAgencyAdmin, true)))
+        ).map((row) => row.id),
+  )
+  return ids.flatMap((userId): NotificationRecipient[] => {
+    const role: NotificationRole | undefined =
+      roles.get(userId) ?? (agencyAdmins.has(userId) ? 'agency' : undefined)
+    return role ? [{ userId, role }] : []
+  })
 }
 
 async function ownersOf(

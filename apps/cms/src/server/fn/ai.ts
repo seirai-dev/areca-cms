@@ -1,15 +1,11 @@
 import { createServerFn } from '@tanstack/react-start'
-import { eq } from 'drizzle-orm'
 import { z } from '#/lib/zod'
 
-import { db } from '#/db'
-import { site } from '#/db/schema'
 import { canonicalLocale, localeTagSchema } from '#/lib/content-locale'
 import { ID_MAX_LENGTH } from '#/lib/content-limits'
 import {
   requireAgencyAdmin,
   requireFreshAgencyAdmin,
-  requireOrgMemberOrNotFound,
   requireUser,
 } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
@@ -27,12 +23,11 @@ import {
   saveAiSettings,
 } from '#/server/ai/settings'
 import { audit } from '#/server/audit'
+import { requireSiteAccess } from '#/server/content/access'
 import { getCollection } from '#/server/content/collections'
 import { NotFoundError, ValidationError } from '#/server/content/errors'
-import { assertSiteVisibleTo } from '#/server/security/site-visibility'
 import { resolveSlug, validateEntryData } from '#/server/content/validation'
 import { allowUserAction } from '#/server/http/rate-limit.server'
-import { siteCoreColumns } from '#/server/content/site-core'
 
 const aiFn = { strict: { output: false } as const }
 
@@ -94,28 +89,10 @@ export const generateEntrySeoFn = createServerFn({ method: 'POST', ...aiFn })
     }),
   )
   .handler(async ({ data }) => {
-    await requireUser()
-    const found = (
-      await db
-        .select(siteCoreColumns)
-        .from(site)
-        .where(eq(site.id, data.siteId))
-        .limit(1)
-    ).at(0)
-    if (!found) throw new NotFoundError(m.server_site_not_found())
     // Access before anything that depends on the site's settings: a locale
     // check first would tell a caller which languages a site it cannot see has.
     // Anyone who can edit the site's content (editor, owner, agency admin).
-    const session = await requireOrgMemberOrNotFound(
-      found.organizationId,
-      undefined,
-      () => new NotFoundError(m.server_site_not_found()),
-    )
-    await assertSiteVisibleTo(
-      session,
-      found,
-      () => new NotFoundError(m.server_site_not_found()),
-    )
+    const { session, site: found } = await requireSiteAccess(data.siteId)
     const locale = data.locale ? canonicalLocale(data.locale) : null
     if (locale && found.languages && !found.languages.all.includes(locale)) {
       throw new ValidationError([

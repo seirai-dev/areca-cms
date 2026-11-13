@@ -1,9 +1,5 @@
 import { redirect } from '@tanstack/react-router'
 import { getRequestHeaders } from '@tanstack/react-start/server'
-import { and, eq } from 'drizzle-orm'
-
-import { db } from '#/db'
-import { membership } from '#/db/schema'
 import { env } from '#/env'
 import { MfaRequiredError } from '#/lib/security-errors'
 import {
@@ -16,6 +12,7 @@ import {
   requireAdminLocalMfa,
   requireMemberLocalMfa,
 } from '#/server/security/local-mfa'
+import { membershipRole } from '#/server/security/org-role'
 import { assertFreshSession } from '#/server/security/step-up'
 
 import type { MembershipRole } from './types.ts'
@@ -147,17 +144,8 @@ async function loadOrgMembership(orgId: string): Promise<OrgMembership> {
     return resolveOrgMembership(session, null, forbidden)
   }
 
-  const rows = await db
-    .select({ role: membership.role })
-    .from(membership)
-    .where(
-      and(
-        eq(membership.userId, session.user.id),
-        eq(membership.organizationId, orgId),
-      ),
-    )
-    .limit(1)
-  return resolveOrgMembership(session, rows.at(0) ?? null, forbidden)
+  const role = await membershipRole(session.user.id, orgId)
+  return resolveOrgMembership(session, role ? { role } : null, forbidden)
 }
 
 /**

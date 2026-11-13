@@ -144,7 +144,7 @@ New module: `apps/cms/src/server/dev-env/` (pure plan logic in files without dat
 ### Visibility helper
 
 - `assertSiteVisibleTo(session, site)` in `apps/cms/src/server/security/site-visibility.ts`. A dev site requires an agency admin (with MFA, as `requireAgencyAdmin`); otherwise NotFound. Any other site keeps today's checks.
-- The copied `requireSiteAccess` helpers (`server/fn/content.ts`, `server/fn/publishing.ts`) and the admin site lookups call it. `requireMcpSiteAccess` calls it. Server functions that take a `siteId` run the access check (org membership) **before** any check that depends on the site's settings, such as the language list (`generateEntrySeoFn`, `translateContentFn`). Otherwise a caller could probe a hidden site's languages.
+- The shared site guard `requireSiteAccess` (`server/content/access.ts`, used by the content, publishing, AI and translation functions and by `requireMcpSiteAccess`) and the admin site lookups call it. Server functions that take a `siteId` run the access check (org membership) **before** any check that depends on the site's settings, such as the language list (`generateEntrySeoFn`, `translateContentFn`). Otherwise a caller could probe a hidden site's languages.
 - Assets (`server/fn/assets.ts`): `originSiteId` names the uploading site, which can be a dev env. Only agency admins (with MFA) receive it. Other callers get `null`, because nothing in the client reads it.
 
 ### MCP connector for a dev env (`server/mcp/http.ts`, `server/mcp/discovery.ts`)
