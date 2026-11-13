@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { Link, useRouteContext } from '@tanstack/react-router'
 import { AnimatePresence, useReducedMotion } from 'motion/react'
 import * as motion from 'motion/react-m'
 import {
@@ -18,7 +18,6 @@ import {
 } from '@phosphor-icons/react'
 
 import { formatDateTime, shortId } from '#/lib/content/utils'
-import { authClient } from '#/lib/auth-client'
 import { Input } from '#/components/ui/input'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
@@ -180,8 +179,7 @@ function GoLivePanelBody({
   const { goLive, isPending, errors, clearErrors } = useGoLive(site.id)
   const [urgent, setUrgent] = React.useState(false)
   const demo = release.data?.publishingMode === 'demo'
-  const isAgencyAdmin =
-    authClient.useSession().data?.user.isAgencyAdmin === true
+  const isAgencyAdmin = useRouteContext({ from: '/_app' }).me.user.isAgencyAdmin
   const pending = usePendingEntries({
     siteId: site.id,
     enabled: release.state !== 'loading',
@@ -898,8 +896,7 @@ function ReleaseHistory({
   const cancelJob = useCancelJob(siteId)
   const reconcile = useReconcileDeployment(siteId)
   const resolveUncertain = useResolveUncertainDeployment(siteId)
-  const isAgencyAdmin =
-    authClient.useSession().data?.user.isAgencyAdmin === true
+  const isAgencyAdmin = useRouteContext({ from: '/_app' }).me.user.isAgencyAdmin
   const [resolutionReasons, setResolutionReasons] = React.useState<
     Record<string, string>
   >({})
