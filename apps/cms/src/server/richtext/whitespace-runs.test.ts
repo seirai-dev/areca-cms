@@ -60,6 +60,6 @@ describe('rich text with long whitespace runs', () => {
       markdownToRichText(`a${' '.repeat(RUN)}x`),
     )
     expect(ms).toBeLessThan(BUDGET_MS)
-    expect(result.content?.[0]?.type).toBe('paragraph')
+    expect(result.content).toMatchObject([{ type: 'paragraph' }])
   })
 })
