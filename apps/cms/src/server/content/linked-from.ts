@@ -94,7 +94,7 @@ export async function linkedFromEntry(
       ),
     )
 
-  const headings = await sectionSnapshotsOf(
+  const headings = sectionSnapshotsOf(
     target.draftData,
     target.fields,
     target.languages,

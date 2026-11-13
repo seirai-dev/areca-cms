@@ -4,14 +4,12 @@ import { collection, entry } from '#/db/schema'
 import { stableStringify } from '#/lib/stable-json'
 import type { EntryData } from '#/lib/types'
 import {
-  entryLinkPath,
+  entryLinkIdsOf,
+  linkTargetHref,
   loadLinkTargets,
   mapRichTextValues,
 } from '#/server/content/entry-links'
-import {
-  entryLinkTargets,
-  relinkEntryLinks,
-} from '#/server/richtext/entry-links'
+import { relinkEntryLinks } from '#/server/richtext/entry-links'
 
 import type { Tx } from '#/db'
 
@@ -51,31 +49,15 @@ export async function relinkProductionEntries(
     .innerJoin(collection, eq(entry.collectionId, collection.id))
     .where(inArray(entry.id, ids))
 
-  const targetIds = new Set<string>()
-  for (const row of rows) {
-    for (const data of [row.draftData, row.publishedData]) {
-      if (!data) continue
-      await mapRichTextValues(data, row.fields, (json) => {
-        for (const target of entryLinkTargets(json))
-          targetIds.add(target.entryId)
-        return json
-      })
-    }
-  }
+  const targetIds = new Set(
+    rows.flatMap((row) => [
+      ...entryLinkIdsOf([row.draftData, row.publishedData], row.fields),
+    ]),
+  )
   const targets = await loadLinkTargets(tx, productionSiteId, targetIds)
   const resolve = (target: { entryId: string; anchor: string | null }) => {
     const found = targets.get(target.entryId)
-    if (
-      !found ||
-      found.collectionKind === 'global' ||
-      found.routePattern === ''
-    ) {
-      return undefined
-    }
-    return {
-      href: entryLinkPath(found.routePattern, found.slug, target.anchor),
-      collection: found.collectionKey,
-    }
+    return found ? linkTargetHref(found, target.anchor) : undefined
   }
 
   const relinked: RelinkedEntry[] = []
@@ -84,10 +66,8 @@ export async function relinkProductionEntries(
       mapRichTextValues(data, row.fields, (json) =>
         relinkEntryLinks(json, resolve),
       )
-    const draftData = await relink(row.draftData)
-    const publishedData = row.publishedData
-      ? await relink(row.publishedData)
-      : null
+    const draftData = relink(row.draftData)
+    const publishedData = row.publishedData ? relink(row.publishedData) : null
     relinked.push({ id: row.id, draftData, publishedData })
     const changed =
       stableStringify(draftData) !== stableStringify(row.draftData) ||

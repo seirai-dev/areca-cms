@@ -239,18 +239,18 @@ export async function attachSectionLinkers(
 }
 
 /** The new data of one JSON column, or null when it holds no link to change. */
-async function remapData(
+function remapData(
   data: EntryData | null,
   source: Pick<SourceRow, 'fields' | 'languages'>,
   targetId: string,
   updates: Map<string, string>,
-): Promise<{ data: EntryData; changed: boolean } | null> {
+): { data: EntryData; changed: boolean } | null {
   if (data === null) return null
   const ctx = source.languages
     ? localeCtxFor(source.languages, source.fields)
     : null
   let changed = false
-  const next = await mapRichTextValues(data, source.fields, (json, slot) => {
+  const next = mapRichTextValues(data, source.fields, (json, slot) => {
     const locale = slot.locale ?? (ctx ? baseLocale(data, ctx) : '')
     const result = remapSectionLinks(json, targetId, (anchor) =>
       updates.get(updateKey(locale, anchor)),
@@ -307,7 +307,7 @@ export async function applySectionLinkUpdates(input: {
     await lockSiteLinkIndex(tx, head.siteId)
     const target = (await readSources(tx, [input.targetId], true)).at(0)
     if (!target) throw new NotFoundError(m.server_entry_not_found())
-    const headings = await sectionSnapshotsOf(
+    const headings = sectionSnapshotsOf(
       target.draftData,
       target.fields,
       target.languages,
@@ -352,7 +352,7 @@ export async function applySectionLinkUpdates(input: {
     const owner = input.viewer.isOwner
     for (const source of sources) {
       if (!visibleTo(source, input.viewer)) continue
-      const draft = await remapData(
+      const draft = remapData(
         source.draftData,
         source,
         input.targetId,
@@ -360,10 +360,10 @@ export async function applySectionLinkUpdates(input: {
       )
       // An editor's change reaches the draft only (see `needsApproval`).
       const published = owner
-        ? await remapData(source.publishedData, source, input.targetId, updates)
+        ? remapData(source.publishedData, source, input.targetId, updates)
         : null
       const scheduled = owner
-        ? await remapData(source.scheduledData, source, input.targetId, updates)
+        ? remapData(source.scheduledData, source, input.targetId, updates)
         : null
       const changed =
         draft?.changed === true ||

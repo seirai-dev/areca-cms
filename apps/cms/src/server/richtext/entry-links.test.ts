@@ -259,6 +259,41 @@ describe('entry link targets and resolution', () => {
     ])
   })
 
+  it('resolves each distinct target once and keeps other marks', async () => {
+    const link = (anchor: string | null) => ({
+      type: 'link',
+      attrs: { href: '/x', entryId: ENTRY_ID, anchor },
+    })
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'a', marks: [{ type: 'bold' }, link(null)] },
+            { type: 'text', text: 'b', marks: [link(null)] },
+            { type: 'text', text: 'c', marks: [link('faq')] },
+          ],
+        },
+      ],
+    }
+    const calls: (string | null)[] = []
+    const { json } = await resolveEntryLinks(doc, async (target) => {
+      calls.push(target.anchor)
+      return { href: `/p#${target.anchor ?? ''}`, targetTitle: 'P' }
+    })
+    expect(calls.sort()).toEqual(['faq', null].sort())
+    const nodes = (
+      json as {
+        content: {
+          content: { marks: { type: string; attrs?: { href: string } }[] }[]
+        }[]
+      }
+    ).content[0].content
+    expect(nodes[0].marks.map((mark) => mark.type)).toEqual(['bold', 'link'])
+    expect(nodes[2].marks[0].attrs?.href).toBe('/p#faq')
+  })
+
   it('remaps entry ids and clears those with no target', () => {
     const json = {
       type: 'doc',

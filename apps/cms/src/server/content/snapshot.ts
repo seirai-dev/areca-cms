@@ -69,7 +69,7 @@ import {
   shippedLocales,
   linkTargetSiteIds,
   loadLinkTargets,
-  mapRichTextValues,
+  entryLinkIdsOf,
 } from './entry-links.ts'
 import type { LinkTargetRow } from './entry-links.ts'
 import { buildEntrySeo } from './seo.ts'
@@ -859,11 +859,7 @@ async function draftLinkTargets(
   fields: Field[],
   draft: EntryData,
 ): Promise<Map<string, LinkTargetRow>> {
-  const ids = new Set<string>()
-  await mapRichTextValues(draft, fields, (json) => {
-    for (const target of entryLinkTargets(json)) ids.add(target.entryId)
-    return json
-  })
+  const ids = entryLinkIdsOf([draft], fields)
   return loadLinkTargets(db, await linkTargetSiteIds(db, siteId), ids)
 }
 

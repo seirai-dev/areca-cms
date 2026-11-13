@@ -10,7 +10,7 @@ import type { EntryData, EntryStatus, Field, SiteLanguages } from '#/lib/types'
 import { entryLinkTargets } from '#/server/richtext/entry-links'
 
 import { localeCtxFor } from './locale-validation.ts'
-import { linkTargetSiteIds, mapRichTextValues } from './entry-links.ts'
+import { forEachRichTextValue, linkTargetSiteIds } from './entry-links.ts'
 
 /**
  * The entry link index (docs/design/rich-text-links.md, decision 18): one row
@@ -67,17 +67,17 @@ export type EntryLinkRow = {
 }
 
 /** The index rows of one entry's content. `languages` null on a single-language site. */
-export async function linkRowsOf(
+export function linkRowsOf(
   datas: (EntryData | null | undefined)[],
   fields: Field[],
   languages: SiteLanguages | null,
-): Promise<EntryLinkRow[]> {
+): EntryLinkRow[] {
   const ctx = languages ? localeCtxFor(languages, fields) : null
   const seen = new Map<string, EntryLinkRow>()
   for (const data of datas) {
     if (!data) continue
     const base = ctx ? baseLocale(data, ctx) : ''
-    await mapRichTextValues(data, fields, (json, slot) => {
+    forEachRichTextValue(data, fields, (json, slot) => {
       const locale = slot.locale ?? base
       for (const target of entryLinkTargets(json)) {
         const row: EntryLinkRow = {
@@ -91,7 +91,6 @@ export async function linkRowsOf(
           row,
         )
       }
-      return json
     })
   }
   return [...seen.values()]
@@ -207,13 +206,13 @@ async function lockedEntryRows(tx: Tx, where: SQL | undefined) {
     .for('no key update', { of: entry })
 }
 
-async function sourceRowsOf(
+function sourceRowsOf(
   row: Awaited<ReturnType<typeof lockedEntryRows>>[number],
-): Promise<SourceRows> {
+): SourceRows {
   return {
     siteId: row.siteId,
     sourceEntryId: row.id,
-    rows: await linkRowsOf(
+    rows: linkRowsOf(
       [row.draftData, row.publishedData, row.scheduledData],
       row.fields,
       row.languages ?? null,
@@ -238,9 +237,7 @@ export async function syncEntryLinkIndexes(tx: Tx, entryIds: string[]) {
         rows.map((row) => row.id),
       ),
     )
-    const sources: SourceRows[] = []
-    for (const row of rows) sources.push(await sourceRowsOf(row))
-    await insertSourceRows(tx, sources)
+    await insertSourceRows(tx, rows.map(sourceRowsOf))
   }
 }
 
@@ -264,9 +261,7 @@ export async function rebuildEntryLinkIndex(
 ): Promise<number> {
   const rows = await lockedEntryRows(tx, eq(entry.siteId, siteId))
   await tx.delete(entryLink).where(eq(entryLink.siteId, siteId))
-  const sources: SourceRows[] = []
-  for (const row of rows) sources.push(await sourceRowsOf(row))
-  return insertSourceRows(tx, sources)
+  return insertSourceRows(tx, rows.map(sourceRowsOf))
 }
 
 export type InboundLink = {

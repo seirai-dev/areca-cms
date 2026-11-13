@@ -504,7 +504,7 @@ export async function createEntry(input: {
       images.data,
     ),
   }
-  const headingBaseline = await sectionSnapshotsOf(
+  const headingBaseline = sectionSnapshotsOf(
     parsed.data,
     ctx.collection.fields,
     ctx.site.languages,
@@ -634,7 +634,7 @@ export async function updateDraft(
   }
 
   const sections = options.explicit
-    ? await sectionChangesOf({
+    ? sectionChangesOf({
         previousData: ctx.entry.draftData,
         baseline: ctx.entry.headingBaseline ?? null,
         nextData: parsed.data,
@@ -649,7 +649,7 @@ export async function updateDraft(
   const storedBaseline = sections
     ? sections.next
     : ctx.entry.headingBaseline == null
-      ? await sectionSnapshotsOf(
+      ? sectionSnapshotsOf(
           ctx.entry.draftData,
           ctx.collection.fields,
           ctx.site.languages,
