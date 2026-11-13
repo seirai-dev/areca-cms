@@ -184,8 +184,6 @@ export function useEntryEditor({
     queryKey: queryKeys.entry(entryId ?? 'new'),
     queryFn: () => getEntryFn({ data: { id: entryId! } }),
     enabled: Boolean(entryId),
-    // Opening an entry always loads its current version.
-    staleTime: 0,
     // While editing, a focus refetch is wasted: the DRAFT_CONFLICT version
     // check already protects against a concurrent edit.
     refetchOnWindowFocus: false,
