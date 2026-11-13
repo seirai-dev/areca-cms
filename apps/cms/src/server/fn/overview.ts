@@ -1,8 +1,9 @@
 import { createServerFn } from '@tanstack/react-start'
-import { and, desc, eq, inArray, max, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, max, ne, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import {
+  buildJob,
   collection,
   entry,
   membership,
@@ -33,7 +34,8 @@ async function accessibleOrgIds(userId: string, isAgencyAdmin: boolean) {
 
 /**
  * Per-site figures for the dashboard and the Sites page: collection and entry
- * counts, the newest entry change, and whether a publication is live.
+ * counts, the newest entry change, whether a publication is live, and
+ * whether the newest build (cancelled ones aside) failed.
  * Scoped to the organizations the caller belongs to (all for agency admins).
  */
 export const getSitesOverviewFn = createServerFn({
@@ -129,6 +131,22 @@ export const getSitesOverviewFn = createServerFn({
     if (!liveSince.has(row.siteId)) liveSince.set(row.siteId, row.createdAt)
   }
 
+  const latestJobs = await db
+    .selectDistinctOn([buildJob.siteId], {
+      siteId: buildJob.siteId,
+      status: buildJob.status,
+    })
+    .from(buildJob)
+    .where(
+      and(inArray(buildJob.siteId, siteIds), ne(buildJob.status, 'cancelled')),
+    )
+    .orderBy(buildJob.siteId, desc(buildJob.createdAt))
+  const failed = new Set(
+    latestJobs
+      .filter((row) => row.status === 'failed')
+      .map((row) => row.siteId),
+  )
+
   // A site deleted after the list above is simply gone: `null` marks it and it
   // is left out, rather than failing the whole overview.
   const pendingPairs = await Promise.all(
@@ -168,6 +186,7 @@ export const getSitesOverviewFn = createServerFn({
       live: live.has(row.id),
       liveSince: liveSince.get(row.id) ?? null,
       pendingEntries: byPending.get(row.id) ?? 0,
+      lastBuildFailed: failed.has(row.id),
     }))
 
   return {

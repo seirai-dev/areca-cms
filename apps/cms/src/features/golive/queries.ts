@@ -50,7 +50,8 @@ export type JobRow = {
   startedAt?: string | Date | null
   finishedAt?: string | Date | null
   error: string | null
-  logs: string | null
+  /** Only `getBuildJobFn` returns logs; the lists leave them out. */
+  logs?: string | null
 }
 
 export type PublicationOrigin = 'manual' | 'scheduled' | 'rollback'

@@ -44,6 +44,11 @@ export function invalidateGoLiveKeys(
       queryKey: ['golive-pending', siteId],
       refetchType,
     }),
+    // The agency "needs attention" lists read failed builds from it.
+    queryClient.invalidateQueries({
+      queryKey: ['sites-overview'],
+      refetchType,
+    }),
   ])
 }
 

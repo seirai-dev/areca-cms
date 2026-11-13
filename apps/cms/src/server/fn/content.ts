@@ -247,13 +247,45 @@ export const listInboundReferencesFn = createServerFn({
     return listInboundReferences(data.id, session.user.isAgencyAdmin)
   })
 
+/**
+ * The entry as the editor sees it: the heading and dev origin baselines stay
+ * on the server.
+ */
+function withoutBaselines<
+  T extends { headingBaseline: unknown; originBaseline: unknown },
+>(row: T) {
+  const { headingBaseline: _heading, originBaseline: _origin, ...rest } = row
+  return rest
+}
+
+/**
+ * What the editor reads back after a save. A draft save never changes the
+ * ready or scheduled copy, so those stay out of the reply too; the editor
+ * keeps the copies it loaded.
+ */
+function saveReply<
+  T extends {
+    headingBaseline: unknown
+    originBaseline: unknown
+    publishedData: unknown
+    scheduledData: unknown
+  },
+>(saved: T) {
+  const {
+    publishedData: _published,
+    scheduledData: _scheduled,
+    ...rest
+  } = withoutBaselines(saved)
+  return rest
+}
+
 export const getEntryFn = createServerFn({ method: 'GET', ...entryFn })
   .validator(z.object({ id: z.string().min(1).max(ID_MAX_LENGTH) }))
   .handler(async ({ data }) => {
     const { entry, createdByName, updatedByName } = await requireEntryAccess(
       data.id,
     )
-    return { ...entry, createdByName, updatedByName }
+    return { ...withoutBaselines(entry), createdByName, updatedByName }
   })
 
 export const createEntryFn = createServerFn({ method: 'POST', ...entryFn })
@@ -298,7 +330,7 @@ export const updateDraftFn = createServerFn({ method: 'POST', ...entryFn })
       { explicit: data.explicit === true },
     )
     return {
-      ...saved,
+      ...saveReply(saved),
       sectionChanges: await attachSectionLinkers(
         data.id,
         saved.sectionChanges,
@@ -661,7 +693,7 @@ export const getGlobalFn = createServerFn({ method: 'GET', ...entryFn })
     return {
       global,
       entry: {
-        ...entry,
+        ...withoutBaselines(entry),
         createdByName: entry.createdBy
           ? (names.get(entry.createdBy) ?? null)
           : null,
@@ -686,11 +718,13 @@ export const updateGlobalDraftFn = createServerFn({
   )
   .handler(async ({ data }) => {
     const { session, entry } = await requireGlobalAccess(data.siteId, data.key)
-    return updateDraft(
-      entry.id,
-      data.data,
-      session.user.id,
-      data.expectedVersion,
+    return saveReply(
+      await updateDraft(
+        entry.id,
+        data.data,
+        session.user.id,
+        data.expectedVersion,
+      ),
     )
   })
 
