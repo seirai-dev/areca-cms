@@ -1,10 +1,8 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { z } from '#/lib/zod'
 
-import {
-  SETTINGS_TABS,
-  SiteSettingsScreen,
-} from '#/features/site-settings/site-settings-screen'
+import { SiteSettingsScreen } from '#/features/site-settings/site-settings-screen'
+import { SETTINGS_TABS } from '#/features/site-settings/settings-tabs'
 
 /** `/sites/$siteId/settings?tab=…` (agency admins, brief §3.10). */
 export const Route = createFileRoute('/_app/sites/$siteId/settings')({

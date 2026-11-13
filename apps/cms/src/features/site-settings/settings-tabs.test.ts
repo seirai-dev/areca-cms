@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { settingsTabsFor } from './site-settings-screen'
+import { settingsTabsFor } from './settings-tabs'
 
 describe('settingsTabsFor', () => {
   it('gives a development environment no Deployment and no Development tab', () => {
