@@ -449,6 +449,7 @@ describe.skipIf(!hasDb)('revision history', () => {
             .orderBy(auditLog.createdAt)
 
         await save('One', ctx.actor.id)
+        const [started] = await updates()
         await save('Two', ctx.actor.id)
         await save('Three', ctx.actor.id)
         const first = await updates()
@@ -456,6 +457,14 @@ describe.skipIf(!hasDb)('revision history', () => {
         expect(first[0]?.actorId).toBe(ctx.actor.id)
         expect(first[0]?.meta).toMatchObject({ saves: 3 })
         expect(typeof first[0]?.meta?.firstSavedAt).toBe('string')
+        // The row stays where its first save put it, so the log's order and
+        // its offset pages do not shift; the newest save is in the meta.
+        expect(first[0]?.createdAt).toEqual(started.createdAt)
+        const lastSaved = first[0]?.meta?.lastSavedAt
+        expect(typeof lastSaved).toBe('string')
+        expect(new Date(String(lastSaved)).getTime()).toBeGreaterThanOrEqual(
+          started.createdAt.getTime(),
+        )
 
         // An explicit save, another person and a save after the window each
         // start their own row.
