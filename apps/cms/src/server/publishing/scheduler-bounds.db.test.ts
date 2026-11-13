@@ -5,7 +5,7 @@ import { eq, inArray } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { db } from '#/db'
-import { buildJob, entry, organization } from '#/db/schema'
+import { buildJob, entry, organization, schedulerBackoff } from '#/db/schema'
 import {
   createTestCollection,
   createTestSite,
@@ -38,8 +38,8 @@ afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.()
 })
 
-/** A site with one scheduled entry that is already due. */
-async function dueSite() {
+/** A site with one scheduled entry that is already due (an hour ago by default). */
+async function dueSite(dueAgoMs = 60 * 60_000) {
   const ctx = await createTestSite()
   const collection = await createTestCollection(ctx.site.id)
   await db.insert(entry).values({
@@ -50,7 +50,7 @@ async function dueSite() {
     draftData: {},
     scheduledData: {},
     scheduledVersion: crypto.randomUUID(),
-    scheduledAt: new Date(Date.now() - 60 * 60_000),
+    scheduledAt: new Date(Date.now() - dueAgoMs),
   })
   cleanups.push(async () => {
     await db.delete(organization).where(eq(organization.id, ctx.org.id))
@@ -74,6 +74,22 @@ describe.skipIf(!hasDb)(
       expect(
         new Set(requested.siteIds.filter((id) => mine.includes(id))),
       ).toEqual(new Set(mine))
+    })
+
+    it('puts paused sites after the others, so they cannot take every slot', async () => {
+      const year = 365 * 24 * 60 * 60_000
+      // Due long before anything other suites schedule, so these two lead.
+      const paused = await dueSite(20 * year)
+      const healthy = await dueSite(19 * year)
+      await db.insert(schedulerBackoff).values({
+        siteId: paused,
+        approvalFingerprint: 'old',
+        failureCount: 4,
+        lastAttemptAt: new Date(),
+      })
+
+      await runSchedulerTick({ maxSites: 1 })
+      expect(requested.siteIds).toEqual([healthy])
     })
 
     it('recovers stale jobs batch by batch and fails every one of them', async () => {

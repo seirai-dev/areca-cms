@@ -115,12 +115,17 @@ export async function runSchedulerTick({
   maxSites = SCHEDULER_SITE_LIMIT,
 }: { maxSites?: number } = {}) {
   const now = new Date()
+  // Sites that are paused or cooling down go last, so their old due entries
+  // cannot fill every slot. Whether they really wait is decided below, by
+  // the fingerprint of their due entries.
+  const waiting = sql`coalesce(bool_or(${schedulerBackoff.failureCount} >= ${SCHEDULER_MAX_FAILURES} OR ${schedulerBackoff.nextAttemptAt} > ${now}), false)`
   const dueSites = await db
     .select({ siteId: entry.siteId })
     .from(entry)
+    .leftJoin(schedulerBackoff, eq(schedulerBackoff.siteId, entry.siteId))
     .where(and(eq(entry.status, 'scheduled'), lte(entry.scheduledAt, now)))
     .groupBy(entry.siteId)
-    .orderBy(sql`min(${entry.scheduledAt})`)
+    .orderBy(waiting, sql`min(${entry.scheduledAt})`)
     .limit(maxSites)
   const siteIds = dueSites.map((row) => row.siteId)
   if (siteIds.length === 0) return
