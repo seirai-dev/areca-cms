@@ -1172,38 +1172,41 @@ export async function archiveEntry(id: string, actorId: string) {
   const ctx = await loadEntryContext(id)
   assertCollectionEntry(ctx.collection)
   const now = new Date()
-  const updated = (
-    await db
-      .update(entry)
-      .set({
-        contentVersion: sql`${entry.contentVersion} + 1`,
-        status: 'archived',
-        updatedBy: actorId,
-        updatedAt: now,
-      })
-      .where(eq(entry.id, id))
-      .returning()
-  ).at(0)
+  return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, ctx.site.id)
+    const updated = (
+      await tx
+        .update(entry)
+        .set({
+          contentVersion: sql`${entry.contentVersion} + 1`,
+          status: 'archived',
+          updatedBy: actorId,
+          updatedAt: now,
+        })
+        .where(eq(entry.id, id))
+        .returning()
+    ).at(0)
 
-  if (!updated) {
-    throw new NotFoundError(m.server_entry_not_found())
-  }
+    if (!updated) {
+      throw new NotFoundError(m.server_entry_not_found())
+    }
 
-  await writeRevision(id, ctx.entry.draftData, actorId, 'archive')
-  await audit(
-    {
-      organizationId: ctx.site.organizationId,
-      siteId: ctx.site.id,
-      actorId,
-      action: 'entry.archive',
-      targetType: 'entry',
-      targetId: id,
-    },
-    db,
-    ctx.site,
-  )
+    await writeRevision(id, updated.draftData, actorId, 'archive', tx)
+    await audit(
+      {
+        organizationId: ctx.site.organizationId,
+        siteId: ctx.site.id,
+        actorId,
+        action: 'entry.archive',
+        targetType: 'entry',
+        targetId: id,
+      },
+      tx,
+      ctx.site,
+    )
 
-  return { ...updated, collectionKey: ctx.collection.key }
+    return { ...updated, collectionKey: ctx.collection.key }
+  })
 }
 
 export async function scheduleEntry(
