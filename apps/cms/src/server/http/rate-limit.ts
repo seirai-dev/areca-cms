@@ -65,6 +65,11 @@ const SITE_TOKEN_PATHS = new Set([
   '/api/sites/snapshot/current',
 ])
 
+const UPLOAD_PATHS = new Set([
+  '/api/assets/upload',
+  '/api/admin/branding/upload',
+])
+
 function fingerprint(value: string) {
   return createHash('sha256').update(value).digest('hex')
 }
@@ -111,96 +116,225 @@ export async function consumeRateLimit(
   return (await store.increment(key, rule.windowSeconds + 1)) <= rule.limit
 }
 
-async function enforceOAuthRegister(
-  request: Request,
-  dependencies: RequestRateLimitDependencies,
-): Promise<Response | null> {
+type BudgetContext = {
+  request: Request
+  path: string
+  dependencies: RequestRateLimitDependencies
+}
+
+/** One counter a request consumes. `key` returns null to skip it. */
+type Budget = {
+  scope: string
+  rule: RateLimitRule
+  key: (context: BudgetContext) => string | null | Promise<string | null>
+}
+
+type Route = {
+  match: (path: string, method: string) => boolean
+  /** Consumed in order; the first one over its limit answers 429. Empty: exempt. */
+  budgets: Budget[]
+  /** A response for an error thrown while consuming, instead of failing open. */
+  onError?: (error: unknown, request: Request) => Promise<Response | null>
+}
+
+const clientIp = ({ request, dependencies }: BudgetContext) =>
+  getClientIp(request, dependencies.trustProxy)
+
+/**
+ * The client IP, or null without a real one: behind no trusted proxy every
+ * client is 'unknown', and one shared bucket would throttle them all together.
+ */
+const knownIp = (context: BudgetContext) => {
+  const ip = clientIp(context)
+  return ip === 'unknown' ? null : `ip:${ip}`
+}
+
+const userOrIp = async (context: BudgetContext) => {
+  const userId = await context.dependencies.resolveUserId(context.request)
+  return userId ? `user:${userId}` : `ip:${clientIp(context)}`
+}
+
+const tokenBodyTooLarge = () =>
+  Response.json({ error: 'Token request body is too large' }, { status: 413 })
+
+const ROUTES: Route[] = [
+  {
+    match: (path, method) =>
+      path === '/api/auth/oauth2/register' && method === 'POST',
+    budgets: [
+      {
+        scope: 'oauth-register-ip',
+        rule: OAUTH_REGISTER_IP_RULE,
+        key: knownIp,
+      },
+      {
+        scope: 'oauth-register-global',
+        rule: OAUTH_REGISTER_GLOBAL_RULE,
+        key: () => 'all',
+      },
+    ],
+  },
+  {
+    match: (path, method) =>
+      path === '/api/auth/oauth2/token' && method === 'POST',
+    // A caller controls client_id, including invalid IDs. Independent budgets
+    // must run before reading the body or selecting a per-client bucket.
+    budgets: [
+      {
+        scope: 'oauth-token-global',
+        rule: OAUTH_TOKEN_GLOBAL_RULE,
+        key: () => 'all',
+      },
+      { scope: 'oauth-token-ip', rule: OAUTH_TOKEN_IP_RULE, key: knownIp },
+      {
+        scope: 'oauth-token',
+        rule: OAUTH_TOKEN_RULE,
+        key: async (context) =>
+          `client:${(await clientIdOf(context.request)) ?? 'anonymous'}|ip:${clientIp(context)}`,
+      },
+    ],
+    onError: async (error, request) => {
+      if (error instanceof OAuthTokenBodyTooLarge) return tokenBodyTooLarge()
+      // Redis outages fail open for the budget, not for request-size validation.
+      try {
+        await readOAuthTokenBody(request)
+      } catch (bodyError) {
+        if (bodyError instanceof OAuthTokenBodyTooLarge) {
+          return tokenBodyTooLarge()
+        }
+      }
+      return null
+    },
+  },
+  {
+    match: (path) => path === '/api/auth' || path.startsWith('/api/auth/'),
+    budgets: [],
+  },
+  {
+    match: (path, method) =>
+      PROBE_PATHS.has(path) && (method === 'GET' || method === 'HEAD'),
+    budgets: [],
+  },
+  {
+    match: (path) => path === '/api/metrics',
+    budgets: [
+      {
+        scope: 'metrics',
+        rule: METRICS_RULE,
+        key: (context) => `ip:${clientIp(context)}`,
+      },
+    ],
+  },
+  {
+    match: (path, method) => path === LIVE_PREVIEW_PATH && method === 'POST',
+    budgets: [
+      { scope: 'live-preview', rule: LIVE_PREVIEW_RULE, key: userOrIp },
+    ],
+  },
+  // The MCP endpoint has its own budgets and is exempt from the general
+  // mutation budget (POST), which would otherwise throttle one agent session by
+  // IP. Two budgets apply: a per-IP one that also catches invalid tokens, and a
+  // per-key one keyed by the SHA-256 of the bearer token (never the raw secret).
+  // The per-IP budget needs a real client IP. Keys are 256-bit random values
+  // checked with one indexed lookup, so skipping it without one costs little.
+  // The agency connector (/api/agency/mcp) shares these budgets: one key, every site.
+  {
+    match: (path) =>
+      path === '/api/mcp' ||
+      path.startsWith('/api/mcp/') ||
+      path === '/api/agency/mcp',
+    budgets: [
+      { scope: 'mcp-ip', rule: MCP_IP_RULE, key: knownIp },
+      {
+        scope: 'mcp',
+        rule: MCP_RULE,
+        key: (context) => {
+          const token = authorizationToken(context.request)
+          return token
+            ? `token:${fingerprint(token)}`
+            : `ip:${clientIp(context)}`
+        },
+      },
+    ],
+  },
+  // Upload links: per link (hashed, never the raw token) and per IP.
+  {
+    match: (path) => path.startsWith(UPLOAD_LINK_PREFIX),
+    budgets: [
+      { scope: 'upload-link-ip', rule: UPLOAD_LINK_IP_RULE, key: knownIp },
+      {
+        scope: 'upload-link',
+        rule: UPLOAD_LINK_RULE,
+        key: ({ path }) =>
+          `link:${fingerprint(path.slice(UPLOAD_LINK_PREFIX.length).split('/')[0] ?? '')}`,
+      },
+    ],
+  },
+  {
+    match: (path) => SITE_TOKEN_PATHS.has(path),
+    budgets: [
+      {
+        scope: 'site-api',
+        rule: SITE_API_RULE,
+        key: (context) => {
+          const token = bearerToken(context.request)
+          return token ? `token:${token}` : `ip:${clientIp(context)}`
+        },
+      },
+    ],
+  },
+  {
+    match: (path) => UPLOAD_PATHS.has(path),
+    budgets: [{ scope: 'upload', rule: UPLOAD_RULE, key: userOrIp }],
+  },
+  {
+    match: (_path, method) => !['GET', 'HEAD', 'OPTIONS'].includes(method),
+    budgets: [{ scope: 'mutation', rule: MUTATION_RULE, key: userOrIp }],
+  },
+]
+
+async function consumeBudgets(route: Route, context: BudgetContext) {
+  const { dependencies } = context
   const now = dependencies.now?.() ?? Date.now()
   try {
-    const ip = getClientIp(request, dependencies.trustProxy)
-    if (ip !== 'unknown') {
-      const ipAllowed = await consumeRateLimit(
+    for (const budget of route.budgets) {
+      const identifier = await budget.key(context)
+      if (identifier === null) continue
+      const allowed = await consumeRateLimit(
         dependencies.store,
-        'oauth-register-ip',
-        `ip:${ip}`,
-        OAUTH_REGISTER_IP_RULE,
+        budget.scope,
+        identifier,
+        budget.rule,
         now,
       )
-      if (!ipAllowed) return tooManyRequests(OAUTH_REGISTER_IP_RULE, now)
+      if (!allowed) return tooManyRequests(budget.rule, now)
     }
-    const globalAllowed = await consumeRateLimit(
-      dependencies.store,
-      'oauth-register-global',
-      'all',
-      OAUTH_REGISTER_GLOBAL_RULE,
-      now,
-    )
-    return globalAllowed
-      ? null
-      : tooManyRequests(OAUTH_REGISTER_GLOBAL_RULE, now)
+    return null
   } catch (error) {
+    const response = await route.onError?.(error, context.request)
+    if (response) return response
     dependencies.logError?.('Rate limiting unavailable; request allowed', error)
     return null
   }
 }
 
-async function enforceOAuthToken(
+/**
+ * Returns a 429 response when blocked and null when the request may continue.
+ * The store falls back to in-memory counters when Redis fails, so the budgets
+ * still apply. An unexpected error lets the request through, so one bug does
+ * not block every request.
+ */
+export async function enforceRequestRateLimit(
   request: Request,
   dependencies: RequestRateLimitDependencies,
 ): Promise<Response | null> {
-  const now = dependencies.now?.() ?? Date.now()
-  try {
-    const ip = getClientIp(request, dependencies.trustProxy)
-    // A caller controls client_id, including invalid IDs. Independent budgets
-    // must run before reading the body or selecting a per-client bucket.
-    const globalAllowed = await consumeRateLimit(
-      dependencies.store,
-      'oauth-token-global',
-      'all',
-      OAUTH_TOKEN_GLOBAL_RULE,
-      now,
-    )
-    if (!globalAllowed) return tooManyRequests(OAUTH_TOKEN_GLOBAL_RULE, now)
-    if (ip !== 'unknown') {
-      const ipAllowed = await consumeRateLimit(
-        dependencies.store,
-        'oauth-token-ip',
-        `ip:${ip}`,
-        OAUTH_TOKEN_IP_RULE,
-        now,
-      )
-      if (!ipAllowed) return tooManyRequests(OAUTH_TOKEN_IP_RULE, now)
-    }
-    const clientId = (await clientIdOf(request)) ?? 'anonymous'
-    const allowed = await consumeRateLimit(
-      dependencies.store,
-      'oauth-token',
-      `client:${clientId}|ip:${ip}`,
-      OAUTH_TOKEN_RULE,
-      now,
-    )
-    return allowed ? null : tooManyRequests(OAUTH_TOKEN_RULE, now)
-  } catch (error) {
-    if (error instanceof OAuthTokenBodyTooLarge) {
-      return Response.json(
-        { error: 'Token request body is too large' },
-        { status: 413 },
-      )
-    }
-    // Redis outages fail open for the budget, not for request-size validation.
-    try {
-      await readOAuthTokenBody(request)
-    } catch (bodyError) {
-      if (bodyError instanceof OAuthTokenBodyTooLarge) {
-        return Response.json(
-          { error: 'Token request body is too large' },
-          { status: 413 },
-        )
-      }
-    }
-    dependencies.logError?.('Rate limiting unavailable; request allowed', error)
-    return null
-  }
+  const url = new URL(request.url)
+  const path =
+    url.pathname.length > 1 ? url.pathname.replace(/\/+$/, '') : url.pathname
+  const method = request.method.toUpperCase()
+  const route = ROUTES.find((candidate) => candidate.match(path, method))
+  if (!route || route.budgets.length === 0) return null
+  return consumeBudgets(route, { request, path, dependencies })
 }
 
 /**
@@ -232,214 +366,6 @@ async function clientIdOf(request: Request): Promise<string | null> {
     }
     return new URLSearchParams(text).get('client_id')
   } catch {
-    return null
-  }
-}
-
-async function enforceLivePreview(
-  request: Request,
-  dependencies: RequestRateLimitDependencies,
-): Promise<Response | null> {
-  const now = dependencies.now?.() ?? Date.now()
-  try {
-    const userId = await dependencies.resolveUserId(request)
-    const identifier = userId
-      ? `user:${userId}`
-      : `ip:${getClientIp(request, dependencies.trustProxy)}`
-    const allowed = await consumeRateLimit(
-      dependencies.store,
-      'live-preview',
-      identifier,
-      LIVE_PREVIEW_RULE,
-      now,
-    )
-    return allowed ? null : tooManyRequests(LIVE_PREVIEW_RULE, now)
-  } catch (error) {
-    dependencies.logError?.('Rate limiting unavailable; request allowed', error)
-    return null
-  }
-}
-
-/**
- * Returns a 429 response when blocked and null when the request may continue.
- * The store falls back to in-memory counters when Redis fails, so the budgets
- * still apply. The catch below only handles unexpected errors, and lets the
- * request through so one bug does not block every request.
- */
-/** Budgets for upload links: per link (hashed, never the raw token) and per IP. */
-async function enforceUploadLink(
-  request: Request,
-  path: string,
-  dependencies: RequestRateLimitDependencies,
-): Promise<Response | null> {
-  const now = dependencies.now?.() ?? Date.now()
-  try {
-    const ip = getClientIp(request, dependencies.trustProxy)
-    if (ip !== 'unknown') {
-      const ipAllowed = await consumeRateLimit(
-        dependencies.store,
-        'upload-link-ip',
-        `ip:${ip}`,
-        UPLOAD_LINK_IP_RULE,
-        now,
-      )
-      if (!ipAllowed) return tooManyRequests(UPLOAD_LINK_IP_RULE, now)
-    }
-    const token = path.slice(UPLOAD_LINK_PREFIX.length).split('/')[0] ?? ''
-    const allowed = await consumeRateLimit(
-      dependencies.store,
-      'upload-link',
-      `link:${fingerprint(token)}`,
-      UPLOAD_LINK_RULE,
-      now,
-    )
-    return allowed ? null : tooManyRequests(UPLOAD_LINK_RULE, now)
-  } catch (error) {
-    dependencies.logError?.('Rate limiting unavailable; request allowed', error)
-    return null
-  }
-}
-
-export async function enforceRequestRateLimit(
-  request: Request,
-  dependencies: RequestRateLimitDependencies,
-): Promise<Response | null> {
-  const url = new URL(request.url)
-  const path =
-    url.pathname.length > 1 ? url.pathname.replace(/\/+$/, '') : url.pathname
-
-  if (path === '/api/auth/oauth2/register' && request.method === 'POST') {
-    return enforceOAuthRegister(request, dependencies)
-  }
-  if (path === '/api/auth/oauth2/token' && request.method === 'POST') {
-    return enforceOAuthToken(request, dependencies)
-  }
-  if (path === '/api/auth' || path.startsWith('/api/auth/')) return null
-
-  const method = request.method.toUpperCase()
-  if (PROBE_PATHS.has(path) && (method === 'GET' || method === 'HEAD')) {
-    return null
-  }
-
-  if (path === '/api/metrics') {
-    try {
-      const allowed = await consumeRateLimit(
-        dependencies.store,
-        'metrics',
-        `ip:${getClientIp(request, dependencies.trustProxy)}`,
-        METRICS_RULE,
-        dependencies.now?.() ?? Date.now(),
-      )
-      return allowed
-        ? null
-        : tooManyRequests(METRICS_RULE, dependencies.now?.() ?? Date.now())
-    } catch (error) {
-      dependencies.logError?.(
-        'Rate limiting unavailable; request allowed',
-        error,
-      )
-      return null
-    }
-  }
-
-  if (path === LIVE_PREVIEW_PATH && method === 'POST') {
-    return enforceLivePreview(request, dependencies)
-  }
-
-  // The MCP endpoint has its own budgets and is exempt from the general
-  // mutation budget (POST), which would otherwise throttle one agent session by
-  // IP. Two budgets apply: a per-IP one that also catches invalid tokens, and a
-  // per-key one keyed by the SHA-256 of the bearer token (never the raw secret).
-  // The per-IP budget needs a real client IP: without a trusted proxy every
-  // client is 'unknown', and one shared bucket would throttle all agents
-  // together. Keys are 256-bit random values checked with one indexed lookup,
-  // so skipping it there costs little.
-  // The agency connector (/api/agency/mcp) shares these budgets: one key, every site.
-  if (
-    path === '/api/mcp' ||
-    path.startsWith('/api/mcp/') ||
-    path === '/api/agency/mcp'
-  ) {
-    const now = dependencies.now?.() ?? Date.now()
-    try {
-      const ip = getClientIp(request, dependencies.trustProxy)
-      if (ip !== 'unknown') {
-        const ipAllowed = await consumeRateLimit(
-          dependencies.store,
-          'mcp-ip',
-          `ip:${ip}`,
-          MCP_IP_RULE,
-          now,
-        )
-        if (!ipAllowed) return tooManyRequests(MCP_IP_RULE, now)
-      }
-
-      const token = authorizationToken(request)
-      const identifier = token ? `token:${fingerprint(token)}` : `ip:${ip}`
-      const allowed = await consumeRateLimit(
-        dependencies.store,
-        'mcp',
-        identifier,
-        MCP_RULE,
-        now,
-      )
-      return allowed ? null : tooManyRequests(MCP_RULE, now)
-    } catch (error) {
-      dependencies.logError?.(
-        'Rate limiting unavailable; request allowed',
-        error,
-      )
-      return null
-    }
-  }
-
-  if (path.startsWith(UPLOAD_LINK_PREFIX)) {
-    return enforceUploadLink(request, path, dependencies)
-  }
-
-  const isSiteApi = SITE_TOKEN_PATHS.has(path)
-  const isUpload =
-    path === '/api/assets/upload' || path === '/api/admin/branding/upload'
-  const isMutation = !['GET', 'HEAD', 'OPTIONS'].includes(
-    request.method.toUpperCase(),
-  )
-
-  if (!isSiteApi && !isUpload && !isMutation) return null
-
-  const now = dependencies.now?.() ?? Date.now()
-
-  try {
-    if (isSiteApi) {
-      const token = bearerToken(request)
-      const identifier = token
-        ? `token:${token}`
-        : `ip:${getClientIp(request, dependencies.trustProxy)}`
-      const allowed = await consumeRateLimit(
-        dependencies.store,
-        'site-api',
-        identifier,
-        SITE_API_RULE,
-        now,
-      )
-      return allowed ? null : tooManyRequests(SITE_API_RULE, now)
-    }
-
-    const userId = await dependencies.resolveUserId(request)
-    const identifier = userId
-      ? `user:${userId}`
-      : `ip:${getClientIp(request, dependencies.trustProxy)}`
-    const rule = isUpload ? UPLOAD_RULE : MUTATION_RULE
-    const scope = isUpload ? 'upload' : 'mutation'
-    const allowed = await consumeRateLimit(
-      dependencies.store,
-      scope,
-      identifier,
-      rule,
-      now,
-    )
-    return allowed ? null : tooManyRequests(rule, now)
-  } catch (error) {
-    dependencies.logError?.('Rate limiting unavailable; request allowed', error)
     return null
   }
 }
