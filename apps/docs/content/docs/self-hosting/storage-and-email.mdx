@@ -100,8 +100,10 @@ To serve assets through a CDN:
 
 - Point the CDN at the CMS origin, not at the bucket.
 - Cache only the `/api/assets/file/` path. Do not cache other `/api/` routes or the application's pages, because those depend on sign-in.
-- Forward only the path. Ignore cookies and the `Authorization` header on asset requests.
-- Respect the `Cache-Control` header from the origin. The CMS sends `public, max-age=31536000, immutable` for assets, because each file name is unique.
+- Forward the path and the `w` query parameter. Ignore cookies and the `Authorization` header on asset requests.
+- Respect the `Cache-Control` and `Vary` headers from the origin. The CMS sends `public, max-age=31536000, immutable` for assets, because each file name is unique.
+
+The CMS screens show resized copies of images, at `/api/assets/file/<key>?w=320` and similar (widths 160, 320, 640 and 1280). The copy is AVIF or WebP, whichever the browser accepts, so these responses send `Vary: Accept`. Each copy is made once and stored in the bucket under `derived/`, next to the original files. PDFs, GIFs and images that are already narrow are served as the original.
 
 Keep `APP_URL` set to the CMS origin, not the CDN, unless your CDN rewrites asset URLs.
 
