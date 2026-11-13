@@ -65,14 +65,7 @@ export function ClientScreen({
   const client = clients.data?.find((item) => item.id === orgId)
 
   if (clients.isError) {
-    return (
-      <QueryError
-        title={m.agency_client_load_error()}
-        error={clients.error}
-        onRetry={() => void clients.refetch()}
-        retrying={clients.isFetching}
-      />
-    )
+    return <QueryError title={m.agency_client_load_error()} query={clients} />
   }
 
   if (clients.isPending) {
@@ -288,12 +281,7 @@ function ClientSites({
         : null}
 
       {sites.isError ? (
-        <QueryError
-          title={m.agency_sites_load_error()}
-          error={sites.error}
-          onRetry={() => void sites.refetch()}
-          retrying={sites.isFetching}
-        />
+        <QueryError title={m.agency_sites_load_error()} query={sites} />
       ) : sites.isPending ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Skeleton className="h-[180px] rounded-card" />

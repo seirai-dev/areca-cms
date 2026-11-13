@@ -1,15 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 
+import { queryKeys } from '#/lib/query-keys'
 import { listGlobalsFn } from '#/server/fn/content'
-
-/**
- * Query key of a site's site content sections (globals). Settings, the
- * sidebar, the palette and the section editor share it: invalidate it after
- * any section change.
- */
-export function globalsQueryKey(siteId: string) {
-  return ['globals', siteId] as const
-}
 
 /**
  * The site's sections as the server returns them (raw collection rows with
@@ -18,7 +10,7 @@ export function globalsQueryKey(siteId: string) {
  */
 export function useSiteGlobals(siteId: string | undefined) {
   return useQuery({
-    queryKey: globalsQueryKey(siteId ?? ''),
+    queryKey: queryKeys.globals(siteId ?? ''),
     queryFn: () => listGlobalsFn({ data: { siteId: siteId! } }),
     enabled: Boolean(siteId),
     staleTime: 60_000,

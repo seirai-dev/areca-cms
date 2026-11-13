@@ -5,7 +5,7 @@ import { useServerFn } from '@tanstack/react-start'
 import { toast } from 'sonner'
 
 import { contentRoute } from '#/lib/content-route'
-import { errorMessage } from '#/lib/content/utils'
+import { errorMessage } from '#/lib/errors'
 import { isCopyOverwriteRefusal } from '#/lib/dev-env'
 import { m } from '#/paraglide/messages'
 import { useStepUp } from '#/features/security/step-up'

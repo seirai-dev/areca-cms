@@ -5,7 +5,7 @@ import { useServerFn } from '@tanstack/react-start'
 import { Button } from '#/components/ui/button'
 import { Checkbox } from '#/components/ui/checkbox'
 import { useStepUp } from '#/features/security/step-up'
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { REAUTH_REQUIRED, securityErrorCode } from '#/lib/security-errors'
 import { m } from '#/paraglide/messages'
 import {

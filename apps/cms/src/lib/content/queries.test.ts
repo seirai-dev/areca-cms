@@ -1,7 +1,7 @@
 import { QueryClient } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { queryKeys } from './query-keys'
+import { queryKeys } from '#/lib/query-keys'
 
 const fns = vi.hoisted(() => ({
   getEntryFn: vi.fn(),

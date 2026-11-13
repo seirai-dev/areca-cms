@@ -1,5 +1,6 @@
 import { useId, useState } from 'react'
 import type { MouseEvent, ReactNode } from 'react'
+import { toast } from 'sonner'
 
 import {
   AlertDialog,
@@ -14,6 +15,7 @@ import {
 } from '#/components/ui/alert-dialog'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
+import { errorMessage } from '#/lib/errors'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
@@ -40,6 +42,8 @@ function typeToConfirmLabel(confirmText: string) {
  * - `confirmText` requires the user to type that exact value before the
  *   confirm button enables (use for irreversible deletes).
  * - Works either with a trigger (`children`) or controlled via `open`.
+ * - A rejected `onConfirm` shows its message as an error toast; the dialog
+ *   closes either way. Catch inside `onConfirm` to handle an error otherwise.
  * - Test ids: `confirm-text` (the type-to-confirm input), `confirm-action`.
  */
 export function ConfirmDialog({
@@ -90,6 +94,8 @@ export function ConfirmDialog({
     setPending(true)
     try {
       await onConfirm()
+    } catch (error) {
+      toast.error(errorMessage(error))
     } finally {
       setInternalOpen(false)
       onOpenChange?.(false)

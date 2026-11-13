@@ -29,12 +29,7 @@ export function OrgNotificationsSection({
       data-testid="org-notifications"
     >
       {query.isError ? (
-        <QueryError
-          title={m.notifications_load_error()}
-          error={query.error}
-          onRetry={() => void query.refetch()}
-          retrying={query.isFetching}
-        />
+        <QueryError title={m.notifications_load_error()} query={query} />
       ) : query.isPending ? (
         <Skeleton className="h-64 rounded-control" />
       ) : (

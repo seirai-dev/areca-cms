@@ -14,7 +14,9 @@ import {
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { assetThumbnail, errorMessage } from '#/lib/content/utils'
+import { queryKeys } from '#/lib/query-keys'
+import { assetThumbnail } from '#/lib/content/utils'
+import { errorMessage } from '#/lib/errors'
 import { Button } from '#/components/ui/button'
 import {
   Dialog,
@@ -69,7 +71,11 @@ export function MediaPickerDialog({
   const dragDepth = React.useRef(0)
 
   const assetsQuery = useInfiniteQuery({
-    queryKey: ['assets', organizationId, 'picker', debouncedSearch, imagesOnly],
+    queryKey: queryKeys.pickerAssets(
+      organizationId,
+      debouncedSearch,
+      imagesOnly,
+    ),
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       listAssetsFn({
@@ -90,7 +96,7 @@ export function MediaPickerDialog({
     mutationFn: (file: File) => uploadAssetFile(file, organizationId),
     onSuccess: async (asset) => {
       await queryClient.invalidateQueries({
-        queryKey: ['assets', organizationId],
+        queryKey: queryKeys.assetsOf(organizationId),
       })
       toast.success(m.editor_uploaded())
       onSelect(asset)
@@ -215,10 +221,8 @@ export function MediaPickerDialog({
             </div>
           ) : assetsQuery.isError ? (
             <QueryError
-              error={assetsQuery.error}
+              query={assetsQuery}
               title={m.editor_could_not_load_media()}
-              onRetry={() => void assetsQuery.refetch()}
-              retrying={assetsQuery.isFetching}
             />
           ) : visible.length === 0 ? (
             <EmptyState

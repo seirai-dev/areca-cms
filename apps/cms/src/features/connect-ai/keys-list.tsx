@@ -6,7 +6,6 @@ import { EmptyState } from '#/components/ui/empty-state'
 import { InsetIcon, InsetList, InsetRow } from '#/components/ui/inset-list'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tag } from '#/components/ui/tag'
-import { errorMessage } from '#/lib/admin/helpers'
 import { formatRelativeTime, absoluteTimeLabel } from '#/lib/relative-time'
 import { m } from '#/paraglide/messages'
 import type { McpKeySummary } from '#/server/mcp/keys'
@@ -103,12 +102,8 @@ export function KeysList({
                 variant="destructive"
                 testId="connect-ai-revoke-dialog"
                 onConfirm={async () => {
-                  try {
-                    await onRevoke(key.id)
-                    toast.success(m.connect_ai_key_revoked())
-                  } catch (error) {
-                    toast.error(errorMessage(error))
-                  }
+                  await onRevoke(key.id)
+                  toast.success(m.connect_ai_key_revoked())
                 }}
               >
                 <RowActionButton

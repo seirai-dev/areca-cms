@@ -55,9 +55,7 @@ export function ConnectAiScreen({ site }: { site: MeSite }) {
       {connections.isError ? (
         <QueryError
           title={m.connect_ai_connected_load_error()}
-          error={connections.error}
-          onRetry={() => void connections.refetch()}
-          retrying={connections.isFetching}
+          query={connections}
         />
       ) : (
         <ConnectorUrlPanel

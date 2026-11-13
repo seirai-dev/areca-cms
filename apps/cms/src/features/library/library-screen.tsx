@@ -10,7 +10,7 @@ import {
   X,
 } from '@phosphor-icons/react'
 
-import { adminQueryKeys } from '#/lib/admin/helpers'
+import { queryKeys } from '#/lib/query-keys'
 import { assetThumbnail } from '#/lib/content/utils'
 import { Button } from '#/components/ui/button'
 import { EmptyState } from '#/components/ui/empty-state'
@@ -102,7 +102,7 @@ export function LibraryScreen({
 
   // Uploader names come from the member list, which owners and admins can read.
   const members = useQuery({
-    queryKey: adminQueryKeys.members(organizationId),
+    queryKey: queryKeys.members(organizationId),
     queryFn: () => listMembersFn({ data: { organizationId } }),
     enabled: canDelete,
     staleTime: 60_000,
@@ -200,12 +200,7 @@ export function LibraryScreen({
       />
 
       {library.isError ? (
-        <QueryError
-          title={m.sites_media_load_error()}
-          error={library.error}
-          onRetry={() => void library.refetch()}
-          retrying={library.isFetching}
-        />
+        <QueryError title={m.sites_media_load_error()} query={library} />
       ) : library.isPending ? (
         <div className={GRID} aria-hidden="true">
           {Array.from({ length: 12 }).map((_, index) => (

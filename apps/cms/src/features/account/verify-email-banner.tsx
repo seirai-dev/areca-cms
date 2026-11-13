@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 
 import { BannerRow } from '#/components/shell/banner-row'
 import { Button } from '#/components/ui/button'
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { m } from '#/paraglide/messages'
 import { useStoredState } from '#/hooks/use-stored-state'
 import type { StoredCodec } from '#/hooks/use-stored-state'

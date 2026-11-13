@@ -6,8 +6,9 @@ import {
 } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
+import { queryKeys } from '#/lib/query-keys'
 import type { MediaAsset } from '#/features/editor/media-upload'
-import { errorMessage } from '#/lib/content/utils'
+import { errorMessage } from '#/lib/errors'
 import { m } from '#/paraglide/messages'
 import { deleteAssetFn, listAssetsFn, updateAssetFn } from '#/server/fn/assets'
 
@@ -55,22 +56,6 @@ export function fileKind(asset: {
 /** Only images without a description in one content language. */
 export type MissingAltFilter = { siteId: string; locale?: string }
 
-function libraryQueryKey(
-  organizationId: string,
-  search: string,
-  missingAlt: MissingAltFilter | undefined,
-) {
-  // Shares the `['assets', organizationId]` prefix with the media picker so
-  // one invalidation refreshes both.
-  return [
-    'assets',
-    organizationId,
-    'library',
-    search,
-    missingAlt ?? null,
-  ] as const
-}
-
 /** Paged Library list ("Load more", 40 per page), newest first. */
 export function useLibraryAssets(
   organizationId: string,
@@ -78,7 +63,7 @@ export function useLibraryAssets(
   missingAlt?: MissingAltFilter,
 ) {
   const query = useInfiniteQuery({
-    queryKey: libraryQueryKey(organizationId, search, missingAlt),
+    queryKey: queryKeys.libraryAssets(organizationId, search, missingAlt),
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       listAssetsFn({
@@ -201,7 +186,7 @@ export function useUploadQueue(organizationId: string) {
           : m.sites_files_uploaded({ count: ok }),
       )
       await queryClient.invalidateQueries({
-        queryKey: ['assets', organizationId],
+        queryKey: queryKeys.assetsOf(organizationId),
       })
     }
     finished.forEach(drop)
@@ -239,7 +224,9 @@ export function useUploadQueue(organizationId: string) {
 export function useAssetMutations(organizationId: string) {
   const queryClient = useQueryClient()
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ['assets', organizationId] })
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.assetsOf(organizationId),
+    })
 
   const saveAlt = useMutation({
     mutationFn: (input: {

@@ -116,9 +116,7 @@ export function CollectionScreen({
       <div data-testid="site-content" data-ready="true" className="grid gap-6">
         <QueryError
           title={m.sites_collections_load_error()}
-          error={collectionsQuery.error}
-          onRetry={() => void collectionsQuery.refetch()}
-          retrying={collectionsQuery.isFetching}
+          query={collectionsQuery}
         />
       </div>
     )
@@ -442,12 +440,7 @@ function CollectionView({
       )}
 
       {query.isError ? (
-        <QueryError
-          title={m.editor_could_not_load_entries()}
-          error={query.error}
-          onRetry={() => void query.refetch()}
-          retrying={query.isFetching}
-        />
+        <QueryError title={m.editor_could_not_load_entries()} query={query} />
       ) : query.isLoading ? (
         <EntriesSkeleton view={view} />
       ) : rows.length === 0 ? (
@@ -679,10 +672,13 @@ function CollectionView({
         variant="destructive"
         onConfirm={async () => {
           if (!confirmDelete) return
-          await bulk.mutateAsync({
-            action: 'delete',
-            targets: targetsFor(confirmDelete),
-          })
+          // The bulk mutation shows its own error toast.
+          await bulk
+            .mutateAsync({
+              action: 'delete',
+              targets: targetsFor(confirmDelete),
+            })
+            .catch(() => undefined)
         }}
       />
 

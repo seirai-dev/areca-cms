@@ -1,54 +1,49 @@
 import { Link } from '@tanstack/react-router'
+import type { UseQueryResult } from '@tanstack/react-query'
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react'
 
 import { Button } from '#/components/ui/button'
-import {
-  MFA_REQUIRED,
-  securityErrorCode,
-  stripSecurityCode,
-} from '#/lib/security-errors'
+import { errorDetail } from '#/lib/errors'
+import { MFA_REQUIRED, securityErrorCode } from '#/lib/security-errors'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
 /**
- * Messages written for developers: React Query's own text (for example
- * `data is undefined` when a query returns nothing) and JS runtime errors.
- */
-const INTERNAL_ERROR =
-  /data is undefined|cannot be undefined|Affected query key|^\[|is not a function|Cannot read propert/i
-
-/** The server's message when it is safe to show, otherwise null (title only). */
-function messageFrom(error: unknown): string | null {
-  const message =
-    error && typeof error === 'object' && 'message' in error
-      ? (error as { message?: unknown }).message
-      : undefined
-  if (typeof message !== 'string' || !message) return null
-  if (error instanceof TypeError || INTERNAL_ERROR.test(message)) return null
-  return stripSecurityCode(message)
-}
-
-/**
  * Inline card for a failed query (brief §3.13): "Couldn't load {thing}", the
  * server message as a whisper, and Try again. Never an endless skeleton.
+ *
+ * Pass the failed `query` (its error, refetch and fetching state), or
+ * `error` with `onRetry` and `retrying` for anything else.
  */
 export function QueryError({
-  error,
+  query,
   title = m.shared_could_not_load(),
-  onRetry,
-  retrying,
   className,
+  ...props
 }: {
-  error: unknown
   title?: string
-  onRetry?: () => void
-  retrying?: boolean
   className?: string
-}) {
+} & (
+  | {
+      query: Pick<UseQueryResult, 'error' | 'refetch' | 'isFetching'>
+      error?: never
+      onRetry?: never
+      retrying?: never
+    }
+  | {
+      query?: never
+      error: unknown
+      onRetry?: () => void
+      retrying?: boolean
+    }
+)) {
+  const error = query ? query.error : props.error
+  const onRetry = query ? () => void query.refetch() : props.onRetry
+  const retrying = query ? query.isFetching : props.retrying
   // An agency admin who has not enrolled in two-factor gets a way forward
   // instead of a generic failure.
   const mfaRequired = securityErrorCode(error) === MFA_REQUIRED
-  const detail = messageFrom(error)
+  const detail = errorDetail(error)
   return (
     <div
       role="alert"

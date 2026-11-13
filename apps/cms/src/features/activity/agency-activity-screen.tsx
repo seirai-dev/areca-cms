@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 
-import { adminQueryKeys } from '#/lib/admin/helpers'
+import { queryKeys } from '#/lib/query-keys'
 import { Card } from '#/components/ui/card'
 import { PageHeader } from '#/components/ui/page-header'
 import {
@@ -29,7 +29,7 @@ export function AgencyActivityScreen({
   onClientChange: (clientId: string | undefined) => void
 }) {
   const clients = useQuery({
-    queryKey: adminQueryKeys.organizations,
+    queryKey: queryKeys.organizations(),
     queryFn: () => listOrganizationsFn(),
   })
 

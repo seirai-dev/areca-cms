@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { QueryClient, QueryKey } from '@tanstack/react-query'
 
-import { adminQueryKeys } from '#/lib/admin/helpers'
-import { OVERVIEW_ENTRIES, queryKeys } from '#/lib/content/query-keys'
+import { OVERVIEW_ENTRIES, queryKeys } from '#/lib/query-keys'
 import { ME_QUERY_KEY } from '#/lib/me-query'
 
 import {
@@ -165,7 +164,7 @@ describe('invalidateQueryKeys', () => {
     )
 
     expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: adminQueryKeys.devSync('dev'),
+      queryKey: queryKeys.devSync('dev'),
     })
     expect(router.invalidate).toHaveBeenCalledTimes(1)
   })

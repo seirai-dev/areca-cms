@@ -5,7 +5,7 @@ import { QueryError } from '#/components/ui/query-error'
 import { Skeleton } from '#/components/ui/skeleton'
 import { EntryPill } from '#/features/collection/entry-pill'
 import type { LiveMembership } from '#/features/golive/entry-live-state'
-import { queryKeys } from '#/lib/content/query-keys'
+import { queryKeys } from '#/lib/query-keys'
 import { uiLanguageName } from '#/lib/site-languages'
 import { m } from '#/paraglide/messages'
 import { listLinkedFromFn } from '#/server/fn/content'
@@ -34,13 +34,7 @@ export function LinkedFrom({
 
   if (query.isPending) return <Skeleton className="h-12" />
   if (query.isError) {
-    return (
-      <QueryError
-        error={query.error}
-        onRetry={() => void query.refetch()}
-        retrying={query.isFetching}
-      />
-    )
+    return <QueryError query={query} />
   }
   const groups = query.data
   if (groups.length === 0) {

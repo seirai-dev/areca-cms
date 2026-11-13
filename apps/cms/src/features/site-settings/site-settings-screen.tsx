@@ -63,12 +63,7 @@ export function SiteSettingsScreen({
     render: (record: NonNullable<typeof settings.site.data>) => React.ReactNode,
   ) =>
     settings.site.isError ? (
-      <QueryError
-        title={m.settings_load_error()}
-        error={settings.site.error}
-        onRetry={() => void settings.site.refetch()}
-        retrying={settings.site.isFetching}
-      />
+      <QueryError title={m.settings_load_error()} query={settings.site} />
     ) : record ? (
       render(record)
     ) : (

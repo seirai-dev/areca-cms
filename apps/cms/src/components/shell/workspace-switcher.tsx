@@ -11,7 +11,7 @@ import {
   Translate,
 } from '@phosphor-icons/react'
 
-import { adminQueryKeys } from '#/lib/admin/helpers'
+import { queryKeys } from '#/lib/query-keys'
 import { BrandLogo } from '#/components/brand-mark'
 import { useShell } from '#/components/shell/shell-context'
 import { SiteTile } from '#/components/shell/site-tile'
@@ -56,7 +56,7 @@ import { getSitesOverviewFn } from '#/server/fn/overview'
 
 export function sitesOverviewQueryOptions() {
   return {
-    queryKey: ['sites-overview'] as const,
+    queryKey: queryKeys.sitesOverview(),
     queryFn: () => getSitesOverviewFn(),
     staleTime: 60_000,
   }
@@ -193,7 +193,7 @@ function SwitcherList({ onDone }: { onDone: () => void }) {
   const branding = useBranding()
   const liveMap = useSitesLive()
   const clients = useQuery({
-    queryKey: adminQueryKeys.organizations,
+    queryKey: queryKeys.organizations(),
     queryFn: () => listOrganizationsFn(),
     enabled: me.user.isAgencyAdmin,
   })

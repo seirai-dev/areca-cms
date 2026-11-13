@@ -2,7 +2,8 @@ import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 
-import { adminQueryKeys, errorMessage } from '#/lib/admin/helpers'
+import { queryKeys } from '#/lib/query-keys'
+import { errorMessage } from '#/lib/errors'
 import type { MembershipRole } from '#/lib/types'
 import { getLocale } from '#/paraglide/runtime'
 import { m } from '#/paraglide/messages'
@@ -94,25 +95,25 @@ export function useMembers(organizationId: string) {
   const regenerateInvitationLink = useServerFn(regenerateInvitationLinkFn)
 
   const members = useQuery({
-    queryKey: adminQueryKeys.members(organizationId),
+    queryKey: queryKeys.members(organizationId),
     queryFn: () => listMembers({ data: { organizationId } }),
   })
   const invitations = useQuery({
-    queryKey: adminQueryKeys.invitations(organizationId),
+    queryKey: queryKeys.invitations(organizationId),
     queryFn: () => listInvitations({ data: { organizationId } }),
   })
 
   const refreshMembers = React.useCallback(
     () =>
       queryClient.invalidateQueries({
-        queryKey: adminQueryKeys.members(organizationId),
+        queryKey: queryKeys.members(organizationId),
       }),
     [queryClient, organizationId],
   )
   const refreshInvitations = React.useCallback(
     () =>
       queryClient.invalidateQueries({
-        queryKey: adminQueryKeys.invitations(organizationId),
+        queryKey: queryKeys.invitations(organizationId),
       }),
     [queryClient, organizationId],
   )

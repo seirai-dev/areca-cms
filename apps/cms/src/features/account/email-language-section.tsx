@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from '#/components/ui/select'
 import { SettingsSection } from '#/components/ui/settings-section'
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { m } from '#/paraglide/messages'
 import { getLocale, locales } from '#/paraglide/runtime'
 import type { Locale } from '#/paraglide/runtime'

@@ -2,6 +2,7 @@ import { useQueries } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { CheckCircle, XCircle } from '@phosphor-icons/react'
 
+import { queryKeys } from '#/lib/query-keys'
 import { SystemAvatar, UserAvatar } from '#/components/ui/avatar'
 import { Tag } from '#/components/ui/tag'
 import { RelativeTime, TimelineItem } from '#/components/ui/timeline'
@@ -34,7 +35,7 @@ export function useActivityEntries(rows: ReadonlyArray<ActivityLike>) {
   }
   const results = useQueries({
     queries: chunks.map((chunk) => ({
-      queryKey: ['activity-entries', chunk] as const,
+      queryKey: queryKeys.activityEntries(chunk),
       queryFn: () => getActivityEntriesFn({ data: { ids: chunk } }),
       staleTime: 60_000,
       retry: false,

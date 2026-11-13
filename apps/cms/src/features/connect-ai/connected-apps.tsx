@@ -7,7 +7,6 @@ import { InsetIcon, InsetList, InsetRow } from '#/components/ui/inset-list'
 import { QueryError } from '#/components/ui/query-error'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tag } from '#/components/ui/tag'
-import { errorMessage } from '#/lib/admin/helpers'
 import type { ConnectTarget } from '#/lib/mcp-install'
 import { absoluteTimeLabel, formatRelativeTime } from '#/lib/relative-time'
 import { m } from '#/paraglide/messages'
@@ -172,14 +171,10 @@ function ConnectedAppRow({
           variant="destructive"
           testId="connect-ai-disconnect-dialog"
           onConfirm={async () => {
-            try {
-              await onDisconnect(app.id)
-              toast.success(
-                m.connect_ai_connected_disconnected({ app: app.clientName }),
-              )
-            } catch (error) {
-              toast.error(errorMessage(error))
-            }
+            await onDisconnect(app.id)
+            toast.success(
+              m.connect_ai_connected_disconnected({ app: app.clientName }),
+            )
           }}
         >
           <RowActionButton

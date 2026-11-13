@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { QueryKey } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
-import { errorMessage } from '#/lib/admin/helpers'
+import { queryKeys } from '#/lib/query-keys'
+import { errorMessage } from '#/lib/errors'
 import type { MyNotifications, RulesMatrix } from '#/lib/notifications'
 import {
   getAgencyNotificationRulesFn,
@@ -24,11 +25,6 @@ import type {
   PreferenceChange,
   RuleChange,
 } from './notification-rules-logic'
-
-export const myNotificationsQueryKey = ['notifications', 'mine'] as const
-export const orgRulesQueryKey = (organizationId: string) =>
-  ['notifications', 'org-rules', organizationId] as const
-export const agencyRulesQueryKey = ['notifications', 'agency-rules'] as const
 
 type OrgRules = RulesMatrix & { orgName: string; agencyName: string }
 type AgencyRules = { clients: RulesMatrix; agency: RulesMatrix }
@@ -74,7 +70,7 @@ function useRuleSave<T, TChange extends RuleChange>({
 
 /** An organization's rules, for its owners and agency admins. */
 export function useOrgNotificationRules(organizationId: string) {
-  const queryKey = orgRulesQueryKey(organizationId)
+  const queryKey = queryKeys.orgNotificationRules(organizationId)
   const query = useQuery({
     queryKey,
     queryFn: () => getOrgNotificationRulesFn({ data: { organizationId } }),
@@ -96,11 +92,11 @@ export function useOrgNotificationRules(organizationId: string) {
 /** Agency defaults: the client matrix and the agency alerts matrix. */
 export function useAgencyNotificationRules() {
   const query = useQuery({
-    queryKey: agencyRulesQueryKey,
+    queryKey: queryKeys.agencyNotificationRules(),
     queryFn: () => getAgencyNotificationRulesFn(),
   })
   const save = useRuleSave<AgencyRules, RuleChange>({
-    queryKey: agencyRulesQueryKey,
+    queryKey: queryKeys.agencyNotificationRules(),
     apply: applyAgencyRuleChange,
     save: (change) => setAgencyNotificationRuleFn({ data: change }),
   })
@@ -115,7 +111,7 @@ export function useAgencyNotificationRules() {
 /** The signed-in person's own switches, grouped by organization. */
 export function useMyNotifications() {
   return useQuery({
-    queryKey: myNotificationsQueryKey,
+    queryKey: queryKeys.myNotifications(),
     queryFn: () => getMyNotificationsFn(),
   })
 }
@@ -126,7 +122,7 @@ export function useMyNotifications() {
  */
 export function useSetMyNotification() {
   const queryClient = useQueryClient()
-  const queryKey = myNotificationsQueryKey
+  const queryKey = queryKeys.myNotifications()
   return useMutation({
     mutationFn: async (change: PreferenceChange) => {
       const result = await setMyNotificationFn({ data: change })

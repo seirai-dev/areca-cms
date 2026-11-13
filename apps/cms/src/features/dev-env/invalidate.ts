@@ -1,29 +1,10 @@
 import type { QueryClient, QueryKey } from '@tanstack/react-query'
 
-import { adminQueryKeys } from '#/lib/admin/helpers'
-import { OVERVIEW_ENTRIES, queryKeys } from '#/lib/content/query-keys'
+import { OVERVIEW_ENTRIES, queryKeys } from '#/lib/query-keys'
 import { ME_QUERY_KEY } from '#/lib/me-query'
-import { globalsQueryKey } from '#/features/globals/use-globals'
 
-/**
- * Entry caches are keyed by id only (`['entry', id]`, no site in the key), so
- * the family prefix is the only way to reach every entry a site owns. Used
- * after a reset, which replaces the dev site's entries.
- */
-export const ENTRY_FAMILY_KEYS: QueryKey[] = [['entry']]
-
-/** The go-live tray's pending list of one site (`features/golive/use-pending-entries.ts`). */
-function goLivePendingQueryKey(siteId: string): QueryKey {
-  return ['golive-pending', siteId]
-}
-
-/**
- * Globals editors are keyed `['global', siteId, key]`. The prefix covers every
- * section of one site, the single-section editor included.
- */
-function globalFamilyKey(siteId: string): QueryKey {
-  return ['global', siteId]
-}
+/** Used after a reset, which replaces the dev site's entries. */
+export const ENTRY_FAMILY_KEYS: QueryKey[] = [queryKeys.entryFamily()]
 
 /**
  * Query keys a development environment's own content and settings live under:
@@ -34,11 +15,11 @@ export function devSiteQueryKeys(devSiteId: string): QueryKey[] {
   return [
     queryKeys.collections(devSiteId),
     queryKeys.entryCounts(devSiteId),
-    ['entries', devSiteId],
-    globalsQueryKey(devSiteId),
-    globalFamilyKey(devSiteId),
-    adminQueryKeys.site(devSiteId),
-    adminQueryKeys.devSync(devSiteId),
+    queryKeys.entriesOf(devSiteId),
+    queryKeys.globals(devSiteId),
+    queryKeys.globalFamily(devSiteId),
+    queryKeys.site(devSiteId),
+    queryKeys.devSync(devSiteId),
   ]
 }
 
@@ -52,14 +33,14 @@ export function productionQueryKeys(productionSiteId: string): QueryKey[] {
   return [
     queryKeys.collections(productionSiteId),
     queryKeys.entryCounts(productionSiteId),
-    ['entries', productionSiteId],
-    globalsQueryKey(productionSiteId),
-    globalFamilyKey(productionSiteId),
-    adminQueryKeys.site(productionSiteId),
+    queryKeys.entriesOf(productionSiteId),
+    queryKeys.globals(productionSiteId),
+    queryKeys.globalFamily(productionSiteId),
+    queryKeys.site(productionSiteId),
     queryKeys.releaseStatus(productionSiteId),
     queryKeys.publications(productionSiteId),
     queryKeys.buildJobs(productionSiteId),
-    goLivePendingQueryKey(productionSiteId),
+    queryKeys.goLivePending(productionSiteId),
   ]
 }
 
@@ -78,8 +59,8 @@ export function devEnvQueryKeys({
   return [
     ...devSiteQueryKeys(devSiteId),
     ...productionQueryKeys(productionSiteId),
-    adminQueryKeys.devEnvironment(productionSiteId),
-    adminQueryKeys.pushPlan(devSiteId),
+    queryKeys.devEnvironment(productionSiteId),
+    queryKeys.pushPlan(devSiteId),
     ME_QUERY_KEY,
   ]
 }
@@ -138,11 +119,11 @@ export function bulkQueryKeys({
   entryIds: readonly string[]
 }): QueryKey[] {
   return [
-    ['entries', siteId, collectionKey],
-    ['entries', siteId, OVERVIEW_ENTRIES],
+    queryKeys.entriesOf(siteId, collectionKey),
+    queryKeys.entriesOf(siteId, OVERVIEW_ENTRIES),
     queryKeys.entryCounts(siteId),
     ...entryQueryKeys(entryIds),
-    adminQueryKeys.devSync(siteId),
+    queryKeys.devSync(siteId),
   ]
 }
 
@@ -169,6 +150,6 @@ export async function invalidateQueryKeys(
  */
 export function invalidateDevSync(queryClient: QueryClient, siteId: string) {
   return queryClient.invalidateQueries({
-    queryKey: adminQueryKeys.devSync(siteId),
+    queryKey: queryKeys.devSync(siteId),
   })
 }

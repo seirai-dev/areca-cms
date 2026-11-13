@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
 
+import { queryKeys } from '#/lib/query-keys'
 import { resolvePreviewOwnersFn } from '#/server/fn/content'
 import type { ResolvedOwner } from '#/server/content/preview-owners'
 import { m } from '#/paraglide/messages'
@@ -102,7 +103,7 @@ export function useClickToEdit(options: ClickToEditOptions): ClickToEdit {
     [markers, self],
   )
   const ownersQuery = useQuery({
-    queryKey: ['preview-owners', siteId, others.map(ownerKey)],
+    queryKey: queryKeys.previewOwners(siteId, others.map(ownerKey)),
     queryFn: () => resolvePreviewOwnersFn({ data: { siteId, owners: others } }),
     enabled: enabled && others.length > 0,
     staleTime: 60_000,

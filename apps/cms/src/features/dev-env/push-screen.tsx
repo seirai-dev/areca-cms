@@ -12,8 +12,8 @@ import { QueryError } from '#/components/ui/query-error'
 import type { SegmentedOption } from '#/components/ui/segmented-control'
 import { SegmentedControl } from '#/components/ui/segmented-control'
 import { Skeleton } from '#/components/ui/skeleton'
-import { errorMessage } from '#/lib/admin/helpers'
 import { contentRoute } from '#/lib/content-route'
+import { errorMessage } from '#/lib/errors'
 import { PLAN_CHANGED_MESSAGE } from '#/lib/dev-env'
 import type { MeSite } from '#/lib/site-nav'
 import { cn } from '#/lib/utils'
@@ -276,11 +276,7 @@ export function PushScreen({
           {plan.isPending ? (
             <Skeleton className="h-48 rounded-card" />
           ) : plan.isError ? (
-            <QueryError
-              error={plan.error}
-              onRetry={() => void plan.refetch()}
-              retrying={plan.isFetching}
-            />
+            <QueryError query={plan} />
           ) : items.length === 0 ? (
             <EmptyState title={m.dev_push_empty()} data-testid="push-empty" />
           ) : (

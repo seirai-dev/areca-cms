@@ -12,7 +12,7 @@ import {
   WarningCircle,
 } from '@phosphor-icons/react'
 
-import { queryKeys } from '#/lib/content/query-keys'
+import { queryKeys } from '#/lib/query-keys'
 import { AccountMenu } from '#/components/shell/account-menu'
 import { NavCount, NavGroupLabel, NavItem } from '#/components/shell/nav-item'
 import { useShell } from '#/components/shell/shell-context'

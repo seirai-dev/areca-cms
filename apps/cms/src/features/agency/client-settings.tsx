@@ -3,7 +3,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import { adminQueryKeys, errorMessage } from '#/lib/admin/helpers'
+import { queryKeys } from '#/lib/query-keys'
+import { errorMessage } from '#/lib/errors'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { FormField } from '#/components/ui/form-field'
@@ -31,9 +32,9 @@ function useClientSettings(client: ClientRow) {
       toast.success(m.admin_org_toast_renamed())
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: adminQueryKeys.organizations,
+          queryKey: queryKeys.organizations(),
         }),
-        queryClient.invalidateQueries({ queryKey: ['sites-overview'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.sitesOverview() }),
         router.invalidate(),
       ])
     },
@@ -46,11 +47,11 @@ function useClientSettings(client: ClientRow) {
     onSuccess: async () => {
       toast.success(m.agency_client_deleted())
       await queryClient.invalidateQueries({
-        queryKey: adminQueryKeys.organizations,
+        queryKey: queryKeys.organizations(),
       })
       await navigate({ to: '/agency/clients' })
     },
-    onError: (err) => toast.error(errorMessage(err)),
+    // Only the confirm dialog deletes; it shows the error.
   })
 
   return { rename, remove }

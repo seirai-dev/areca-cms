@@ -9,7 +9,7 @@ import {
   listRecentEntriesFn,
 } from '#/server/fn/content'
 
-import { queryKeys } from './query-keys'
+import { queryKeys } from '#/lib/query-keys'
 
 /*
  * Query options shared by the screens and the route loaders that start the

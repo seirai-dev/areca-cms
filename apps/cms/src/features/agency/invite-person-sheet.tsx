@@ -8,7 +8,8 @@ import { FormField } from '#/components/ui/form-field'
 import { Input } from '#/components/ui/input'
 import { SegmentedControl } from '#/components/ui/segmented-control'
 import { SlideOver } from '#/components/ui/slide-over'
-import { adminQueryKeys, errorMessage } from '#/lib/admin/helpers'
+import { queryKeys } from '#/lib/query-keys'
+import { errorMessage } from '#/lib/errors'
 import type { MembershipRole } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { isValidEmail } from '#/features/people/use-members'
@@ -150,7 +151,7 @@ export function InvitePersonSheet({
       }
     }
     setBusy(false)
-    await queryClient.invalidateQueries({ queryKey: adminQueryKeys.users })
+    await queryClient.invalidateQueries({ queryKey: queryKeys.users() })
     if (sent > 0) {
       toast.success(
         sent === 1

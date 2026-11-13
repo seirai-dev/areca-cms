@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 
-import { queryKeys } from '#/lib/content/query-keys'
+import { queryKeys } from '#/lib/query-keys'
 import { listRevisionsFn } from '#/server/fn/content'
 
 /**

@@ -1,14 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 
+import { queryKeys } from '#/lib/query-keys'
 import {
   listMcpConnectionsFn,
   revokeMcpConnectionFn,
 } from '#/server/fn/mcp-oauth'
-
-export function mcpConnectionsQueryKey(siteId: string) {
-  return ['connect-ai', 'connections', siteId] as const
-}
 
 /** The apps connected to a site (via OAuth) and the connector URL. */
 export function useMcpConnections(siteId: string) {
@@ -17,7 +14,7 @@ export function useMcpConnections(siteId: string) {
   const revokeConnection = useServerFn(revokeMcpConnectionFn)
 
   const connections = useQuery({
-    queryKey: mcpConnectionsQueryKey(siteId),
+    queryKey: queryKeys.mcpConnections(siteId),
     queryFn: () => listConnections({ data: { siteId } }),
   })
 
@@ -25,7 +22,7 @@ export function useMcpConnections(siteId: string) {
     mutationFn: (id: string) => revokeConnection({ data: { id } }),
     onSettled: () =>
       queryClient.invalidateQueries({
-        queryKey: mcpConnectionsQueryKey(siteId),
+        queryKey: queryKeys.mcpConnections(siteId),
       }),
   })
 

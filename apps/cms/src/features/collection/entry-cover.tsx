@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { FileText } from '@phosphor-icons/react'
 
 import type { MediaAsset } from '#/features/editor/media-upload'
-import { queryKeys } from '#/lib/content/query-keys'
+import { queryKeys } from '#/lib/query-keys'
 import { assetThumbnail } from '#/lib/content/utils'
 import { cn } from '#/lib/utils'
 import { getAssetFn } from '#/server/fn/assets'
