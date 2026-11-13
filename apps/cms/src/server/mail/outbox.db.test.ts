@@ -172,6 +172,27 @@ describe.skipIf(!hasDb)('email outbox', () => {
     })
   })
 
+  it('lets the worker send a new row at once when the app clock runs ahead of the database', async () => {
+    // The claim compares against the database clock, so the due time must
+    // come from it too. A Docker or remote Postgres can lag the app by a few ms.
+    vi.useFakeTimers({ now: Date.now() + 5_000, toFake: ['Date'] })
+    let id: string
+    try {
+      ;({ id } = await enqueueEmail({
+        kind: 'test',
+        template: 'test',
+        to: `skew-${crypto.randomUUID()}@areca.local`,
+        params: { host: 'mailpit', sentBy: 'admin@areca.local' },
+        locale: 'en',
+      }))
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(await processOutbox({ only: [id] })).toBe(1)
+    expect(await rowOf(id)).toMatchObject({ status: 'sent', attempts: 1 })
+  })
+
   it('ignores the outcome of a sender whose lease was taken over mid-send', async () => {
     const to = `fenced-${crypto.randomUUID()}@areca.local`
     const { id } = await enqueueEmail({

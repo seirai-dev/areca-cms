@@ -152,7 +152,8 @@ export async function enqueueEmail(
           : {
               status: 'queued' as const,
               attempts: 0,
-              nextAttemptAt: new Date(),
+              // The database clock: `claimable()` compares against it.
+              nextAttemptAt: sql`now()`,
             }),
       })
       .returning({ id: emailOutbox.id })
