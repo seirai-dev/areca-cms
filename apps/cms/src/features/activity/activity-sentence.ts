@@ -397,6 +397,8 @@ export const REPEAT_WINDOW_MS = 15 * 60_000
 export type ActivityGroup<T extends ActivityLike> = {
   row: T
   count: number
+  /** First and newest save of a group of saves, when they span more than a minute. */
+  span: { from: number; to: number } | null
 }
 
 /** When a shared autosave row (see `auditAutosave`) took its last save. */
@@ -434,7 +436,7 @@ function repeatsOf(row: ActivityLike) {
 export function collapseRepeats<T extends ActivityLike>(
   rows: ReadonlyArray<T>,
 ) {
-  const out: Array<ActivityGroup<T>> = []
+  const out: Array<{ row: T; count: number; from: number; to: number }> = []
   let lastAt = 0
   for (const row of rows) {
     const { count, at, firstAt } = repeatsOf(row)
@@ -447,12 +449,17 @@ export function collapseRepeats<T extends ActivityLike>(
       Math.abs(lastAt - at) <= REPEAT_WINDOW_MS
     ) {
       prev.count += count
+      prev.from = Math.min(prev.from, firstAt)
+      prev.to = Math.max(prev.to, at)
     } else {
-      out.push({ row, count })
+      out.push({ row, count, from: firstAt, to: at })
     }
     lastAt = firstAt
   }
-  return out
+  return out.map(({ row, count, from, to }): ActivityGroup<T> => {
+    const sameMinute = Math.floor(from / 60_000) === Math.floor(to / 60_000)
+    return { row, count, span: count > 1 && !sameMinute ? { from, to } : null }
+  })
 }
 
 /** Entry ids whose titles make the sentences readable. */

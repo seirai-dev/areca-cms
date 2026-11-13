@@ -151,11 +151,12 @@ export function ActivityList({
             <h3 className="text-overline text-text-muted">{group.day}</h3>
           ) : null}
           <Timeline>
-            {group.rows.map(({ row, count }) => (
+            {group.rows.map(({ row, count, span }) => (
               <ActivityTimelineItem
                 key={row.id}
                 row={row}
                 count={count}
+                span={span}
                 entry={entries.get(row.targetId)}
                 scope={showScope ? activityScope(row) : null}
               />

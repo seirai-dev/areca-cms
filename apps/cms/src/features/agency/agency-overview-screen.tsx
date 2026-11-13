@@ -361,11 +361,12 @@ function RecentActivity() {
               } as React.CSSProperties
             }
           >
-            {collapseRepeats(rows).map(({ row, count }) => (
+            {collapseRepeats(rows).map(({ row, count, span }) => (
               <ActivityTimelineItem
                 key={row.id}
                 row={row}
                 count={count}
+                span={span}
                 entry={entries.get(row.targetId)}
                 testId="home-activity-item"
                 scope={activityScope(row)}

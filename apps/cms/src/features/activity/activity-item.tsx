@@ -14,12 +14,7 @@ import { contentRoute } from '#/lib/content-route'
 import { ACTIVITY_ENTRIES_MAX_IDS } from '#/lib/content-limits'
 import { m } from '#/paraglide/messages'
 import { getActivityEntriesFn } from '#/server/fn/activity-entries'
-import {
-  activityParts,
-  entryTargetIds,
-  lastSavedAt,
-  viaMcpKey,
-} from './activity-sentence'
+import { activityParts, entryTargetIds, viaMcpKey } from './activity-sentence'
 import type { ActivityLike } from './activity-sentence'
 
 type EntryRef = {
@@ -72,12 +67,15 @@ export function useActivityEntries(rows: ReadonlyArray<ActivityLike>) {
 export function ActivityTimelineItem({
   row,
   count = 1,
+  span = null,
   entry,
   scope,
   testId = 'activity-item',
 }: {
   row: ActivityLike
   count?: number
+  /** First and newest save of a group of saves (see `collapseRepeats`). */
+  span?: { from: number; to: number } | null
   entry?: EntryRef
   scope?: string | null
   testId?: string
@@ -111,7 +109,6 @@ export function ActivityTimelineItem({
       : null
   const metaLine = [scope, repeat].filter(Boolean).join(' · ')
   const via = viaMcpKey(row)
-  const savedUntil = lastSavedAt(row)
   const viaKey = via?.name ?? null
 
   const icon =
@@ -155,8 +152,8 @@ export function ActivityTimelineItem({
         <RelativeTime
           value={row.createdAt}
           title={
-            savedUntil
-              ? `${absoluteTimeLabel(row.createdAt)} – ${absoluteTimeLabel(savedUntil)}`
+            span
+              ? `${absoluteTimeLabel(new Date(span.from))} – ${absoluteTimeLabel(new Date(span.to))}`
               : undefined
           }
         />

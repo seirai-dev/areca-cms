@@ -580,3 +580,44 @@ describe('activityText for development environments', () => {
     ).toBe('Sanne de Vries copied “Spring menu” to production as a draft')
   })
 })
+
+describe('collapseRepeats save span', () => {
+  const save = (createdAt: string, meta: Record<string, unknown>) =>
+    ({
+      id: createdAt,
+      action: 'entry.update',
+      targetId: 'e1',
+      targetType: 'entry',
+      actorId: 'u1',
+      createdAt,
+      meta,
+    }) as unknown as Parameters<typeof collapseRepeats>[0][number]
+
+  it('spans every stored row of a group, oldest first save to newest save', () => {
+    const [group] = collapseRepeats([
+      save('2026-09-30T10:16:00Z', {
+        saves: 2,
+        lastSavedAt: '2026-09-30T10:20:00Z',
+      }),
+      save('2026-09-30T10:01:00Z', {
+        saves: 3,
+        lastSavedAt: '2026-09-30T10:12:00Z',
+      }),
+    ])
+    expect(group.count).toBe(5)
+    expect(group.span).toEqual({
+      from: Date.parse('2026-09-30T10:01:00Z'),
+      to: Date.parse('2026-09-30T10:20:00Z'),
+    })
+  })
+
+  it('has no span when the saves fall in one minute', () => {
+    const [group] = collapseRepeats([
+      save('2026-09-30T10:01:05Z', {
+        saves: 4,
+        lastSavedAt: '2026-09-30T10:01:40Z',
+      }),
+    ])
+    expect(group.span).toBeNull()
+  })
+})
