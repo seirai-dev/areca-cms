@@ -1,3 +1,5 @@
+import type { IncomingMessage, ServerResponse } from 'node:http'
+
 import { defineConfig } from 'vite'
 import type { Plugin, UserConfig } from 'vite'
 import { devtools } from '@tanstack/devtools-vite'
@@ -32,6 +34,34 @@ function arecaAssetFileDevPlugin(): Plugin {
         }
         next()
       })
+    },
+  }
+}
+
+function dropAbandonedRequestErrors(): Plugin {
+  return {
+    name: 'areca-drop-abandoned-request-errors',
+    apply: 'serve',
+    enforce: 'post',
+    configureServer(server) {
+      // Nitro streams a request body to its dev worker. When the browser drops
+      // the request first (a cancelled fetch, a page that navigated away), the
+      // stream fails ("aborted", "read ECONNRESET") and Vite would show that as
+      // an error overlay on every open page, covering what the user or an e2e
+      // test clicks. Nobody is waiting for that response, so drop the error.
+      return () => {
+        server.middlewares.use(
+          (
+            error: unknown,
+            req: IncomingMessage,
+            res: ServerResponse,
+            next: (error?: unknown) => void,
+          ) => {
+            if (req.socket.destroyed) res.destroy()
+            else next(error)
+          },
+        )
+      }
     },
   }
 }
@@ -123,6 +153,7 @@ const config = defineConfig(async ({ command }): Promise<UserConfig> => ({
       },
     }),
     viteReact(),
+    dropAbandonedRequestErrors(),
   ],
 }))
 
