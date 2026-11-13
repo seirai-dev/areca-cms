@@ -27,6 +27,54 @@ function bearer(token: string) {
 }
 
 describe.skipIf(!hasDb)('site API routes', () => {
+  it('revalidates a stored publication by ETag from its stored asset flag', async () => {
+    await withTestSite(async (fixtures) => {
+      const pull = (headers: Record<string, string> = {}) =>
+        getSitesSnapshotCurrent(
+          new Request('http://cms.test/api/sites/snapshot/current', {
+            headers: { ...bearer(fixtures.token), ...headers },
+          }),
+        )
+      const snapshot: Snapshot = {
+        publicationId: '',
+        siteKey: fixtures.site.slug,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        hash: 'hash-old',
+        collections: {},
+      }
+      const [old] = await db
+        .insert(publication)
+        .values({
+          siteId: fixtures.site.id,
+          snapshot,
+          snapshotHash: 'hash-old',
+          status: 'live',
+        })
+        .returning()
+      expect(old.hasAssets).toBe(false)
+      const legacy = await pull({ 'If-None-Match': '*' })
+      expect(legacy.status).toBe(200)
+      expect(legacy.headers.get('ETag')).toBeNull()
+
+      const [stored] = await db
+        .insert(publication)
+        .values({
+          siteId: fixtures.site.id,
+          snapshot: { ...snapshot, hash: 'hash-new', assets: [] },
+          snapshotHash: 'hash-new',
+          status: 'live',
+        })
+        .returning()
+      expect(stored.hasAssets).toBe(true)
+      const first = await pull()
+      const etag = first.headers.get('ETag')
+      expect(etag).toMatch(/^"[0-9a-f]{40}"$/)
+      expect(((await first.json()) as Snapshot).publicationId).toBe(stored.id)
+      const again = await pull({ 'If-None-Match': etag! })
+      expect(again.status).toBe(304)
+    })
+  })
+
   it('separates build and schema tokens and rejects unsafe identifiers', async () => {
     await withTestSite(async (fixtures) => {
       const post = (token: string, collections: unknown) =>
