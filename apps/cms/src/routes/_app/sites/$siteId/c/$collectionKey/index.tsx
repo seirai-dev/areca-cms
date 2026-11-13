@@ -6,6 +6,7 @@ import {
   collectionEntriesQuery,
   missingLanguageFilter,
 } from '#/features/collection/use-collection-entries'
+import { prefetchInBrowser } from '#/lib/route-prefetch'
 
 /** `/sites/$siteId/c/$collectionKey`: one collection's entries. */
 export const Route = createFileRoute('/_app/sites/$siteId/c/$collectionKey/')({
@@ -13,23 +14,24 @@ export const Route = createFileRoute('/_app/sites/$siteId/c/$collectionKey/')({
     /** "Missing translation" filter: a language tag, in `?missing=`. */
     missing: z.string().min(1).max(40).optional().catch(undefined),
   }),
-  // The first page with the screen's initial filter, started early and not
-  // awaited (see the site layout's loader).
+  // The first page with the screen's initial filter, started early (see
+  // lib/route-prefetch.ts).
   loaderDeps: ({ search }) => ({ missing: search.missing }),
-  loader: ({ context, params, deps }) => {
-    void context.queryClient.prefetchInfiniteQuery(
-      collectionEntriesQuery({
-        siteId: context.site.id,
-        collectionKey: params.collectionKey,
-        status: 'all',
-        search: '',
-        missingLanguage: missingLanguageFilter(
-          context.site.languages,
-          deps.missing,
-        ),
-      }),
-    )
-  },
+  loader: ({ context, params, deps }) =>
+    prefetchInBrowser(() =>
+      context.queryClient.prefetchInfiniteQuery(
+        collectionEntriesQuery({
+          siteId: context.site.id,
+          collectionKey: params.collectionKey,
+          status: 'all',
+          search: '',
+          missingLanguage: missingLanguageFilter(
+            context.site.languages,
+            deps.missing,
+          ),
+        }),
+      ),
+    ),
   component: CollectionPage,
 })
 

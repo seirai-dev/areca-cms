@@ -7,6 +7,7 @@ import {
   entryQuery,
   previewUrlQuery,
 } from '#/lib/content/queries'
+import { prefetchInBrowser } from '#/lib/route-prefetch'
 
 /**
  * Edit an entry: the editor in focus mode (no sidebar), rendered by the
@@ -24,22 +25,21 @@ export const Route = createFileRoute(
   staticData: { shell: 'focus' },
   // The entry starts loading next to the collections (site layout) and the
   // editor's code, instead of after them; its preview URL follows the entry.
-  // Hovering a link loads the entry only. Not awaited: the editor keeps its
-  // own loading and error states.
+  // Hovering a link loads the entry only (see lib/route-prefetch.ts).
   loader: ({ context, params, preload }) => {
     const { queryClient, site } = context
-    const entry = queryClient.prefetchQuery(entryQuery(params.entryId))
-    if (preload) return
-    void queryClient.prefetchQuery(aiAvailabilityQuery())
-    void entry.then(() => {
-      const slug = queryClient.getQueryData(
-        entryQuery(params.entryId).queryKey,
-      )?.slug
+    const entry = entryQuery(params.entryId)
+    prefetchInBrowser(async () => {
+      await queryClient.prefetchQuery(entry)
+      if (preload) return
+      const slug = queryClient.getQueryData(entry.queryKey)?.slug
       if (slug)
-        void queryClient.prefetchQuery(
+        await queryClient.prefetchQuery(
           previewUrlQuery(site.id, params.collectionKey, slug),
         )
     })
+    if (!preload)
+      prefetchInBrowser(() => queryClient.prefetchQuery(aiAvailabilityQuery()))
   },
   component: () => null,
 })

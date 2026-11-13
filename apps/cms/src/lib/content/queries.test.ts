@@ -1,5 +1,5 @@
 import { QueryClient } from '@tanstack/react-query'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { queryKeys } from './query-keys'
 
@@ -38,8 +38,14 @@ async function runLoader(queryClient: QueryClient, preload: boolean) {
   await vi.waitFor(() => expect(queryClient.isFetching()).toBe(0))
 }
 
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
 describe('editor route loader', () => {
   beforeEach(() => {
+    // The loader prefetches in the browser only (lib/route-prefetch.ts).
+    vi.stubGlobal('window', globalThis)
     vi.clearAllMocks()
     fns.getEntryFn.mockResolvedValue({ id: 'entry_1', slug: 'hello' })
     fns.getPreviewUrlFn.mockResolvedValue({ url: 'https://site/preview' })
@@ -73,5 +79,14 @@ describe('editor route loader', () => {
     await runLoader(queryClient, false)
     expect(fns.getEntryFn).toHaveBeenCalledTimes(1)
     expect(fns.getPreviewUrlFn).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('editor route loader on the server', () => {
+  it('starts nothing, so the HTML shows the loading state as before', async () => {
+    vi.clearAllMocks()
+    const queryClient = new QueryClient()
+    await runLoader(queryClient, false)
+    expect(fns.getEntryFn).not.toHaveBeenCalled()
   })
 })

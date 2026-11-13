@@ -8,6 +8,7 @@ import {
   globalQuery,
 } from '#/features/globals/global-editor-screen'
 import { aiAvailabilityQuery } from '#/lib/content/queries'
+import { prefetchInBrowser } from '#/lib/route-prefetch'
 
 /**
  * Site content section (global): the single-form editor. Any site member can
@@ -21,11 +22,13 @@ export const Route = createFileRoute('/_app/sites/$siteId/globals/$globalKey')({
     /** Visual mode (docs/design/visual-editor.md). Below 1280 px it is ignored. */
     view: z.enum(['visual']).optional().catch(undefined),
   }),
-  // Started early, not awaited (see the site layout's loader).
+  // Started early (see lib/route-prefetch.ts).
   loader: ({ context, params, preload }) => {
     const { queryClient, site } = context
-    void queryClient.prefetchQuery(globalQuery(site.id, params.globalKey))
-    if (!preload) void queryClient.prefetchQuery(aiAvailabilityQuery())
+    prefetchInBrowser(
+      () => queryClient.prefetchQuery(globalQuery(site.id, params.globalKey)),
+      () => !preload && queryClient.prefetchQuery(aiAvailabilityQuery()),
+    )
   },
   component: GlobalRoute,
 })
