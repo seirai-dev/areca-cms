@@ -63,11 +63,12 @@ import {
   readDevEnvironment,
 } from './rows'
 import type { DevEnvActor, SiteRow } from './rows'
+import { getSiteOrThrow } from '#/server/content/site-core'
+import type { SiteCore } from '#/server/content/site-core'
 import {
   keepDraftRevision,
   nextOriginBaseline,
   productionReferenceLookup,
-  readSiteRow,
   readyProblems,
   referenceWarnings,
   slugCollisionMessage,
@@ -253,7 +254,7 @@ async function runPush(
     .select()
     .from(collection)
     .where(eq(collection.siteId, prod.id))
-  const productionSite = await readSiteRow(tx, prod.id)
+  const productionSite = await getSiteOrThrow(prod.id, tx)
 
   const created = await pushEntriesPassOne(
     state,
@@ -988,7 +989,7 @@ async function relinkWrittenEntries(
  */
 async function resolveReadyCandidates(
   tx: Tx,
-  productionSite: SiteRow,
+  productionSite: SiteCore,
   candidates: ReadyCandidate[],
   warnings: PushWarning[],
 ) {

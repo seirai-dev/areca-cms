@@ -32,6 +32,7 @@ import {
   ValidationError,
 } from '#/server/content/errors'
 import { generateSiteToken } from '#/server/content/site-auth'
+import { getSiteOrThrow } from '#/server/content/site-core'
 import { deleteDevSiteRows } from '#/server/dev-env/delete'
 import { lockProductionSite } from '#/server/dev-env/lock'
 import { lockProductionRow } from '#/server/dev-env/rows'
@@ -292,12 +293,7 @@ export async function updateSite(
   },
   actorId: string,
 ) {
-  const existing = (
-    await db.select().from(site).where(eq(site.id, id)).limit(1)
-  ).at(0)
-  if (!existing) {
-    throw new NotFoundError(m.server_site_not_found())
-  }
+  const existing = await getSiteOrThrow(id)
   if (isDevSite(existing)) {
     // Dev envs stay in Demo mode with no deployment target (Decision 7).
     // The production URL and the preview URL stay editable.
@@ -526,12 +522,7 @@ export async function rotateSiteTokenAdmin(
   privilege: 'build' | 'schema' = 'build',
   actorId: string,
 ) {
-  const existing = (
-    await db.select().from(site).where(eq(site.id, id)).limit(1)
-  ).at(0)
-  if (!existing) {
-    throw new NotFoundError(m.server_site_not_found())
-  }
+  const existing = await getSiteOrThrow(id)
 
   const generated = generateSiteToken()
   await db.transaction(async (tx) => {
@@ -565,12 +556,7 @@ export async function rotateSiteTokenAdmin(
 }
 
 export async function deleteSite(id: string, actorId: string) {
-  const existing = (
-    await db.select().from(site).where(eq(site.id, id)).limit(1)
-  ).at(0)
-  if (!existing) {
-    throw new NotFoundError(m.server_site_not_found())
-  }
+  const existing = await getSiteOrThrow(id)
 
   if (isDevSite(existing)) {
     // Dev content is never archived; the dev env is deleted from its

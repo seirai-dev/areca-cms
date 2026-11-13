@@ -2,14 +2,14 @@
 import { and, eq } from 'drizzle-orm'
 
 import { db } from '#/db'
-import { membership, site } from '#/db/schema'
+import { membership } from '#/db/schema'
 import { requireOrgMemberOrNotFound, requireUser } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { NotFoundError } from '#/server/content/errors'
 import { assertSiteVisibleTo } from '#/server/security/site-visibility'
 
 import type { McpRole } from './keys'
-import { siteCoreColumns } from '#/server/content/site-core'
+import { getSiteOrThrow } from '#/server/content/site-core'
 
 /**
  * Site access for the Connect AI pages and their server functions. Answers
@@ -18,12 +18,7 @@ import { siteCoreColumns } from '#/server/content/site-core'
  */
 export async function requireMcpSiteAccess(siteId: string) {
   await requireUser()
-  const [found] = await db
-    .select(siteCoreColumns)
-    .from(site)
-    .where(eq(site.id, siteId))
-    .limit(1)
-  if (!found) throw new NotFoundError(m.server_site_not_found())
+  const found = await getSiteOrThrow(siteId)
   const session = await requireOrgMemberOrNotFound(
     found.organizationId,
     undefined,

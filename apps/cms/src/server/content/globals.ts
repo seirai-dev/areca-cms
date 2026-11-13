@@ -25,7 +25,7 @@ import {
   languageBlockers,
   normalizeRequiredLanguages,
 } from './locale-validation.ts'
-import { siteCoreColumns } from './site-core.ts'
+import { getSiteOrThrow } from './site-core.ts'
 
 /**
  * Site content sections ("globals"). A section is a `collection` row with
@@ -350,16 +350,7 @@ export async function upsertGlobal(
   actorId?: string,
 ) {
   const prepared = prepareGlobalUpsert(input)
-  const existingSite = (
-    await db
-      .select(siteCoreColumns)
-      .from(site)
-      .where(eq(site.id, siteId))
-      .limit(1)
-  ).at(0)
-  if (!existingSite) {
-    throw new NotFoundError(m.server_site_not_found())
-  }
+  const existingSite = await getSiteOrThrow(siteId)
 
   const now = new Date()
 

@@ -1,9 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
-import { eq } from 'drizzle-orm'
 import { z } from '#/lib/zod'
 
-import { db } from '#/db'
-import { site } from '#/db/schema'
 import {
   requireAgencyAdmin,
   requireOrgMemberOrNotFound,
@@ -28,7 +25,7 @@ import {
   requestRollback,
 } from '#/server/publishing/publications'
 import { listPendingRelease } from '#/server/publishing/release-diff'
-import { siteCoreColumns } from '#/server/content/site-core'
+import { findSite } from '#/server/content/site-core'
 
 const loose = { strict: { output: false } as const }
 
@@ -42,13 +39,7 @@ async function requireSiteAccess(
   // Authenticate first; a missing site and a site the caller cannot access
   // look identical (NotFound), so other tenants' ids cannot be probed.
   await requireUser()
-  const found = (
-    await db
-      .select(siteCoreColumns)
-      .from(site)
-      .where(eq(site.id, siteId))
-      .limit(1)
-  ).at(0)
+  const found = await findSite(siteId)
   if (!found) {
     throw new NotFoundError(notFoundMessage())
   }

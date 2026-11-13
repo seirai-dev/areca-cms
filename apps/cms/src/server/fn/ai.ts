@@ -1,9 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
-import { eq } from 'drizzle-orm'
 import { z } from '#/lib/zod'
 
-import { db } from '#/db'
-import { site } from '#/db/schema'
 import { canonicalLocale, localeTagSchema } from '#/lib/content-locale'
 import { ID_MAX_LENGTH } from '#/lib/content-limits'
 import {
@@ -32,7 +29,7 @@ import { NotFoundError, ValidationError } from '#/server/content/errors'
 import { assertSiteVisibleTo } from '#/server/security/site-visibility'
 import { resolveSlug, validateEntryData } from '#/server/content/validation'
 import { allowUserAction } from '#/server/http/rate-limit.server'
-import { siteCoreColumns } from '#/server/content/site-core'
+import { getSiteOrThrow } from '#/server/content/site-core'
 
 const aiFn = { strict: { output: false } as const }
 
@@ -95,14 +92,7 @@ export const generateEntrySeoFn = createServerFn({ method: 'POST', ...aiFn })
   )
   .handler(async ({ data }) => {
     await requireUser()
-    const found = (
-      await db
-        .select(siteCoreColumns)
-        .from(site)
-        .where(eq(site.id, data.siteId))
-        .limit(1)
-    ).at(0)
-    if (!found) throw new NotFoundError(m.server_site_not_found())
+    const found = await getSiteOrThrow(data.siteId)
     // Access before anything that depends on the site's settings: a locale
     // check first would tell a caller which languages a site it cannot see has.
     // Anyone who can edit the site's content (editor, owner, agency admin).

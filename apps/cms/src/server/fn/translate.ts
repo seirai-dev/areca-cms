@@ -1,9 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
-import { eq } from 'drizzle-orm'
 import { z } from '#/lib/zod'
 
-import { db } from '#/db'
-import { site } from '#/db/schema'
 import { ID_MAX_LENGTH } from '#/lib/content-limits'
 import {
   canonicalLocale,
@@ -24,7 +21,7 @@ import { NotFoundError, ValidationError } from '#/server/content/errors'
 import { assertSiteVisibleTo } from '#/server/security/site-visibility'
 import { languageName } from '#/server/content/locale-validation'
 import { allowUserAction } from '#/server/http/rate-limit.server'
-import { siteCoreColumns } from '#/server/content/site-core'
+import { getSiteOrThrow } from '#/server/content/site-core'
 
 /**
  * Same paid-AI quota as generateEntrySeoFn (one bucket, so suggestions and
@@ -59,14 +56,7 @@ export const translateContentFn = createServerFn({
   )
   .handler(async ({ data }) => {
     await requireUser()
-    const found = (
-      await db
-        .select(siteCoreColumns)
-        .from(site)
-        .where(eq(site.id, data.siteId))
-        .limit(1)
-    ).at(0)
-    if (!found) throw new NotFoundError(m.server_site_not_found())
+    const found = await getSiteOrThrow(data.siteId)
     const session = await requireOrgMemberOrNotFound(
       found.organizationId,
       undefined,

@@ -1,7 +1,7 @@
 import { and, desc, eq, gt, inArray } from 'drizzle-orm'
 
 import { db } from '#/db'
-import { collection, entry, publication, site, user } from '#/db/schema'
+import { collection, entry, publication, user } from '#/db/schema'
 import { entryTitle } from '#/lib/content/utils'
 import { globalsAsEntryLists } from '#/lib/globals'
 import { stableStringify } from '#/lib/stable-json'
@@ -14,7 +14,7 @@ import type {
 } from '#/lib/types'
 import { buildSnapshot } from '#/server/content/snapshot'
 import type { LinkWarning } from '#/server/content/snapshot'
-import { siteCoreColumns } from '#/server/content/site-core'
+import { findSite } from '#/server/content/site-core'
 
 /**
  * Approved-candidate vs live (or demo) snapshot.
@@ -364,13 +364,7 @@ async function listScheduledUpcoming(
 export async function diffApprovedRelease(
   siteId: string,
 ): Promise<ApprovedReleaseDiff> {
-  const existingSite = (
-    await db
-      .select(siteCoreColumns)
-      .from(site)
-      .where(eq(site.id, siteId))
-      .limit(1)
-  ).at(0)
+  const existingSite = await findSite(siteId)
   const publishingMode = existingSite?.publishingMode ?? 'production'
   const live = await latestPublication(siteId, 'live')
   const demo =

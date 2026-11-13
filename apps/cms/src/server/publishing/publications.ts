@@ -35,7 +35,7 @@ import {
 } from '#/server/content/errors'
 import { diffApprovedRelease } from '#/server/publishing/release-diff'
 import { isDevSite } from '#/server/security/site-visibility'
-import { siteCoreColumns } from '#/server/content/site-core'
+import { getSiteOrThrow, siteCoreColumns } from '#/server/content/site-core'
 import type { SiteCore } from '#/server/content/site-core'
 
 export function dbActorId(actorId: string | null | undefined) {
@@ -53,20 +53,6 @@ export function deploymentBlockers(row: SiteCore): string[] {
   return hasCompleteDeploymentTarget(row.deploymentTarget)
     ? []
     : [m.server_publication_deployment_required()]
-}
-
-export async function getSiteOrThrow(siteId: string) {
-  const row = (
-    await db
-      .select(siteCoreColumns)
-      .from(site)
-      .where(eq(site.id, siteId))
-      .limit(1)
-  ).at(0)
-  if (!row) {
-    throw new NotFoundError(m.server_site_not_found())
-  }
-  return row
 }
 
 function uniqueActorIds(ids: Array<string | null | undefined>) {
