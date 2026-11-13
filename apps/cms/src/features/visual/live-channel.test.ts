@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { channelReducer, initialChannel, requestStatus } from './live-channel'
+import {
+  DEBOUNCE_MAX_WAIT_MS,
+  DEBOUNCE_MS,
+  channelReducer,
+  initialChannel,
+  requestStatus,
+  sendDelay,
+} from './live-channel'
 import type { ChannelState } from './live-channel'
 
 /** Runs events in order and returns the final state. */
@@ -239,5 +246,20 @@ describe('requestStatus', () => {
       live,
     )
     expect(requestStatus(state)).toBe('idle')
+  })
+})
+
+describe('sendDelay', () => {
+  it('waits for a pause in typing', () => {
+    expect(sendDelay(1000, 1000)).toBe(DEBOUNCE_MS)
+    expect(DEBOUNCE_MS).toBe(400)
+  })
+
+  it('sends at most a second after the first unsent change while typing goes on', () => {
+    expect(DEBOUNCE_MAX_WAIT_MS).toBe(1000)
+    // Keys every 200 ms: the pause restarts, the max wait does not.
+    expect(sendDelay(1700, 1000)).toBe(300)
+    expect(sendDelay(1900, 1000)).toBe(100)
+    expect(sendDelay(2500, 1000)).toBe(0)
   })
 })

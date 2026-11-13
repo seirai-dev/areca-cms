@@ -13,7 +13,7 @@ import { SharedMarker, translateProps, useLocaleFields } from './locale-fields'
 import type { LocaleFields } from './locale-fields'
 import type { LinkContext } from './rich-text/link-picker'
 import { RichTextEditor } from './rich-text/rich-text-editor'
-import { RichTextPreview } from './rich-text/rich-text-preview'
+import { LazyRichTextPreview } from './lazy-parts'
 
 /** Main-language reference under a translatable field, when not on main. */
 function referenceFor(
@@ -89,6 +89,21 @@ export function EditorCanvas({
 }) {
   const firstBodyRef = React.useRef<HTMLElement | null>(null)
   const locale = useLocaleFields()
+  // One change handler per rich text field that never changes, so the fields
+  // not being typed in skip their render (RichTextEditor is memoised).
+  const onChangeRef = React.useRef(onChange)
+  onChangeRef.current = onChange
+  const [handlers] = React.useState(
+    () => new Map<string, (value: unknown) => void>(),
+  )
+  const handlerFor = (key: string) => {
+    let handler = handlers.get(key)
+    if (!handler) {
+      handler = (value) => onChangeRef.current(key, value)
+      handlers.set(key, handler)
+    }
+    return handler
+  }
   const titleValue =
     titleField && typeof data[titleField.key] === 'string'
       ? (data[titleField.key] as string)
@@ -204,13 +219,17 @@ export function EditorCanvas({
                   id={`field-${field.key}`}
                   label={field.label}
                   value={data[field.key]}
-                  onChange={(value) => onChange(field.key, value)}
+                  onChange={handlerFor(field.key)}
                   organizationId={organizationId}
                   linkContext={linkContext}
                   invalid={Boolean(errors[field.key])}
                   previewing={previewing}
                   compact={compact}
-                  preview={<RichTextPreview value={data[field.key]} />}
+                  preview={
+                    previewing ? (
+                      <LazyRichTextPreview value={data[field.key]} />
+                    ) : undefined
+                  }
                 />
               </div>
             ) : (

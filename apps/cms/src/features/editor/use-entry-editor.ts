@@ -4,6 +4,7 @@ import { useBlocker } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
 import {
+  createDraftWriter,
   persistDraft,
   readRecoveredDraft,
   shouldKeepEditorOpen,
@@ -13,6 +14,7 @@ import { readLocale, writeLocale } from '#/lib/content-locale'
 import { isValidSlug } from '#/lib/slug'
 import type { LocaleCtx } from '#/lib/content-locale'
 import { OVERVIEW_ENTRIES, queryKeys } from '#/lib/content/query-keys'
+import { entryQuery as entryOptions } from '#/lib/content/queries'
 import {
   errorMessage,
   fieldErrorsFromUnknown,
@@ -31,7 +33,11 @@ import { invalidateDevSync } from '#/features/dev-env/invalidate'
 import type { EntryData, EntryStatus, Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import type { LocaleBlocker } from './language-state'
-import { autosaveDelay, scheduledPollInterval } from './editor-timing'
+import {
+  DRAFT_WRITE_DELAY,
+  autosaveDelay,
+  scheduledPollInterval,
+} from './editor-timing'
 import { isExplicitTrigger } from './save-intent'
 import type { SaveTrigger } from './save-intent'
 import {
@@ -181,11 +187,8 @@ export function useEntryEditor({
   const slugField = fields.find((field) => field.type === 'slug')
 
   const entryQuery = useQuery({
-    queryKey: queryKeys.entry(entryId ?? 'new'),
-    queryFn: () => getEntryFn({ data: { id: entryId! } }),
+    ...entryOptions(entryId ?? 'new'),
     enabled: Boolean(entryId),
-    // Opening an entry always loads its current version.
-    staleTime: 0,
     // While editing, a focus refetch is wasted: the DRAFT_CONFLICT version
     // check already protects against a concurrent edit.
     refetchOnWindowFocus: false,
@@ -263,17 +266,52 @@ export function useEntryEditor({
     [],
   )
 
-  const dataJson = JSON.stringify(data)
-  const dirty = dataJson !== baseline
+  // The one serialisation of the entry per change.
+  const dirty = React.useMemo(
+    () => JSON.stringify(data) !== baseline,
+    [data, baseline],
+  )
+
+  // The browser copy for crash recovery is written once typing pauses, and at
+  // once when the tab is hidden or closed, before navigation and on unmount.
+  const recoveryReady =
+    Boolean(recoveryUserId) && !(entryId && hydratedId !== entryId)
+  const recoveryReadyRef = React.useRef(recoveryReady)
+  recoveryReadyRef.current = recoveryReady
+  // Reads only refs, so the writer made on the first render stays correct.
+  const [draftWriter] = React.useState(() =>
+    createDraftWriter(() => {
+      if (!recoveryReadyRef.current || !isDirtyNow()) return
+      try {
+        persistDraft(
+          localStorage,
+          recoveryKeyRef.current,
+          dataRef.current,
+          versionRef.current,
+        )
+      } catch {
+        setFormError(m.editor_draft_recovery_unavailable())
+      }
+    }, DRAFT_WRITE_DELAY),
+  )
+  const flushDraft = draftWriter.flush
 
   React.useEffect(() => {
-    if (!dirty || !recoveryUserId || (entryId && hydratedId !== entryId)) return
-    try {
-      persistDraft(localStorage, recoveryKey, data, versionRef.current)
-    } catch {
-      setFormError(m.editor_draft_recovery_unavailable())
+    if (dirty && recoveryReady) draftWriter.schedule()
+  }, [data, dirty, recoveryKey, recoveryReady, draftWriter])
+
+  React.useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') flushDraft()
     }
-  }, [dataJson, dirty, recoveryKey, recoveryUserId, entryId, hydratedId])
+    document.addEventListener('visibilitychange', onHide)
+    window.addEventListener('pagehide', flushDraft)
+    return () => {
+      document.removeEventListener('visibilitychange', onHide)
+      window.removeEventListener('pagehide', flushDraft)
+      flushDraft()
+    }
+  }, [flushDraft])
 
   React.useEffect(() => {
     setRecoveredDraft(null)
@@ -326,16 +364,6 @@ export function useEntryEditor({
     (next: EntryData, touched: string[]) => {
       setServerBlockers((current) => (current.length > 0 ? [] : current))
       setData(next)
-      try {
-        persistDraft(
-          localStorage,
-          recoveryKeyRef.current,
-          next,
-          versionRef.current,
-        )
-      } catch {
-        setFormError(m.editor_draft_recovery_unavailable())
-      }
       setFieldErrors((errors) => {
         const stale = Object.keys(errors).filter((path) =>
           touched.some((item) => path === item || path.startsWith(`${item}.`)),
@@ -410,18 +438,7 @@ export function useEntryEditor({
   }
 
   function updateFieldRaw(key: string, value: unknown) {
-    const next = { ...dataRef.current, [key]: value }
-    setData(next)
-    try {
-      persistDraft(
-        localStorage,
-        recoveryKeyRef.current,
-        next,
-        versionRef.current,
-      )
-    } catch {
-      setFormError(m.editor_draft_recovery_unavailable())
-    }
+    setData({ ...dataRef.current, [key]: value })
   }
 
   /* ----------------------------------------------------------------------
@@ -730,7 +747,7 @@ export function useEntryEditor({
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [dataJson, dirty])
+  }, [data, dirty])
 
   // Blur of the window or a hidden tab saves at once.
   React.useEffect(() => {
@@ -752,6 +769,7 @@ export function useEntryEditor({
   // Leaving: wait (max 3s) for the save; ask only when it could not save.
   const blocker = useBlocker({
     shouldBlockFn: async ({ current, next }) => {
+      flushDraft()
       if (bypassRef.current) return false
       if (current.pathname === next.pathname) return false
       if (!isDirtyNow() && !runningRef.current) return false
@@ -1053,17 +1071,29 @@ export function useEntryEditor({
 
   const isNew = !entryId
   const errorCount = Object.keys(fieldErrors).filter(Boolean).length
-  const markable = entry
-    ? entry.status !== 'published' ||
-      isEditedSinceReady({
-        status: entry.status,
-        updatedAt: entry.updatedAt,
-        draftData: initialEntryData(fields, data),
-        publishedData: entry.publishedData
-          ? initialEntryData(fields, entry.publishedData)
-          : entry.publishedData,
-      })
-    : true
+  /** True when Mark ready has something to approve in `draft`. */
+  const isMarkable = React.useCallback(
+    (draft: EntryData) =>
+      entry
+        ? entry.status !== 'published' ||
+          isEditedSinceReady({
+            status: entry.status,
+            updatedAt: entry.updatedAt,
+            draftData: initialEntryData(fields, draft),
+            publishedData: entry.publishedData
+              ? initialEntryData(fields, entry.publishedData)
+              : entry.publishedData,
+          })
+        : true,
+    [entry, fields],
+  )
+  // Compares two serialisations on a published entry; kept out of the
+  // keystroke's render. Actions read the current draft (`isMarkable`).
+  const deferredData = React.useDeferredValue(data)
+  const markable = React.useMemo(
+    () => isMarkable(deferredData),
+    [isMarkable, deferredData],
+  )
   const busy =
     markReadyMutation.isPending ||
     goLiveNowMutation.isPending ||
@@ -1149,7 +1179,9 @@ export function useEntryEditor({
     markReady: () => markReadyMutation.mutate({}),
     markReadyPending: markReadyMutation.isPending,
     goLiveNow: async () => {
-      const result = await goLiveNowMutation.mutateAsync(markable)
+      const result = await goLiveNowMutation.mutateAsync(
+        isMarkable(dataRef.current),
+      )
       return result
     },
     goLiveNowPending: goLiveNowMutation.isPending || goLive.isPending,

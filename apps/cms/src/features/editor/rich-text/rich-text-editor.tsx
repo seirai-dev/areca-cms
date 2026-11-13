@@ -203,7 +203,7 @@ function blockCommands(): (Command & { id: BlockType })[] {
  * opens the same insert actions. Every earlier capability, shortcut and test
  * id is kept.
  */
-export function RichTextEditor({
+export const RichTextEditor = React.memo(function RichTextEditorField({
   id,
   label,
   value,
@@ -268,12 +268,14 @@ export function RichTextEditor({
 
   // TipTap writes its base ProseMirror stylesheet into <head>; it needs the nonce.
   const cspNonce = useCspNonce()
-  const editor = useEditor({
-    extensions: EDITOR_EXTENSIONS,
-    content: (value as object | null) ?? emptyRichText(),
-    immediatelyRender: false,
-    injectNonce: cspNonce,
-    editorProps: {
+  // `useEditor` compares its options on every render and updates the
+  // ProseMirror view when one differs, so they must keep their identity. The
+  // content is only read at creation; the effect below applies later changes.
+  const [initialContent] = React.useState(
+    () => (value as object | null) ?? emptyRichText(),
+  )
+  const editorProps = React.useMemo(
+    () => ({
       attributes: {
         class: cn(
           'prose max-w-none pb-8 text-body-lg text-text-primary focus:outline-none',
@@ -287,10 +289,23 @@ export function RichTextEditor({
         'aria-multiline': 'true',
         role: 'textbox',
       },
-      handleKeyDown: (_view, event) => slashKeyRef.current(event),
-    },
+      handleKeyDown: (_view: unknown, event: KeyboardEvent) =>
+        slashKeyRef.current(event),
+    }),
+    [compact, id, label],
+  )
+  /** The document this editor last reported, to tell its own changes from outside ones. */
+  const emittedRef = React.useRef<unknown>(undefined)
+  const editor = useEditor({
+    extensions: EDITOR_EXTENSIONS,
+    content: initialContent,
+    immediatelyRender: false,
+    injectNonce: cspNonce,
+    editorProps,
     onUpdate: ({ editor: next }) => {
-      onChange(next.getJSON())
+      const json = next.getJSON()
+      emittedRef.current = json
+      onChange(json)
     },
   })
 
@@ -319,9 +334,10 @@ export function RichTextEditor({
         : null,
   })
 
-  // Keep the document in step with outside changes (restore, hydration).
+  // Keep the document in step with outside changes (restore, hydration). The
+  // value this editor just reported needs no comparison.
   React.useEffect(() => {
-    if (!editor) return
+    if (!editor || value === emittedRef.current) return
     const incoming = (value as object | null) ?? emptyRichText()
     if (JSON.stringify(editor.getJSON()) === JSON.stringify(incoming)) return
     editor.commands.setContent(incoming, { emitUpdate: false })
@@ -947,7 +963,7 @@ export function RichTextEditor({
       />
     </div>
   )
-}
+})
 
 type SlashState = {
   query: string

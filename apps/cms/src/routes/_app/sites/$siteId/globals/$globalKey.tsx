@@ -1,7 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { localeTagParam, optionalParam, z } from '#/lib/search-params'
 
-import { GlobalEditorScreen } from '#/features/globals/global-editor-screen'
+import {
+  GlobalEditorScreen,
+  globalQuery,
+} from '#/features/globals/global-editor-screen'
+import { aiAvailabilityQuery } from '#/lib/content/queries'
+import { prefetchInBrowser } from '#/lib/route-prefetch'
 
 /**
  * Site content section (global): the single-form editor. Any site member can
@@ -15,6 +20,14 @@ export const Route = createFileRoute('/_app/sites/$siteId/globals/$globalKey')({
     /** Visual mode (docs/design/visual-editor.md). Below 1280 px it is ignored. */
     view: optionalParam(z.enum(['visual'])),
   }),
+  // Started early (see lib/route-prefetch.ts).
+  loader: ({ context, params, preload }) => {
+    const { queryClient, site } = context
+    prefetchInBrowser(
+      () => queryClient.prefetchQuery(globalQuery(site.id, params.globalKey)),
+      () => !preload && queryClient.prefetchQuery(aiAvailabilityQuery()),
+    )
+  },
   component: GlobalRoute,
 })
 

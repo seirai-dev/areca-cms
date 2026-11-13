@@ -4,6 +4,10 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Stack, WarningCircle } from '@phosphor-icons/react'
 
 import { queryKeys } from '#/lib/content/query-keys'
+import {
+  aiAvailabilityQuery,
+  collectionsQuery as collectionsOptions,
+} from '#/lib/content/queries'
 import { initialEntryData } from '#/lib/content/utils'
 import { TOGGLE_DETAILS_EVENT, useShortcut } from '#/components/shell/shortcuts'
 import {
@@ -41,11 +45,10 @@ import type { Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 import { readEntrySeo, SEO_KEY } from '#/lib/seo'
-import { getAiAvailabilityFn } from '#/server/fn/ai'
-import { listCollectionsFn, listInboundReferencesFn } from '#/server/fn/content'
+import { listInboundReferencesFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 
-import { AiSeoDialog } from './ai-seo-dialog'
+import { LazyAiSeoDialog } from './lazy-parts'
 import { TranslateLanguageButton } from './translate-language-button'
 import { useAiTranslation } from './use-ai-translation'
 
@@ -75,11 +78,11 @@ import { conflictReadyBlock, EditorConflictNotice } from './conflict-notice'
 import { SeoPanel, plainTextOf } from './seo-panel'
 import { useContentLanguage } from './use-content-language'
 import { useEntryEditor } from './use-entry-editor'
-import { PreviewPane } from '#/features/visual/preview-pane'
+import { LazyPreviewPane } from '#/features/visual/lazy-preview-pane'
 import { VisualEditorLayout } from '#/features/visual/visual-editor-layout'
 import { VisualFullScreenProvider } from '#/features/visual/visual-context'
 import { VisualShortcuts } from '#/features/visual/visual-shortcuts'
-import { seoClickFields } from '#/features/visual/use-click-to-edit'
+import { seoClickFields } from '#/features/visual/click-fields'
 import type { ClickSource } from '#/features/visual/preview-pane'
 import { announceReveal, pulseField } from './reveal-field'
 import {
@@ -118,12 +121,7 @@ export function EditorScreen({
   onCreated: (id: string) => Promise<unknown> | void
   onDeleted: () => Promise<unknown> | void
 }) {
-  const collectionsQuery = useQuery({
-    queryKey: queryKeys.collections(site.id),
-    queryFn: () => listCollectionsFn({ data: { siteId: site.id } }),
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-  })
+  const collectionsQuery = useQuery(collectionsOptions(site.id))
   const collection = (
     collectionsQuery.data as CollectionRecord[] | undefined
   )?.find((item) => item.key === collectionKey)
@@ -274,11 +272,7 @@ function EntryEditorView({
     [data, ctx, lang.main],
   )
   const notMainLocale = Boolean(ctx && active && !lang.isMain)
-  const aiQuery = useQuery({
-    queryKey: queryKeys.aiAvailability(),
-    queryFn: () => getAiAvailabilityFn(),
-    staleTime: 30_000,
-  })
+  const aiQuery = useQuery(aiAvailabilityQuery())
   // AI translation needs AI set up and a saved entry (the server reads it).
   const translateEnabled =
     aiQuery.data?.enabled === true && Boolean(editor.entryId)
@@ -461,6 +455,32 @@ function EntryEditorView({
     save: editor.save,
   })
 
+  // A development environment has no releases: no "unreleased changes" dot.
+  const editedSinceReady = React.useMemo(
+    () =>
+      entry && !isDev
+        ? isEditedSinceReady({
+            status: entry.status,
+            updatedAt: entry.updatedAt,
+            draftData: initialEntryData(fields, entry.draftData),
+            publishedData: entry.publishedData
+              ? initialEntryData(fields, entry.publishedData)
+              : entry.publishedData,
+          })
+        : false,
+    [entry, isDev, fields],
+  )
+  const linkLocale = ctx ? active : null
+  const linkContext = React.useMemo(
+    () => ({
+      siteId,
+      entryId: editor.entryId ?? null,
+      locale: linkLocale,
+      devSite: isDev,
+    }),
+    [siteId, editor.entryId, linkLocale, isDev],
+  )
+
   if (routeEntryId && editor.entryQuery.isError && !entry) {
     return (
       <div
@@ -496,18 +516,6 @@ function EntryEditorView({
       ? (view[titleField.key] as string)
       : m.editor_untitled()
   const uiStatus = entry ? entryUiStatus(entry, live, isDev) : 'draft'
-  // A development environment has no releases: no "unreleased changes" dot.
-  const editedSinceReady =
-    entry && !isDev
-      ? isEditedSinceReady({
-          status: entry.status,
-          updatedAt: entry.updatedAt,
-          draftData: initialEntryData(fields, entry.draftData),
-          publishedData: entry.publishedData
-            ? initialEntryData(fields, entry.publishedData)
-            : entry.publishedData,
-        })
-      : false
   const primary: PrimaryState = editor.isNew
     ? 'new'
     : editor.markable
@@ -664,12 +672,7 @@ function EntryEditorView({
       errors={editor.fieldErrors}
       onChange={onLocaleChange}
       organizationId={site.organizationId}
-      linkContext={{
-        siteId,
-        entryId: editor.entryId ?? null,
-        locale: ctx ? active : null,
-        devSite: isDev,
-      }}
+      linkContext={linkContext}
       previewing={previewing}
       titleRef={titleRef}
       transitionName={
@@ -943,7 +946,7 @@ function EntryEditorView({
                 </>
               }
               preview={
-                <PreviewPane
+                <LazyPreviewPane
                   previewUrl={editor.previewUrl}
                   title={title}
                   lastSavedAt={editor.lastSavedAt}
@@ -1019,7 +1022,7 @@ function EntryEditorView({
 
           {translate.dialog}
 
-          <AiSeoDialog
+          <LazyAiSeoDialog
             open={aiOpen}
             onOpenChange={setAiOpen}
             siteId={siteId}

@@ -12,6 +12,7 @@ import {
 } from '@phosphor-icons/react'
 
 import { queryKeys } from '#/lib/content/query-keys'
+import { draftsByOthersQuery, recentEntriesQuery } from '#/lib/content/queries'
 import { EntryThumb } from '#/features/collection/entry-cover'
 import { useShell } from '#/components/shell/shell-context'
 import { useSiteCollections } from '#/components/shell/sidebar'
@@ -47,7 +48,6 @@ import { isDevSite } from '#/lib/site-environment'
 import { canManageSite, collectionIcon, displayHost } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
-import { listRecentEntriesFn } from '#/server/fn/content'
 
 /**
  * Site Overview (brief §3.3), phase 1: greeting, the attention strip, create
@@ -527,11 +527,7 @@ function RecentlyEdited({
   collections: SidebarCollection[]
 }) {
   const release = useReleaseStatus(site.id)
-  const recent = useQuery({
-    queryKey: queryKeys.recentEntries(site.id, 'recent'),
-    queryFn: () => listRecentEntriesFn({ data: { siteId: site.id, limit: 8 } }),
-    staleTime: 15_000,
-  })
+  const recent = useQuery(recentEntriesQuery(site.id))
   const loading = recent.isLoading
   const failed = recent.isError ? recent : undefined
   const byKey = new Map(collections.map((c) => [c.key, c]))
@@ -628,15 +624,7 @@ function useDraftsWaiting(
   collections: SidebarCollection[],
   enabled: boolean,
 ) {
-  const result = useQuery({
-    queryKey: queryKeys.recentEntries(siteId, 'drafts-by-others'),
-    queryFn: () =>
-      listRecentEntriesFn({
-        data: { siteId, draftsByOthers: true, limit: 3 },
-      }),
-    enabled,
-    staleTime: 30_000,
-  })
+  const result = useQuery({ ...draftsByOthersQuery(siteId), enabled })
   if (!enabled || !result.data) return { total: 0, items: [] }
   const keys = new Set(collections.map((c) => c.key))
   return {

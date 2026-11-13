@@ -46,7 +46,8 @@ import type { MeSite } from '#/lib/site-nav'
 import type { Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
-import { listCollectionsFn, listEntryCountsFn } from '#/server/fn/content'
+import { listEntryCountsFn } from '#/server/fn/content'
+import { collectionsQuery } from '#/lib/content/queries'
 
 export type SidebarCollection = {
   id: string
@@ -63,11 +64,8 @@ export function useSiteCollections(
   isAdmin: boolean,
 ) {
   const query = useQuery({
-    queryKey: queryKeys.collections(siteId ?? ''),
-    queryFn: () => listCollectionsFn({ data: { siteId: siteId! } }),
+    ...collectionsQuery(siteId ?? ''),
     enabled: Boolean(siteId),
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
   })
   const all = (query.data ?? []) as SidebarCollection[]
   const visible = isAdmin ? all : all.filter((item) => item.enabled)

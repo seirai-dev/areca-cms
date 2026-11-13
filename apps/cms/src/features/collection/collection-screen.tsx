@@ -18,7 +18,7 @@ import {
 } from '@phosphor-icons/react'
 
 import type { EntrySummary } from '#/lib/content/entry-summary'
-import { queryKeys } from '#/lib/content/query-keys'
+import { collectionsQuery as collectionsOptions } from '#/lib/content/queries'
 import { useShortcut } from '#/components/shell/shortcuts'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
@@ -53,7 +53,6 @@ import type { Field } from '#/lib/types'
 import { isMultilingual, nonMainLanguages } from '#/lib/site-languages'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
-import { listCollectionsFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 
 import {
@@ -63,6 +62,7 @@ import {
 } from './collection-controls'
 import { EntryCard, EntryListRow } from './entry-item'
 import {
+  missingLanguageFilter,
   useCollectionEntries,
   useCollectionView,
   useEntryBulkActions,
@@ -105,12 +105,7 @@ export function CollectionScreen({
   onMissingLanguageChange?: (value: string | null) => void
 }) {
   const isAdmin = me.user.isAgencyAdmin
-  const collectionsQuery = useQuery({
-    queryKey: queryKeys.collections(site.id),
-    queryFn: () => listCollectionsFn({ data: { siteId: site.id } }),
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-  })
+  const collectionsQuery = useQuery(collectionsOptions(site.id))
   const collection = (
     collectionsQuery.data as CollectionRecord[] | undefined
   )?.find((item) => item.key === collectionKey && (item.enabled || isAdmin))
@@ -206,12 +201,7 @@ function CollectionView({
   // multilingual site; a stale `?missing=` is ignored.
   const languages = site.languages ?? null
   const multilingual = isMultilingual(languages)
-  const missingFilter =
-    multilingual &&
-    missingLanguage &&
-    nonMainLanguages(languages).includes(missingLanguage)
-      ? missingLanguage
-      : undefined
+  const missingFilter = missingLanguageFilter(languages, missingLanguage)
 
   const { query, rows, total } = useCollectionEntries({
     siteId,
