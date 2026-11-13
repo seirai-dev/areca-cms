@@ -262,7 +262,8 @@ export async function requestPublication(input: {
     const built = await buildSnapshot(input.siteId, tx)
     if (!built.ok) return { ok: false as const, errors: built.errors }
     const snapshot = { ...built.snapshot, publicationId }
-    const isScheduler = input.note === 'scheduled' || input.actorId === 'system'
+    const isScheduler =
+      input.actorId === 'system' || input.schedulerFingerprint !== undefined
     let scheduledBy = uniqueActorIds(input.scheduledBy ?? [])
     if (isScheduler && scheduledBy.length === 0) {
       const owners = await tx
