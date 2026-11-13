@@ -133,37 +133,46 @@ export function challengeHeaderAt(
   return `${params.dpop ? 'DPoP' : 'Bearer'} ${parts.join(', ')}`
 }
 
-function challengeHeader(siteSlug: string, params: ChallengeParams = {}) {
-  return challengeHeaderAt(protectedResourceMetadataUrl(siteSlug), params)
-}
-
-function challenge401(
-  siteSlug: string,
-  params: { error?: string; description?: string; dpop?: boolean } = {},
-): Response {
-  return Response.json(
-    { error: params.description ?? 'Sign in to connect to this site' },
-    {
-      status: 401,
-      headers: { 'WWW-Authenticate': challengeHeader(siteSlug, params) },
+/**
+ * The 401 and 403 answers of one MCP resource. Both name the resource's
+ * metadata URL, so a client finds how to sign in; `copy` is the body text a
+ * 401 without a description, and a 403, carry.
+ */
+export function mcpChallenges(
+  metadataUrl: () => string,
+  copy: { signIn: string; insufficientScope: string },
+) {
+  return {
+    challenge401(
+      params: ChallengeParams & { message?: string } = {},
+    ): Response {
+      const { message, ...challenge } = params
+      return Response.json(
+        { error: message ?? challenge.description ?? copy.signIn },
+        {
+          status: 401,
+          headers: {
+            'WWW-Authenticate': challengeHeaderAt(metadataUrl(), challenge),
+          },
+        },
+      )
     },
-  )
-}
-
-function insufficientScope(siteSlug: string, dpop = false): Response {
-  return Response.json(
-    { error: 'This connection is not allowed to use the site' },
-    {
-      status: 403,
-      headers: {
-        'WWW-Authenticate': challengeHeader(siteSlug, {
-          error: 'insufficient_scope',
-          scope: MCP_SCOPE,
-          dpop,
-        }),
-      },
+    insufficientScope(dpop = false): Response {
+      return Response.json(
+        { error: copy.insufficientScope },
+        {
+          status: 403,
+          headers: {
+            'WWW-Authenticate': challengeHeaderAt(metadataUrl(), {
+              error: 'insufficient_scope',
+              scope: MCP_SCOPE,
+              dpop,
+            }),
+          },
+        },
+      )
     },
-  )
+  }
 }
 
 export function unknownSite(): Response {
@@ -211,6 +220,13 @@ export async function handleSiteMcpRequest(
     .limit(1)
   if (!found) return unknownSite()
   const devEnv = isDevSite(found)
+  const { challenge401, insufficientScope } = mcpChallenges(
+    () => protectedResourceMetadataUrl(siteSlug),
+    {
+      signIn: 'Sign in to connect to this site',
+      insufficientScope: 'This connection is not allowed to use the site',
+    },
+  )
 
   const authorization = parseAccessTokenAuthorization(
     request.headers.get('authorization'),
@@ -219,11 +235,11 @@ export async function handleSiteMcpRequest(
     authorization?.scheme === 'Bearer' || authorization?.scheme === 'DPoP'
       ? authorization.token
       : null
-  if (!token) return challenge401(siteSlug)
+  if (!token) return challenge401()
 
   if (token.startsWith(MCP_KEY_PREFIX)) {
     if (authorization?.scheme !== 'Bearer')
-      return challenge401(siteSlug, {
+      return challenge401({
         error: 'invalid_token',
         dpop: true,
         description: 'Personal keys require Bearer authorization',
@@ -233,7 +249,7 @@ export async function handleSiteMcpRequest(
       // mfa_required is only ever reported for an agency admin's key.
       return resolution.reason === 'mfa_required'
         ? mfaRequired()
-        : challenge401(siteSlug, {
+        : challenge401({
             error: 'invalid_token',
             description: 'Invalid or expired key',
           })
@@ -243,7 +259,7 @@ export async function handleSiteMcpRequest(
       // On a dev env the answer must not depend on the dev env existing.
       return devEnv
         ? unknownSite()
-        : challenge401(siteSlug, {
+        : challenge401({
             error: 'invalid_token',
             description: 'Key is for a different site',
           })
@@ -264,7 +280,7 @@ export async function handleSiteMcpRequest(
     mcpResourceUrl(siteSlug),
   )
   if (!verdict.ok) {
-    return challenge401(siteSlug, {
+    return challenge401({
       error: verdict.error ?? 'invalid_token',
       dpop: verdict.dpop || authorization?.scheme === 'DPoP',
       description:
@@ -288,7 +304,7 @@ export async function handleSiteMcpRequest(
     .where(eq(user.id, userId))
     .limit(1)
   if (!owner) {
-    return challenge401(siteSlug, { error: 'invalid_token', dpop })
+    return challenge401({ error: 'invalid_token', dpop })
   }
   // The token is verified from here on, so the caller is known. On a dev env
   // every refusal from here is the missing-slug NotFound, unless the caller is
@@ -299,15 +315,14 @@ export async function handleSiteMcpRequest(
   // RFC 8707: a token only works at the resource it was issued for.
   if (!resources.includes(mcpResourceUrl(siteSlug))) {
     return refuse(() =>
-      challenge401(siteSlug, {
+      challenge401({
         error: 'invalid_token',
         description: 'Access token was issued for a different site',
         dpop,
       }),
     )
   }
-  if (!scopes.includes(MCP_SCOPE))
-    return refuse(() => insufficientScope(siteSlug, dpop))
+  if (!scopes.includes(MCP_SCOPE)) return refuse(() => insufficientScope(dpop))
 
   const connection = await findUsableConnection({
     userId,
@@ -316,7 +331,7 @@ export async function handleSiteMcpRequest(
   })
   if (!connection || connection.id !== connectionId) {
     return refuse(() =>
-      challenge401(siteSlug, {
+      challenge401({
         error: 'invalid_token',
         description: 'This app is no longer connected to the site',
         dpop,
@@ -329,7 +344,7 @@ export async function handleSiteMcpRequest(
     return live.reason === 'mfa_required'
       ? mfaRequired()
       : refuse(() =>
-          challenge401(siteSlug, {
+          challenge401({
             error: 'invalid_token',
             description: 'You no longer have access to this site',
             dpop,
