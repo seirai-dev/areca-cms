@@ -11,7 +11,6 @@ import {
   schedulerBackoff,
   site,
 } from '#/db/schema'
-import { createMockDeploymentAdapter } from '#/adapters/deployment/mock'
 import { deleteSite } from '#/server/admin/sites'
 import {
   removeDokployCredentials,
@@ -32,7 +31,7 @@ import {
   recoverStaleJobs,
 } from './worker'
 import { runSchedulerTick } from './scheduler'
-import { jobOf } from './test-helpers'
+import { createMockDeploymentAdapter, jobOf } from './test-helpers'
 
 const fakeFetch: typeof fetch = async () =>
   Response.json({ items: [], total: 0 })

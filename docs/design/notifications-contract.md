@@ -112,18 +112,20 @@ export async function notify(input: {
   payload: NotificationPayload
 }): Promise<{ notified: string[] }>   // user ids that got a row
 
-// triggers.ts — what the publishing/invite code calls (all never throw)
-export async function notifyPublicationLive(publicationId: string): Promise<void>
+// triggers.ts — what the publishing/invite code calls
+// deliverPublication* throw on failure: the publication events loop
+// (publication-events.ts) runs and retries them.
+export async function deliverPublicationLive(publicationId: string, previousPublicationId?: string | null): Promise<void>
   // origin manual → release.live (requester) + release.live.others (other owners)
   // origin scheduled → schedule.published (scheduled_by users)
   // origin rollback → rollback.live (owners) ; requester gets release.live
   // entries = diff vs the previous live/demo publication (diffSnapshotCollections), title = data.title ?? slug
-export async function notifyPublicationFailed(publicationId: string, opts: { stuck: boolean }): Promise<void>
+export async function deliverPublicationFailed(publicationId: string, opts: { stuck: boolean }): Promise<void>
   // release.failed | release.stuck → requester + scheduled_by + owners; then agency.release.failed
 export async function deliverScheduleFailed(siteId: string, input: { scheduledBy: string[]; fingerprint: string }): Promise<void>  // throws on failure: run by the outbox
   // schedule.failed → owners; then agency.release.failed (subjectId = `schedule:${siteId}:${fingerprint}`)
   // queued by queueScheduleFailedEvent in the same transaction that records the failure (notification_event)
-export async function notifyInviteAccepted(invitationId: string, acceptedUserId: string): Promise<void>
+export async function notifyInviteAccepted(invitationId: string, acceptedUserId: string): Promise<void>  // never throws
   // invite.accepted → inviter
 
 // unsubscribe.ts
@@ -137,14 +139,17 @@ export function verifyUnsubscribeToken(token: string, now?: Date):
 export async function applyUnsubscribe(token: string): Promise<...>
 ```
 
-### Wiring (each call after commit, wrapped so it can never fail the caller)
+### Wiring
 
-- `publishing/worker.ts` success path (after the transaction, next to the
-  completion audit) → `notifyPublicationLive(pub.id)`.
-- `failJob` (when `recorded`) → `notifyPublicationFailed(publicationId, { stuck: dispatchUncertain })`.
-- `recoverStaleJobs` → after the transaction, for each stale job →
-  `notifyPublicationFailed(job.publicationId, { stuck: <dispatch uncertain> })`.
-- `resolveUncertainDeploymentJob` → after resolving → `notifyPublicationFailed(id, { stuck: false })`
+The worker never notifies directly. Each path below queues a publication event
+(`queuePublicationEvent`, `notification_event`) in the transaction that records
+the outcome; the events loop (`processPublicationEvents`) then calls
+`deliverPublicationLive` or `deliverPublicationFailed` and retries on failure.
+
+- `publishing/worker.ts` success path → a live event for the publication.
+- `failJob` (when `recorded`) → a failed event (`stuck: dispatchUncertain`).
+- `recoverStaleJobs` → a failed event for each stale job (`stuck: <dispatch uncertain>`).
+- `resolveUncertainDeploymentJob` → a failed event (`stuck: false`)
   (dedupe key makes a repeat harmless: use event `release.failed`).
 - `scheduler.ts` validation failure → `recordRequestFailure` queues the
   `schedule.failed` event in its own transaction, next to the backoff record;

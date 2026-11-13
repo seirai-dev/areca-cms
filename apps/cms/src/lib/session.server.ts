@@ -4,8 +4,6 @@ import { and, eq } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { membership } from '#/db/schema'
-import { env } from '#/env'
-import { MfaRequiredError } from '#/lib/security-errors'
 import {
   SESSION_MEMO_KEY,
   forgetForRequest,
@@ -80,25 +78,11 @@ export async function requireUser() {
   return session
 }
 
-/**
- * Agency admins can reach every client, so they must have two-factor enabled
- * before any admin power is exercised. Throws `MFA_REQUIRED` otherwise.
- */
-export function assertAdminMfa(
-  user: { twoFactorEnabled?: boolean | null },
-  required: boolean = env.ADMIN_MFA_REQUIRED,
-) {
-  if (required && !user.twoFactorEnabled) {
-    throw new MfaRequiredError()
-  }
-}
-
 export async function requireAgencyAdmin() {
   const session = await requireUser()
   if (!session.user.isAgencyAdmin) {
     throw new Response('Forbidden', { status: 403 })
   }
-  assertAdminMfa(session.user)
   await requireAdminLocalMfa(session)
   return session
 }
@@ -110,7 +94,6 @@ export async function requireAgencyAdmin() {
 export async function requireAccountUser() {
   const session = await requireUser()
   if (session.user.isAgencyAdmin) {
-    assertAdminMfa(session.user)
     await requireAdminLocalMfa(session)
   }
   return session
@@ -172,7 +155,6 @@ export async function resolveOrgMembership(
   notFound: () => unknown,
 ): Promise<OrgMembership> {
   if (session.user.isAgencyAdmin) {
-    assertAdminMfa(session.user)
     await requireAdminLocalMfa(session)
     return { session, member: null }
   }

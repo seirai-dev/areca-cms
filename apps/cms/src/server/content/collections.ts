@@ -488,12 +488,3 @@ export async function writeCollectionDelete(
     tx,
   )
 }
-
-/** Collection-only validation (every definition is a collection). */
-export function validateCollectionDefinitions(
-  defs: { key: string; fields: Field[]; enabled?: boolean }[],
-) {
-  validateContentDefinitions(
-    defs.map((def) => ({ ...def, kind: 'collection' as const })),
-  )
-}

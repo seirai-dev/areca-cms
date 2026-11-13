@@ -179,14 +179,6 @@ export async function countUnpushedChanges(devSiteId: string): Promise<number> {
   return (await loadPlan(db, devSiteId)).items.length
 }
 
-/** Production changes since the baseline, regardless of what dev holds. */
-export async function countProductionChanges(
-  devSiteId: string,
-): Promise<number> {
-  const context = await loadPlanContext(db, devSiteId)
-  return productionChangeCount(context.planInput)
-}
-
 /** Both counts from one read, for the dev banner and the status. */
 export async function getDevSiteSyncStatus(devSiteId: string) {
   const context = await loadPlanContext(db, devSiteId)

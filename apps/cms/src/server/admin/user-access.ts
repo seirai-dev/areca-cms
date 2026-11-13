@@ -166,13 +166,6 @@ export async function getUserDetail(userId: string) {
   }
 }
 
-export type UserDetail = Awaited<ReturnType<typeof getUserDetail>>
-
-/** Raw `max(timestamptz)` values come back as text, so read them as dates. */
-export function toDate(value: unknown): Date | null {
-  return value ? new Date(String(value)) : null
-}
-
 /**
  * Applies the staged changes in one transaction. Clients are visited in id
  * order, so two batches over overlapping clients lock them in the same order.

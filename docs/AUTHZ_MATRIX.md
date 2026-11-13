@@ -224,7 +224,7 @@ The AI endpoint's tools are not rows in `authz-matrix.ts`. Each tool declares
 its `access` level, `ToolRegistry` (`tool-kit.ts`) registers only the tools the
 caller may use, and `requireAccess` (`guard.ts`) refuses a direct call with a
 message that says who may do it. The access is re-read from the live role on
-every request (`resolveMcpActor`, `keys.ts`). `mcp.test.ts` covers the role
+every request (`resolveMcpActorResult`, `keys.ts`). `mcp.test.ts` covers the role
 listings, direct calls, cross-site ids, go-live and the agency schema tools.
 
 | Access | Who may call it | Tools |

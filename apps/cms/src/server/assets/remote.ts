@@ -18,27 +18,6 @@ const USER_AGENT = 'ArecaCMS/1.0 (+asset-import)'
 const ACCEPT = 'image/*,application/pdf'
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
 
-// Compatibility exports use the English catalog; request errors resolve their
-// locale at the point of use below.
-export const PRIVATE_ADDRESS_MESSAGE = m.server_remote_private_address(
-  {},
-  { locale: 'en' },
-)
-export const UNSUPPORTED_SCHEME_MESSAGE = m.server_remote_unsupported_scheme(
-  {},
-  { locale: 'en' },
-)
-export const TIMEOUT_MESSAGE = m.server_remote_timeout({}, { locale: 'en' })
-export const REDIRECT_LIMIT_MESSAGE = m.server_remote_redirect_limit(
-  {},
-  { locale: 'en' },
-)
-export const UNSUPPORTED_FILE_MESSAGE = m.server_remote_unsupported_file(
-  {},
-  { locale: 'en' },
-)
-export const WEB_PAGE_MESSAGE = m.server_remote_web_page({}, { locale: 'en' })
-
 /** Message for a non-2xx answer. Names the host and status so the agent can tell the user what happened. */
 export function httpStatusMessage(status: number, host: string): string {
   if (status >= 400 && status < 500) {

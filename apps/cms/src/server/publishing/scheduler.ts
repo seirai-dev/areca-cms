@@ -21,9 +21,6 @@ const BLOCKING_JOB_STATUSES = [
   'deploying',
 ] as const
 
-/** Kept for tests; retry state is durable, never process-local. */
-export function resetSchedulerAttempts() {}
-
 export function scheduleFingerprint(
   rows: Array<{ id: string; scheduledVersion: string | null }>,
 ) {

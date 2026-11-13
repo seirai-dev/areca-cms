@@ -57,7 +57,6 @@ export function requireAccess(
   access: ToolAccess,
   message?: string,
 ): void {
-  if (canUseTool(actor, access)) return
-  if (access === 'everyone') return
+  if (access === 'everyone' || canUseTool(actor, access)) return
   throw new ForbiddenError(message ?? deniedMessage(actor, access))
 }

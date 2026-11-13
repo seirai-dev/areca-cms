@@ -525,9 +525,3 @@ export async function listPendingRelease(
 
   return { changes, languages: diff.languages, linkWarnings: diff.linkWarnings }
 }
-
-export async function listPendingReleaseChanges(
-  siteId: string,
-): Promise<PendingReleaseChange[]> {
-  return (await listPendingRelease(siteId)).changes
-}

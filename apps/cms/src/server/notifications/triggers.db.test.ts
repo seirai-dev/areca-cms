@@ -17,8 +17,8 @@ import { hashToken } from '#/server/security/token-hash'
 import { writeRule } from './preferences.ts'
 import {
   notifyInviteAccepted,
-  notifyPublicationFailed,
-  notifyPublicationLive,
+  deliverPublicationFailed,
+  deliverPublicationLive,
   deliverScheduleFailed,
   scheduleFailedSubject,
 } from './triggers.ts'
@@ -109,7 +109,7 @@ describe('publication went live', () => {
       entries: [{ slug: 'hello', title: 'Hello world' }],
     })
 
-    await notifyPublicationLive(pub.id)
+    await deliverPublicationLive(pub.id)
 
     const row = await rowFor('release.live', pub.id, requester.id)
     expect(row?.payload).toMatchObject({
@@ -132,7 +132,7 @@ describe('publication went live', () => {
       requestedBy: requester.id,
     })
 
-    await notifyPublicationLive(pub.id)
+    await deliverPublicationLive(pub.id)
 
     expect(
       await rowFor('release.live.others', pub.id, ownerTwo.id),
@@ -151,7 +151,7 @@ describe('publication went live', () => {
       scheduledBy: [editor.id],
     })
 
-    await notifyPublicationLive(pub.id)
+    await deliverPublicationLive(pub.id)
 
     expect(await rowFor('schedule.published', pub.id, editor.id)).toBeDefined()
     expect(await rowFor('release.live', pub.id, requester.id)).toBeUndefined()
@@ -165,7 +165,7 @@ describe('publication went live', () => {
       requestedBy: requester.id,
     })
 
-    await notifyPublicationLive(pub.id)
+    await deliverPublicationLive(pub.id)
     expect(await rowFor('rollback.live', pub.id, ownerTwo.id)).toBeUndefined()
     expect(await rowFor('release.live', pub.id, requester.id)).toBeDefined()
 
@@ -175,7 +175,7 @@ describe('publication went live', () => {
       origin: 'rollback',
       requestedBy: requester.id,
     })
-    await notifyPublicationLive(second.id)
+    await deliverPublicationLive(second.id)
     expect(await rowFor('rollback.live', second.id, ownerTwo.id)).toBeDefined()
     // The requester hears once, through release.live.
     expect(
@@ -191,7 +191,7 @@ describe('publication went live', () => {
       requestedBy: requester.id,
     })
 
-    await notifyPublicationLive(pub.id)
+    await deliverPublicationLive(pub.id)
 
     expect(await rowFor('release.live', pub.id, requester.id)).toBeUndefined()
   })
@@ -206,14 +206,14 @@ describe('publication failed or stuck', () => {
       requestedBy: requester.id,
     })
 
-    await notifyPublicationFailed(pub.id, { stuck: false })
+    await deliverPublicationFailed(pub.id, { stuck: false })
 
     expect(await rowFor('release.failed', pub.id, requester.id)).toBeDefined()
     expect(await rowFor('release.failed', pub.id, ownerTwo.id)).toBeDefined()
     // An editor who did not request the release is not told.
     expect(await rowFor('release.failed', pub.id, editor.id)).toBeUndefined()
 
-    await notifyPublicationFailed(pub.id, { stuck: true })
+    await deliverPublicationFailed(pub.id, { stuck: true })
     expect(await rowFor('release.stuck', pub.id, requester.id)).toBeDefined()
     expect(await rowFor('release.stuck', pub.id, ownerTwo.id)).toBeDefined()
   })
@@ -230,8 +230,8 @@ describe('publication failed or stuck', () => {
       requestedBy: requester.id,
     })
 
-    await notifyPublicationFailed(pub.id, { stuck: false })
-    await notifyPublicationFailed(pub.id, { stuck: false })
+    await deliverPublicationFailed(pub.id, { stuck: false })
+    await deliverPublicationFailed(pub.id, { stuck: false })
 
     const alert = await rowFor('agency.release.failed', pub.id, agencyAdmin.id)
     expect(alert).toMatchObject({
@@ -348,10 +348,10 @@ describe('invitation accepted', () => {
 describe('never fails the caller', () => {
   it('resolves for publications and invitations that do not exist', async () => {
     await expect(
-      notifyPublicationLive(crypto.randomUUID()),
+      deliverPublicationLive(crypto.randomUUID()),
     ).resolves.toBeUndefined()
     await expect(
-      notifyPublicationFailed(crypto.randomUUID(), { stuck: true }),
+      deliverPublicationFailed(crypto.randomUUID(), { stuck: true }),
     ).resolves.toBeUndefined()
     await expect(
       notifyInviteAccepted(crypto.randomUUID(), crypto.randomUUID()),

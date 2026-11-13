@@ -823,19 +823,6 @@ export async function acceptInvitation(input: {
   return result
 }
 
-export async function listAgencyAdmins() {
-  return db
-    .select({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      isAgencyAdmin: user.isAgencyAdmin,
-    })
-    .from(user)
-    .where(eq(user.isAgencyAdmin, true))
-    .orderBy(user.email)
-}
-
 export async function setAgencyAdmin(
   userId: string,
   isAgencyAdmin: boolean,

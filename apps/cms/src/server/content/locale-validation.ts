@@ -217,13 +217,3 @@ export async function validateLocaleSlugs(
   }
   return errors
 }
-
-/** The site's languages, read from the database. Used by lifecycle code. */
-export async function siteLocaleCtx(
-  siteId: string,
-  fields: Field[],
-  connection: DbReader = db,
-): Promise<LocaleCtx | null> {
-  const languages = await loadSiteLanguages(siteId, connection)
-  return languages ? localeCtxFor(languages, fields) : null
-}

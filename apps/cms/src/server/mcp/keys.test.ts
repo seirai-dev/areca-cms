@@ -16,10 +16,14 @@ import {
   createMcpKey,
   listMcpKeys,
   MCP_KEY_PREFIX,
-  resolveMcpActor,
   resolveMcpActorResult,
   revokeMcpKey,
 } from './keys'
+
+async function resolveMcpActor(token: string, now?: Date) {
+  const result = await resolveMcpActorResult(token, now)
+  return result.ok ? result.actor : null
+}
 
 // Must run before `#/env` is first imported: resolution reads ADMIN_MFA_REQUIRED.
 vi.hoisted(() => {

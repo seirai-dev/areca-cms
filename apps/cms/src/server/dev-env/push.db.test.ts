@@ -40,7 +40,7 @@ import {
 } from '#/server/content/test-utils'
 
 import { forkDevEnvironment } from './fork'
-import { countProductionChanges, loadPlan } from './load-plan'
+import { getDevSiteSyncStatus, loadPlan } from './load-plan'
 import { PLAN_CHANGED_MESSAGE, pushDevEnvironment } from './push'
 
 const hasDb = Boolean(process.env.DATABASE_URL)
@@ -1531,7 +1531,7 @@ describe.skipIf(!hasDb)('development environment: push', () => {
 
       // Disabled in production is the same as absent in dev: nothing comes back.
       expect((await loadPlan(db, devId)).items).toEqual([])
-      expect(await countProductionChanges(devId)).toBe(0)
+      expect((await getDevSiteSyncStatus(devId)).productionChanges).toBe(0)
     })
   })
 
@@ -1569,7 +1569,7 @@ describe.skipIf(!hasDb)('development environment: push', () => {
       const sectionEntry = await entryRow(ctx.site.id, 'companyInfo', '$global')
       expect(sectionEntry?.status).toBe('archived')
       expect((await loadPlan(db, devId)).items).toEqual([])
-      expect(await countProductionChanges(devId)).toBe(0)
+      expect((await getDevSiteSyncStatus(devId)).productionChanges).toBe(0)
     })
   })
 

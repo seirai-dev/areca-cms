@@ -1,7 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
-import { createMockDeploymentAdapter } from '#/adapters/deployment/mock'
 import type { DeploymentAdapter } from '#/adapters/deployment/types'
 import { db } from '#/db'
 import { buildJob, publication, site } from '#/db/schema'
@@ -9,6 +8,7 @@ import type { Snapshot } from '#/lib/types'
 import { cleanupTestSite, createTestSite } from '#/server/content/test-utils'
 
 import { claimNextJob, createJobPool, processJob } from './worker.ts'
+import { createMockDeploymentAdapter } from './test-helpers'
 
 const hasDb = Boolean(process.env.DATABASE_URL)
 

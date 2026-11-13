@@ -302,8 +302,7 @@ export async function liveRoleFor(
   // Suspended, not revoked: keys and connections work again once unblocked.
   if (owner.blockedAt) return { ok: false, reason: 'invalid' }
   if (owner.isAgencyAdmin) {
-    // Mirrors assertAdminMfa in lib/session.server.ts. Not imported, because
-    // that module pulls in request-only APIs.
+    // Mirrors the two-factor check of requireAdminLocalMfa (security/local-mfa.ts).
     if (env.ADMIN_MFA_REQUIRED && !owner.twoFactorEnabled) {
       return { ok: false, reason: 'mfa_required' }
     }
@@ -382,15 +381,6 @@ export async function resolveMcpActorResult(
   }
 }
 
-/** Actor-or-null form of `resolveMcpActorResult`, for callers that do not need the reason. */
-export async function resolveMcpActor(
-  token: string,
-  now: Date = new Date(),
-): Promise<McpActor | null> {
-  const result = await resolveMcpActorResult(token, now)
-  return result.ok ? result.actor : null
-}
-
 // ---------------------------------------------------------------------------
 // Agency keys: one key that reaches every site (docs/design/agency-mcp.md).
 // They live in mcp_key with scope 'agency' and no site.
@@ -432,7 +422,7 @@ export function agencyAdminStatus(owner: {
 }): AgencyAdminStatus {
   if (!owner.isAgencyAdmin) return 'not_admin'
   if (owner.blockedAt) return 'blocked'
-  // Mirrors assertAdminMfa in lib/session.server.ts (see liveRoleFor).
+  // Mirrors requireAdminLocalMfa's two-factor check (see liveRoleFor).
   if (env.ADMIN_MFA_REQUIRED && !owner.twoFactorEnabled) return 'mfa_required'
   return 'active'
 }

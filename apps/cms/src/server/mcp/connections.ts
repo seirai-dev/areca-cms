@@ -62,30 +62,6 @@ export function isConnectionUsable(
   return now.getTime() - lastActive.getTime() <= MCP_CONNECTION_IDLE_MS
 }
 
-/**
- * Records that `userId` connected `clientId` to a site. One active connection
- * per (user, site, app): approving again updates the name and go-live flag.
- */
-export async function upsertConnection(input: {
-  userId: string
-  siteId: string
-  organizationId: string
-  clientId: string
-  clientName: string
-  allowGoLive: boolean
-  now?: Date
-}): Promise<McpConnectionRow> {
-  return withConnectionLock(input, async () => {
-    const now = input.now ?? new Date()
-    const existing = await findUsableConnection({ ...input, now })
-    return saveConnectionApproval(
-      input,
-      existing?.id ?? crypto.randomUUID(),
-      now,
-    )
-  })
-}
-
 /** Serialize approval and disconnect for the same grant across processes. */
 export async function withConnectionLock<T>(
   input: { userId: string; siteId: string | null; clientId: string },
