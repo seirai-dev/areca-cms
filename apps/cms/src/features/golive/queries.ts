@@ -2,7 +2,6 @@ import { queryOptions } from '@tanstack/react-query'
 
 import { queryKeys } from '#/lib/content/query-keys'
 import { isActiveJobStatus } from '#/lib/status'
-import type { BuildJobStatus, PublicationStatus } from '#/lib/types'
 import {
   getBuildJobFn,
   getSiteReleaseStatusFn,
@@ -16,64 +15,23 @@ import {
  * while the job runs. Nothing polls while idle.
  */
 
-export type ReleaseStatusData = {
-  /** Messages for what blocks a go live (site content never marked ready). */
-  blockers?: string[]
-  publishingMode?: 'production' | 'demo'
-  demo?: { id: string; createdAt: string | Date } | null
-  live: {
-    id: string
-    createdAt: string | Date
-    deployedAt: string | Date | null
-  } | null
-  activeJob: {
-    id: string
-    status: BuildJobStatus
-    error: string | null
-  } | null
-  pendingEntries: number
-  /** A release is queued, running, or uncertain: deployment settings wait. */
-  deploymentPending?: boolean
-  liveEntryIds?: string[]
-  liveSlugsByEntryId?: Record<string, string>
-  pendingEntryIds?: string[]
-}
+export type ReleaseStatusData = Awaited<
+  ReturnType<typeof getSiteReleaseStatusFn>
+>
 
-export type JobRow = {
-  id: string
-  publicationId?: string
-  status: BuildJobStatus
-  attempts: number
-  dispatchUncertain?: boolean
-  priority?: number
-  createdAt: string | Date
-  startedAt?: string | Date | null
-  finishedAt?: string | Date | null
-  error: string | null
-  /** Only `getBuildJobFn` returns logs; the lists leave them out. */
-  logs?: string | null
-}
+/** A build job as the lists show it; `getBuildJobFn` adds the logs. */
+export type JobRow = Awaited<ReturnType<typeof listBuildJobsFn>>[number]
 
-export type PublicationOrigin = 'manual' | 'scheduled' | 'rollback'
+export type PublicationRow = Awaited<
+  ReturnType<typeof listPublicationsFn>
+>[number]
 
-export type PublicationRow = {
-  id: string
-  status: PublicationStatus
-  wasLive: boolean
-  snapshotHash: string
-  requestedBy: string | null
-  requestedByName: string | null
-  origin: PublicationOrigin
-  createdAt: string | Date
-  deployedAt: string | Date | null
-  job?: JobRow | null
-}
+export type PublicationOrigin = PublicationRow['origin']
 
 export function releaseStatusQuery(siteId: string) {
   return queryOptions({
     queryKey: queryKeys.releaseStatus(siteId),
-    queryFn: async () =>
-      (await getSiteReleaseStatusFn({ data: { siteId } })) as ReleaseStatusData,
+    queryFn: () => getSiteReleaseStatusFn({ data: { siteId } }),
     refetchInterval: (query) => (query.state.data?.activeJob ? 5000 : false),
     staleTime: 10_000,
   })
@@ -86,8 +44,7 @@ export function releaseStatusQuery(siteId: string) {
 export function latestJobsQuery(siteId: string, active = false) {
   return queryOptions({
     queryKey: [...queryKeys.buildJobs(siteId), 'latest'] as const,
-    queryFn: async () =>
-      (await listBuildJobsFn({ data: { siteId, limit: 5 } })) as JobRow[],
+    queryFn: () => listBuildJobsFn({ data: { siteId, limit: 5 } }),
     refetchInterval: active ? 5000 : false,
     staleTime: 30_000,
   })
@@ -96,8 +53,7 @@ export function latestJobsQuery(siteId: string, active = false) {
 export function jobsQuery(siteId: string) {
   return queryOptions({
     queryKey: [...queryKeys.buildJobs(siteId), 'all'] as const,
-    queryFn: async () =>
-      (await listBuildJobsFn({ data: { siteId, limit: 50 } })) as JobRow[],
+    queryFn: () => listBuildJobsFn({ data: { siteId, limit: 50 } }),
     // Live build state: refetch whenever the panel opens.
     staleTime: 0,
     refetchInterval: (query) =>
@@ -114,10 +70,10 @@ export function publicationsQuery(siteId: string, pages: number) {
   return queryOptions({
     queryKey: [...queryKeys.publications(siteId), limit] as const,
     // One extra row tells us whether there is more.
-    queryFn: async () =>
-      (await listPublicationsFn({
+    queryFn: () =>
+      listPublicationsFn({
         data: { siteId, limit: Math.min(limit + 1, 100), offset: 0 },
-      })) as PublicationRow[],
+      }),
     staleTime: 0,
     refetchInterval: (query) =>
       query.state.data?.some(
@@ -131,8 +87,7 @@ export function publicationsQuery(siteId: string, pages: number) {
 export function buildJobQuery(jobId: string) {
   return queryOptions({
     queryKey: queryKeys.buildJob(jobId),
-    queryFn: async () =>
-      (await getBuildJobFn({ data: { id: jobId } })) as JobRow,
+    queryFn: () => getBuildJobFn({ data: { id: jobId } }),
     enabled: Boolean(jobId),
     staleTime: 0,
     refetchInterval: (query) => {

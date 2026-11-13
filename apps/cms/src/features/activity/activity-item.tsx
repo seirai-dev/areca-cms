@@ -5,7 +5,7 @@ import { CheckCircle, XCircle } from '@phosphor-icons/react'
 import { SystemAvatar, UserAvatar } from '#/components/ui/avatar'
 import { Tag } from '#/components/ui/tag'
 import { RelativeTime, TimelineItem } from '#/components/ui/timeline'
-import { GLOBAL_ROUTE } from '#/features/globals/site-content'
+import { contentRoute } from '#/lib/content-route'
 import { ACTIVITY_ENTRIES_MAX_IDS } from '#/lib/content-limits'
 import { m } from '#/paraglide/messages'
 import { getActivityEntriesFn } from '#/server/fn/activity-entries'
@@ -80,22 +80,7 @@ export function ActivityTimelineItem({
   const target = parts.target ? (
     parts.named && entry ? (
       <Link
-        {...(entry.global
-          ? {
-              to: GLOBAL_ROUTE,
-              params: {
-                siteId: entry.siteId,
-                globalKey: entry.collectionKey,
-              },
-            }
-          : {
-              to: '/sites/$siteId/c/$collectionKey/$entryId' as const,
-              params: {
-                siteId: entry.siteId,
-                collectionKey: entry.collectionKey,
-                entryId: row.targetId,
-              },
-            })}
+        {...contentRoute({ ...entry, entryId: row.targetId })}
         className="text-text-primary hover:underline"
       >
         {parts.target}

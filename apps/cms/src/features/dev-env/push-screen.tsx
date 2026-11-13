@@ -13,6 +13,7 @@ import type { SegmentedOption } from '#/components/ui/segmented-control'
 import { SegmentedControl } from '#/components/ui/segmented-control'
 import { Skeleton } from '#/components/ui/skeleton'
 import { errorMessage } from '#/lib/admin/helpers'
+import { contentRoute } from '#/lib/content-route'
 import { PLAN_CHANGED_MESSAGE } from '#/lib/dev-env'
 import type { MeSite } from '#/lib/site-nav'
 import { cn } from '#/lib/utils'
@@ -730,24 +731,14 @@ function PushResultView({
                   title={title}
                   subtitle={m.dev_push_open_in_production()}
                 >
-                  {row.collectionKind === 'global' ? (
-                    <Link
-                      to="/sites/$siteId/globals/$globalKey"
-                      params={{
-                        siteId: productionSiteId,
-                        globalKey: item.collectionKey,
-                      }}
-                    />
-                  ) : (
-                    <Link
-                      to="/sites/$siteId/c/$collectionKey/$entryId"
-                      params={{
-                        siteId: productionSiteId,
-                        collectionKey: item.collectionKey,
-                        entryId: row.productionId,
-                      }}
-                    />
-                  )}
+                  <Link
+                    {...contentRoute({
+                      siteId: productionSiteId,
+                      collectionKey: item.collectionKey,
+                      entryId: row.productionId,
+                      global: row.collectionKind === 'global',
+                    })}
+                  />
                 </InsetRow>
               )
             })}

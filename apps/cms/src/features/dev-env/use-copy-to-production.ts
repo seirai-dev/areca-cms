@@ -4,6 +4,7 @@ import { useNavigate, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { toast } from 'sonner'
 
+import { contentRoute } from '#/lib/content-route'
 import { errorMessage } from '#/lib/content/utils'
 import { isCopyOverwriteRefusal } from '#/lib/dev-env'
 import { m } from '#/paraglide/messages'
@@ -79,26 +80,18 @@ export function useCopyToProduction({
           : undefined,
         action: {
           label: m.dev_env_copy_open(),
-          onClick: () => {
-            if (destination.kind === 'global') {
-              void navigate({
-                to: '/sites/$siteId/globals/$globalKey',
-                params: {
-                  siteId: productionSiteId,
-                  globalKey: destination.globalKey,
-                },
-              })
-              return
-            }
-            void navigate({
-              to: '/sites/$siteId/c/$collectionKey/$entryId',
-              params: {
+          onClick: () =>
+            void navigate(
+              contentRoute({
                 siteId: productionSiteId,
-                collectionKey: destination.collectionKey,
+                collectionKey:
+                  destination.kind === 'global'
+                    ? destination.globalKey
+                    : destination.collectionKey,
                 entryId: result.productionId,
-              },
-            })
-          },
+                global: destination.kind === 'global',
+              }),
+            ),
         },
       })
     },

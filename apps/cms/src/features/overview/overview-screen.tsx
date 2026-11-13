@@ -21,7 +21,7 @@ import { UserAvatar } from '#/components/ui/avatar'
 import { Button } from '#/components/ui/button'
 import { Card } from '#/components/ui/card'
 import { ConnectAiCard } from '#/features/connect-ai/connect-ai-card'
-import { GLOBAL_ROUTE } from '#/features/globals/site-content'
+import { contentRoute } from '#/lib/content-route'
 import { greeting, greetingName } from '#/features/overview/greeting'
 import { EmptyState } from '#/components/ui/empty-state'
 import { InsetList, InsetRow } from '#/components/ui/inset-list'
@@ -371,22 +371,12 @@ function AttentionStrip({
                     className="truncate text-callout text-text-secondary"
                   >
                     <Link
-                      {...(entry.global
-                        ? {
-                            to: GLOBAL_ROUTE,
-                            params: {
-                              siteId: site.id,
-                              globalKey: entry.collectionKey,
-                            },
-                          }
-                        : {
-                            to: '/sites/$siteId/c/$collectionKey/$entryId' as const,
-                            params: {
-                              siteId: site.id,
-                              collectionKey: entry.collectionKey,
-                              entryId: entry.id,
-                            },
-                          })}
+                      {...contentRoute({
+                        siteId: site.id,
+                        collectionKey: entry.collectionKey,
+                        entryId: entry.id,
+                        global: entry.global,
+                      })}
                       className="hover:text-text-primary hover:underline"
                     >
                       {entry.title}
