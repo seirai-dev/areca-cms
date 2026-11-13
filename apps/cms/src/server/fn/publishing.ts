@@ -87,8 +87,10 @@ export const requestPublicationFn = createServerFn({ method: 'POST', ...loose })
     z.object({
       siteId: z.string().min(1),
       requestKey: z.string().uuid(),
-      priority: z.number().int().optional(),
-      note: z.string().optional(),
+      // The UI sends 0 or 100 (urgent); the build queue is shared by every
+      // client, so other values are refused.
+      priority: z.union([z.literal(0), z.literal(100)]).optional(),
+      note: z.string().max(500).optional(),
     }),
   )
   .handler(async ({ data }) => {
