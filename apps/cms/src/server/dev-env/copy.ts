@@ -15,7 +15,7 @@ import type { EntryData } from '#/lib/types'
 import { audit } from '#/server/audit'
 import { lockOrganizationForMutation } from '#/server/admin/organization-lock'
 import { assetExclusiveLock } from '#/server/assets/usage'
-import { writeRevision } from '#/server/content/entries'
+import { writeRevision } from '#/server/content/entry-commit'
 import {
   ConflictError,
   NotFoundError,
