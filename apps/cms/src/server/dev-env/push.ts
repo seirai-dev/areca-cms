@@ -141,13 +141,6 @@ async function runPush(
 
   const context = await loadPlanContext(tx, dev.id)
   const plan = buildPlan(context.planInput)
-  /** Plan entry item id to the collection kind of its dev entry. */
-  const kinds = new Map<string, ContentKind>(
-    context.planInput.devEntries.map((devEntry) => [
-      `entry:${devEntry.id}`,
-      devEntry.collectionKind,
-    ]),
-  )
   if (plan.planHash !== input.planHash) {
     throw new ConflictError(PLAN_CHANGED_MESSAGE)
   }
@@ -304,7 +297,9 @@ async function runPush(
     written: [...state.written].map(([itemId, productionId]) => ({
       itemId,
       productionId,
-      collectionKind: kinds.get(itemId) ?? null,
+      collectionKind: itemId.startsWith('entry:')
+        ? (devById.get(itemId.slice('entry:'.length))?.collectionKind ?? null)
+        : null,
     })),
     productionSiteId: prod.id,
   }

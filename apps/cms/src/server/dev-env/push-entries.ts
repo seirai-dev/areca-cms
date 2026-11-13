@@ -476,13 +476,23 @@ export async function resolveReadyCandidates(
   candidates: ReadyCandidate[],
   warnings: PushWarning[],
 ) {
+  // What the last passing check would store, per candidate. The last round
+  // reverts nothing, so its results hold for the final state.
+  const storedById = new Map<string, EntryData | null>()
   let reverted = true
   while (reverted) {
     reverted = false
     for (const candidate of candidates) {
       if (!candidate.active) continue
-      const { messages } = await readyProblems(tx, productionSite, candidate)
-      if (messages.length === 0) continue
+      const { messages, stored } = await readyProblems(
+        tx,
+        productionSite,
+        candidate,
+      )
+      if (messages.length === 0) {
+        storedById.set(candidate.entryId, stored)
+        continue
+      }
       await tx
         .update(entry)
         .set({
@@ -508,7 +518,7 @@ export async function resolveReadyCandidates(
   // Store what validation kept (single-language sites strip unknown keys).
   for (const candidate of candidates) {
     if (!candidate.active) continue
-    const { stored } = await readyProblems(tx, productionSite, candidate)
+    const stored = storedById.get(candidate.entryId)
     if (
       stored &&
       stableStringify(stored) !== stableStringify(candidate.ready)

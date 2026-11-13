@@ -15,6 +15,7 @@ import type { EntryData } from '#/lib/types'
 import { audit } from '#/server/audit'
 import { lockOrganizationForMutation } from '#/server/admin/organization-lock'
 import { assetExclusiveLock } from '#/server/assets/usage'
+import { writeRevision } from '#/server/content/entries'
 import {
   ConflictError,
   NotFoundError,
@@ -41,7 +42,7 @@ import {
 import type { DevEnvActor } from './rows'
 import { schemaSnapshot } from './schema-snapshot'
 import {
-  keepDraftRevision,
+  BEFORE_DEV_PUSH_NOTE,
   nextOriginBaseline,
   productionReferenceLookup,
   readyProblems,
@@ -275,7 +276,13 @@ async function runCopy(
   let productionId: string
   if (target) {
     productionId = target.id
-    await keepDraftRevision(tx, target, actor.id)
+    await writeRevision(
+      target.id,
+      target.draftData,
+      actor.id,
+      BEFORE_DEV_PUSH_NOTE,
+      tx,
+    )
   } else {
     const inserted = (
       await tx
