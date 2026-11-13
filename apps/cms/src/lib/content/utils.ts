@@ -71,15 +71,32 @@ export const THUMBNAIL_WIDTHS = [160, 320, 640, 1280] as const
 
 /**
  * `src`, `srcSet` and `sizes` for an image shown `sizes` wide: the browser
- * picks a resized copy instead of the original upload.
+ * picks a resized copy instead of the original upload. Only copies narrower
+ * than the image are offered, plus the original at its real width: a `w`
+ * descriptor larger than the file would make the browser shrink its natural
+ * size (a 1 px upload listed as 640w reports a natural width of 0).
  */
-export function assetThumbnail(storageKey: string, sizes: string) {
-  const url = assetFileUrl(storageKey)
+export function assetThumbnail(
+  asset: { storageKey: string; width?: number | null },
+  sizes: string,
+) {
+  const url = assetFileUrl(asset.storageKey)
+  const { width } = asset
+  if (width == null) {
+    return {
+      src: `${url}?w=640`,
+      srcSet: THUMBNAIL_WIDTHS.map((w) => `${url}?w=${w} ${w}w`).join(', '),
+      sizes,
+    }
+  }
+  const smaller = THUMBNAIL_WIDTHS.filter((w) => w < width)
+  if (smaller.length === 0) return { src: url }
+  const largest = THUMBNAIL_WIDTHS[THUMBNAIL_WIDTHS.length - 1]
+  const candidates = smaller.map((w) => `${url}?w=${w} ${w}w`)
+  if (width <= largest) candidates.push(`${url} ${width}w`)
   return {
-    src: `${url}?w=640`,
-    srcSet: THUMBNAIL_WIDTHS.map((width) => `${url}?w=${width} ${width}w`).join(
-      ', ',
-    ),
+    src: width <= 640 ? url : `${url}?w=640`,
+    srcSet: candidates.join(', '),
     sizes,
   }
 }

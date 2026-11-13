@@ -88,7 +88,7 @@ export function EntryCover({
       {image ? (
         <img
           {...assetThumbnail(
-            image.storageKey,
+            image,
             '(min-width: 1024px) 33vw, (min-width: 520px) 50vw, 100vw',
           )}
           alt=""
@@ -127,7 +127,7 @@ export function EntryThumb({
   if (asset && asset.mimeType.startsWith('image/') && !broken) {
     return (
       <img
-        {...assetThumbnail(asset.storageKey, `${size}px`)}
+        {...assetThumbnail(asset, `${size}px`)}
         alt=""
         onError={() => setBroken(true)}
         loading="lazy"

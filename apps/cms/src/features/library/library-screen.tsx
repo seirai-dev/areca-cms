@@ -446,10 +446,7 @@ function AssetTile({
       >
         {image ? (
           <img
-            {...assetThumbnail(
-              asset.storageKey,
-              '(min-width: 640px) 240px, 50vw',
-            )}
+            {...assetThumbnail(asset, '(min-width: 640px) 240px, 50vw')}
             alt=""
             loading="lazy"
             decoding="async"
