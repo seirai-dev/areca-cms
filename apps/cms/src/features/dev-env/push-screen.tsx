@@ -17,6 +17,8 @@ import { PLAN_CHANGED_MESSAGE } from '#/lib/dev-env'
 import type { MeSite } from '#/lib/site-nav'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
+import { useStoredState } from '#/hooks/use-stored-state'
+import type { StoredCodec } from '#/hooks/use-stored-state'
 import type { PlanItem } from '#/server/dev-env/plan'
 import type { pushToProductionFn } from '#/server/fn/dev-env'
 
@@ -320,29 +322,14 @@ export function PushScreen({
   )
 }
 
+const GO_LIVE_CHOICE: StoredCodec<boolean> = {
+  parse: (raw) => raw === 'true',
+  serialize: (goLive) => String(goLive),
+}
+
 /** The go-live choice, remembered per user in this browser. */
 function useGoLiveChoice(userId: string) {
-  const key = `areca.dev-env.push.go-live.${userId}`
-  const [value, setValue] = React.useState(false)
-  React.useEffect(() => {
-    try {
-      setValue(window.localStorage.getItem(key) === 'true')
-    } catch {
-      // Storage can be blocked (private mode). The option then starts off.
-    }
-  }, [key])
-  const update = React.useCallback(
-    (next: boolean) => {
-      setValue(next)
-      try {
-        window.localStorage.setItem(key, String(next))
-      } catch {
-        // Not remembered when storage is blocked. The choice still applies.
-      }
-    },
-    [key],
-  )
-  return [value, update] as const
+  return useStoredState(`areca.dev-env.push.go-live.${userId}`, GO_LIVE_CHOICE)
 }
 
 function groupTitle(key: PushGroupKey) {

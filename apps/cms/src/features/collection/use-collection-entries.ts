@@ -25,6 +25,8 @@ import {
   shouldPollScheduled,
 } from './scheduled-poll'
 import { m } from '#/paraglide/messages'
+import { useStoredState } from '#/hooks/use-stored-state'
+import type { StoredCodec } from '#/hooks/use-stored-state'
 import { BULK_ENTRY_MAX_IDS } from '#/lib/content-limits'
 import { bulkEntryActionFn, listEntriesFn } from '#/server/fn/content'
 import type { BulkEntryActionResult } from '#/server/fn/content'
@@ -387,35 +389,21 @@ export function useEntryBulkActions(
 
 export type CollectionView = 'cards' | 'list'
 
+const COLLECTION_VIEW: StoredCodec<CollectionView | null> = {
+  parse: (raw) => (raw === 'cards' || raw === 'list' ? raw : null),
+  serialize: (view) => view,
+}
+
 /** Cards / List, remembered per collection in this browser. */
 export function useCollectionView(
   siteId: string,
   collectionKey: string,
   fallback: CollectionView,
 ) {
-  const storageKey = `areca.collection-view.${siteId}.${collectionKey}`
-  const [view, setViewState] = React.useState<CollectionView | null>(null)
-
-  React.useEffect(() => {
-    try {
-      const stored = localStorage.getItem(storageKey)
-      setViewState(stored === 'cards' || stored === 'list' ? stored : null)
-    } catch {
-      setViewState(null)
-    }
-  }, [storageKey])
-
-  const setView = React.useCallback(
-    (next: CollectionView) => {
-      setViewState(next)
-      try {
-        localStorage.setItem(storageKey, next)
-      } catch {
-        /* localStorage unavailable */
-      }
-    },
-    [storageKey],
+  const [view, setView] = useStoredState(
+    `areca.collection-view.${siteId}.${collectionKey}`,
+    COLLECTION_VIEW,
+    { serverValue: null },
   )
-
   return [view ?? fallback, setView] as const
 }

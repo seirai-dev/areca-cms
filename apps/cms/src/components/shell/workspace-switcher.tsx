@@ -39,7 +39,7 @@ import { Sheet, SheetContent, SheetTitle } from '#/components/ui/sheet'
 import { Tag } from '#/components/ui/tag'
 import { LiveDot } from '#/components/ui/status-pill'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
-import { readRecentSites } from '#/features/shell/last-site'
+import { useRecentSites } from '#/features/shell/last-site'
 import { useIsMobile } from '#/hooks/use-mobile'
 import { useBranding } from '#/lib/use-branding'
 import {
@@ -197,8 +197,7 @@ function SwitcherList({ onDone }: { onDone: () => void }) {
     queryFn: () => listOrganizationsFn(),
     enabled: me.user.isAgencyAdmin,
   })
-  const [recent, setRecent] = React.useState<string[]>([])
-  React.useEffect(() => setRecent(readRecentSites()), [])
+  const recent = useRecentSites()
 
   const recentSites = recent
     .map((id) => me.sites.find((site) => site.id === id))
