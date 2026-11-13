@@ -52,9 +52,11 @@ describe.skipIf(!hasDb)('organization Dokploy credentials', () => {
       actorId: actor.id,
     })
     const seenKeys: string[] = []
-    const fakeFetch: typeof fetch = async (_input, init) => {
+    const seenHosts: string[] = []
+    const fakeFetch: typeof fetch = async (input, init) => {
       const headers = new Headers(init?.headers)
       seenKeys.push(headers.get('x-api-key') ?? '')
+      seenHosts.push(new URL(input instanceof Request ? input.url : input).host)
       return applicationResponse()
     }
 
@@ -86,21 +88,37 @@ describe.skipIf(!hasDb)('organization Dokploy credentials', () => {
       ).at(0)
       expect(storedFirst?.encryptedApiKey).not.toContain('first-secret-key')
 
+      // Same URL (written differently): the saved key is reused.
       await saveDokployCredentials({
         organizationId: org.id,
-        url: 'https://dokploy-two.example.com',
+        url: ' https://dokploy-one.example.com// ',
         actorId: actor.id,
         fetch: fakeFetch,
       })
-      const storedUrlUpdate = (
+      const storedSameUrl = (
         await db
           .select()
           .from(dokployCredential)
           .where(eq(dokployCredential.organizationId, org.id))
       ).at(0)
-      expect(storedUrlUpdate?.encryptedApiKey).toBe(
-        storedFirst?.encryptedApiKey,
-      )
+      expect(storedSameUrl?.encryptedApiKey).toBe(storedFirst?.encryptedApiKey)
+
+      // A new URL without a new key: refused before anything is sent there.
+      await expect(
+        saveDokployCredentials({
+          organizationId: org.id,
+          url: 'https://dokploy-two.example.com',
+          actorId: actor.id,
+          fetch: fakeFetch,
+        }),
+      ).rejects.toMatchObject({
+        errors: [{ path: 'apiKey' }],
+      })
+      expect(seenHosts).not.toContain('dokploy-two.example.com')
+      expect(await getDokployCredentialStatus(org.id)).toEqual({
+        configured: true,
+        url: 'https://dokploy-one.example.com',
+      })
 
       await saveDokployCredentials({
         organizationId: org.id,
@@ -133,6 +151,12 @@ describe.skipIf(!hasDb)('organization Dokploy credentials', () => {
         'first-secret-key',
         'replacement-secret-key',
         'replacement-secret-key',
+      ])
+      expect(seenHosts).toEqual([
+        'dokploy-one.example.com',
+        'dokploy-one.example.com',
+        'dokploy-two.example.com',
+        'dokploy-two.example.com',
       ])
 
       await removeDokployCredentials({
