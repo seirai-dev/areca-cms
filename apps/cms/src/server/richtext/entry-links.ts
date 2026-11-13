@@ -114,12 +114,12 @@ export function mapEntryLinkMarks(
  * The rich text with every entry link resolved. Returns a copy; `json` is not
  * mutated. A link that cannot work loses its link mark and keeps its text.
  * `issues` lists each distinct problem once. Each distinct target is resolved
- * once.
+ * once. Synchronous.
  */
-export async function resolveEntryLinks(
+export function resolveEntryLinks(
   json: unknown,
-  resolve: (target: EntryLinkTarget) => Promise<EntryLinkResolution>,
-): Promise<{ json: JSONContent; issues: EntryLinkIssue[] }> {
+  resolve: (target: EntryLinkTarget) => EntryLinkResolution,
+): { json: JSONContent; issues: EntryLinkIssue[] } {
   const targets = new Map<string, EntryLinkTarget>()
   eachNode(json as Node, (node) => {
     for (const mark of node.marks ?? []) {
@@ -129,7 +129,7 @@ export async function resolveEntryLinks(
     }
   })
   const resolved = new Map<string, EntryLinkResolution>()
-  for (const [key, target] of targets) resolved.set(key, await resolve(target))
+  for (const [key, target] of targets) resolved.set(key, resolve(target))
 
   const issues: EntryLinkIssue[] = []
   const seen = new Set<string>()

@@ -15,7 +15,8 @@ import {
   restoreRevision,
   scheduleEntry,
 } from './entries'
-import { buildPreviewEntry, buildSnapshot } from './snapshot'
+import { buildSnapshot } from './snapshot'
+import { buildPreviewEntry } from './snapshot-preview'
 import { createTestCollection, withTestSite } from './test-utils'
 
 const basic: Field[] = [

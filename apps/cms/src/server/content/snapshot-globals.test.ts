@@ -20,7 +20,8 @@ import {
   scheduleEntry,
   updateDraft,
 } from './entries.ts'
-import { buildPreviewGlobal, buildSnapshot } from './snapshot.ts'
+import { buildSnapshot } from './snapshot.ts'
+import { buildPreviewGlobal } from './snapshot-preview.ts'
 import {
   createTestCollection,
   createTestGlobal,

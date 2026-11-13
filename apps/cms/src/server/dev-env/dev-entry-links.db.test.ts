@@ -12,7 +12,7 @@ import {
 } from '#/server/content/entries'
 import { ValidationError } from '#/server/content/errors'
 import { listInboundLinks } from '#/server/content/entry-link-index'
-import { buildPreviewEntry } from '#/server/content/snapshot'
+import { buildPreviewEntry } from '#/server/content/snapshot-preview'
 import {
   cleanupTestSite,
   createSiteInOrganization,

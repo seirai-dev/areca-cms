@@ -16,7 +16,7 @@ import { normalizeEntryData } from '#/server/content/entries'
 import {
   buildPreviewEntryFromDraft,
   buildPreviewGlobalFromDraft,
-} from '#/server/content/snapshot'
+} from '#/server/content/snapshot-preview'
 import { NotFoundError } from '#/server/content/errors'
 import { entryDataSchema, validateEntryData } from '#/server/content/validation'
 

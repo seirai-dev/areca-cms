@@ -4,7 +4,7 @@ import '@tanstack/react-start'
 import {
   buildPreviewEntry,
   buildPreviewGlobal,
-} from '#/server/content/snapshot'
+} from '#/server/content/snapshot-preview'
 import {
   decodePreviewToken,
   verifyPreviewToken,

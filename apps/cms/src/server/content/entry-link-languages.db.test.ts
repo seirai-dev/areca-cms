@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import { createEntry, publishEntry } from './entries.ts'
-import { buildPreviewEntry, buildSnapshot } from './snapshot.ts'
+import { buildSnapshot } from './snapshot.ts'
+import { buildPreviewEntry } from './snapshot-preview.ts'
 import {
   cleanupTestSite,
   createTestCollection,

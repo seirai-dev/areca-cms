@@ -194,9 +194,9 @@ describe('entry link targets and resolution', () => {
     expect(entryLinkTargets(linkDoc({ href: '/x' }))).toEqual([])
   })
 
-  it('replaces the href and keeps the mark when the target resolves', async () => {
+  it('replaces the href and keeps the mark when the target resolves', () => {
     const source = linkDoc({ entryId: ENTRY_ID, anchor: 'faq' })
-    const { json, issues } = await resolveEntryLinks(source, async () => ({
+    const { json, issues } = resolveEntryLinks(source, () => ({
       href: '/nl/vragen#faq',
       targetTitle: 'Vragen',
     }))
@@ -213,7 +213,7 @@ describe('entry link targets and resolution', () => {
     )
   })
 
-  it('drops the mark of a link that cannot work, keeps the text, and reports it once', async () => {
+  it('drops the mark of a link that cannot work, keeps the text, and reports it once', () => {
     const doc = {
       type: 'doc',
       content: [
@@ -239,7 +239,7 @@ describe('entry link targets and resolution', () => {
         },
       ],
     }
-    const { json, issues } = await resolveEntryLinks(doc, async () => ({
+    const { json, issues } = resolveEntryLinks(doc, () => ({
       href: null,
       reason: 'not-live',
       targetTitle: 'Concept',
@@ -259,7 +259,7 @@ describe('entry link targets and resolution', () => {
     ])
   })
 
-  it('resolves each distinct target once and keeps other marks', async () => {
+  it('resolves each distinct target once and keeps other marks', () => {
     const link = (anchor: string | null) => ({
       type: 'link',
       attrs: { href: '/x', entryId: ENTRY_ID, anchor },
@@ -278,7 +278,7 @@ describe('entry link targets and resolution', () => {
       ],
     }
     const calls: (string | null)[] = []
-    const { json } = await resolveEntryLinks(doc, async (target) => {
+    const { json } = resolveEntryLinks(doc, (target) => {
       calls.push(target.anchor)
       return { href: `/p#${target.anchor ?? ''}`, targetTitle: 'P' }
     })

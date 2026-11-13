@@ -11,7 +11,8 @@ import {
   richTextAssetsAuthorizedFrom,
 } from '#/server/assets/richtext-ownership'
 
-import { buildPreviewEntryFromDraft, buildSnapshot } from './snapshot.ts'
+import { buildSnapshot } from './snapshot.ts'
+import { buildPreviewEntryFromDraft } from './snapshot-preview.ts'
 import {
   createTestCollection,
   createTestSite,

@@ -14,7 +14,8 @@ import {
 import { ValidationError } from './errors.ts'
 import { listInboundReferences } from './inbound-references.ts'
 import { rebuildEntryLinkIndex } from './entry-link-index.ts'
-import { buildPreviewEntry, buildSnapshot } from './snapshot.ts'
+import { buildSnapshot } from './snapshot.ts'
+import { buildPreviewEntry } from './snapshot-preview.ts'
 import type { LinkWarning } from './snapshot.ts'
 import {
   cleanupTestSite,

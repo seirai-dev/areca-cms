@@ -3,14 +3,15 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { db } from '#/db'
 import { asset, collection, entry, site } from '#/db/schema'
+import type * as Env from '#/env'
 import type { EntryData, SiteLanguages } from '#/lib/types'
 
+import { buildSnapshot } from './snapshot.ts'
 import {
   buildPreviewEntry,
   buildPreviewEntryFromDraft,
   buildPreviewGlobal,
-  buildSnapshot,
-} from './snapshot.ts'
+} from './snapshot-preview.ts'
 import { getCollection } from './collections.ts'
 import { findSite } from './site-core.ts'
 import {
@@ -21,7 +22,7 @@ import {
 } from './test-utils.ts'
 
 vi.mock('#/env', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('#/env')>()
+  const actual = await importOriginal<typeof Env>()
   return { env: { ...actual.env, APP_URL: 'https://cms.fixture' } }
 })
 
@@ -77,6 +78,7 @@ async function seedFixture(prefix: string, languages: SiteLanguages | null) {
   await db
     .delete(asset)
     .where(inArray(asset.id, ['hero', 'inline', 'og', 'logo'].map(id)))
+  const emptyAlt: Record<string, string> = {}
   await db.insert(asset).values(
     ['hero', 'inline', 'og', 'logo'].map((name, i) => ({
       id: id(name),
@@ -88,7 +90,7 @@ async function seedFixture(prefix: string, languages: SiteLanguages | null) {
       width: 640 + i,
       height: 480 + i,
       altText: `${name} alt`,
-      altI18n: languages ? { nl: `${name} alt nl` } : {},
+      altI18n: languages ? { nl: `${name} alt nl` } : emptyAlt,
     })),
   )
 
@@ -182,7 +184,10 @@ async function seedFixture(prefix: string, languages: SiteLanguages | null) {
       name: 'Fixture BV',
       logo: id('logo'),
       about: doc(
-        paragraph('See draft', { entryId: id('draft'), collection: 'articles' }),
+        paragraph('See draft', {
+          entryId: id('draft'),
+          collection: 'articles',
+        }),
         image(`/api/assets/file/${key('inline')}`),
       ),
       $seo: { description: 'About us', ogImage: id('og') },
