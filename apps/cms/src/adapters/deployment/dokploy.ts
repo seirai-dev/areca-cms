@@ -1,4 +1,4 @@
-import { DeploymentNotDispatchedError, DeploymentUncertainError } from './types'
+import { DeploymentUncertainError } from './types'
 import type {
   DeploymentAdapter,
   DeploymentContext,
@@ -7,12 +7,14 @@ import type {
 } from './types'
 import { createHealthChecker } from './health-check'
 import {
-  POLL_RETRY_DELAYS_MS,
-  formatRetryDelay,
-  isTransientStatus,
-  retryTransient,
-  sleep,
-} from './shared'
+  createdSince,
+  dispatchOnce,
+  dispatchedSince,
+  logReconciled,
+  pollUntilMatch,
+  waitForDeployment,
+} from './dispatch'
+import { isTransientStatus, retryTransient, sleep } from './shared'
 import { collectSecretValues, redactString } from '#/server/log'
 import { assertSecureServiceUrl } from '#/server/http/outbound-url'
 import type { ResolveHost } from '#/server/http/outbound-url'
@@ -27,9 +29,6 @@ import type { ResolveHost } from '#/server/http/outbound-url'
 // domain.create: { host, path?, port?, https?, certificateType?, applicationId?, domainType?, ... }
 
 type FetchFn = typeof fetch
-
-/** Tolerated CMS-to-Dokploy clock skew when comparing deployment createdAt. */
-const DISPATCH_CLOCK_SKEW_MS = 5_000
 
 type DokployConnectionOptions = {
   baseUrl: string
@@ -258,52 +257,32 @@ export function createDokployAdapter(
 
   return {
     async deploy(target, log, context) {
-      log(
-        `Deploying application=${requireDokploy(target).applicationId} job=${context.jobId} publication=${context.publicationId} snapshot=${context.snapshotHash}`,
-      )
-      try {
-        await bustContentCache(
-          requireDokploy(target).applicationId,
-          log,
-          context,
-        )
-      } catch (error) {
-        throw new DeploymentNotDispatchedError(
-          error instanceof Error ? error.message : String(error),
-        )
-      }
-      try {
-        // This POST is deliberately never retried: a lost response or even an
-        // upstream 5xx can follow enqueueing the deployment.
-        await request('/api/application.deploy', {
-          method: 'POST',
-          body: JSON.stringify({
-            applicationId: requireDokploy(target).applicationId,
-            ...dispatchIdentity(context),
-          }),
-        })
-      } catch (error) {
-        if (
-          error instanceof DokployHttpError &&
-          [400, 401, 403, 404, 422].includes(error.status)
-        ) {
-          throw new DeploymentNotDispatchedError(error.message)
-        }
-        log(
-          'Deploy response uncertain; reconciling the same dispatch before proceeding',
-        )
-      }
-      const found = await reconcile(
-        requireDokploy(target).applicationId,
+      const { applicationId } = requireDokploy(target)
+      return dispatchOnce(
+        {
+          describe: `application=${applicationId}`,
+          prepare: () => bustContentCache(applicationId, log, context),
+          async post() {
+            // This POST is deliberately never retried: a lost response or even
+            // an upstream 5xx can follow enqueueing the deployment. Dokploy
+            // returns no deployment id, so the dispatch is always reconciled.
+            await request('/api/application.deploy', {
+              method: 'POST',
+              body: JSON.stringify({
+                applicationId,
+                ...dispatchIdentity(context),
+              }),
+            })
+            return null
+          },
+          notDispatched: (error) =>
+            error instanceof DokployHttpError &&
+            [400, 401, 403, 404, 422].includes(error.status),
+          reconcile: () => reconcile(applicationId, context, log),
+        },
         context,
         log,
       )
-      if (!found)
-        throw new DeploymentUncertainError(
-          `Deployment acceptance unknown for job=${context.jobId} publication=${context.publicationId}; reconcile manually, do not redeploy`,
-        )
-      log(`upstream deployment=${found.deploymentId}`)
-      return found
     },
 
     async reconcile(target, context, log) {
@@ -312,103 +291,91 @@ export function createDokployAdapter(
         context,
         log,
       )
-      log(
-        found
-          ? `Reconciled upstream deployment=${found.deploymentId}`
-          : `No matching dispatch job=${context.jobId}; acceptance remains unknown`,
-      )
+      logReconciled(found, context, log)
       return found
     },
 
-    async waitForCompletion(target, deploymentId, { timeoutMs, pollMs }, log) {
-      const deadline = now() + timeoutMs
-      let lastStatus: string | undefined
-      while (now() < deadline) {
-        // A status poll survives about 30 seconds of transient failures, capped
-        // to this wait's deadline, before the error is thrown as before.
-        const app = await retryTransient(
-          () => fetchApplication(requireDokploy(target).applicationId),
-          {
-            delays: POLL_RETRY_DELAYS_MS,
-            isTransient: isDokployTransient,
-            sleep: sleepBetweenPolls,
-            now,
-            deadline,
-            onRetry: (error, delay) =>
-              log(
-                `poll failed (${failureReason(error)}); retrying in ${formatRetryDelay(delay)}`,
-              ),
-          },
-        )
-        const deployment = app.deployments?.find(
-          (item) => item.deploymentId === deploymentId,
-        )
-        const status = deployment?.status
-        if (status !== lastStatus) {
-          log(`deployment=${deploymentId} status=${status ?? 'unknown'}`)
-          lastStatus = status
-        }
-        if (status === 'error') return 'error'
-        if (status === 'done') return 'done'
-        // Application-wide status belongs to no particular dispatch. Missing
-        // deployment records are uncertain, never evidence of success/failure.
-        const wait = Math.min(pollMs, deadline - now())
-        if (wait <= 0) break
-        await sleepBetweenPolls(wait)
-      }
-      return 'timeout'
+    waitForCompletion(target, deploymentId, { timeoutMs, pollMs }, log) {
+      const { applicationId } = requireDokploy(target)
+      return waitForDeployment({
+        deploymentId,
+        async poll() {
+          const app = await fetchApplication(applicationId)
+          // Application-wide status belongs to no particular dispatch. Missing
+          // deployment records are uncertain, never evidence of success/failure.
+          const status = app.deployments?.find(
+            (item) => item.deploymentId === deploymentId,
+          )?.status
+          return {
+            state:
+              status === 'error'
+                ? 'error'
+                : status === 'done'
+                  ? 'done'
+                  : 'running',
+            status,
+          }
+        },
+        timeoutMs,
+        pollMs,
+        now,
+        sleep: sleepBetweenPolls,
+        isTransient: isDokployTransient,
+        failureReason,
+        log,
+      })
     },
     healthCheck,
   }
 
-  async function reconcile(
+  function reconcile(
     applicationId: string,
     context: DeploymentContext,
     log: (line: string) => void,
   ) {
-    const deadline = Date.now() + (opts.reconciliationTimeoutMs ?? 30_000)
     const identity = dispatchIdentity(context)
-    for (;;) {
-      const app = await getApplication(applicationId)
-      const deployments = app.deployments ?? []
-      // Preferred evidence: the exact identity we sent. Git-sourced apps make
-      // Dokploy ignore title/description, so this only matches other providers.
-      const matches = deployments.filter(
-        (item) =>
-          item.title === identity.title &&
-          item.description === identity.description,
-      )
-      if (matches.length > 1)
-        throw new DeploymentUncertainError(
-          `Multiple upstream deployments match job=${context.jobId}; manual investigation required`,
+    return pollUntilMatch({
+      timeoutMs: opts.reconciliationTimeoutMs ?? 30_000,
+      pollMs: opts.reconciliationPollMs ?? 1000,
+      now: Date.now,
+      sleep,
+      async find() {
+        const app = await getApplication(applicationId)
+        const deployments = app.deployments ?? []
+        // Preferred evidence: the exact identity we sent. Git-sourced apps make
+        // Dokploy ignore title/description, so this only matches other providers.
+        const matches = deployments.filter(
+          (item) =>
+            item.title === identity.title &&
+            item.description === identity.description,
         )
-      const id = matches[0]?.deploymentId
-      if (id) {
-        log(`deployment=${id} matched by dispatch title`)
-        return { deploymentId: id }
-      }
-      // Fallback: Dokploy ignored our identity. Builds for an application are
-      // serialised by the worker, so the single deployment created since our
-      // dispatch is ours. The health check still verifies the publicationId.
-      const created = findDeploymentsCreatedSince(deployments, context)
-      if (created.length > 1)
-        throw new DeploymentUncertainError(
-          `Multiple upstream deployments were created after dispatch for job=${context.jobId}; manual investigation required`,
-        )
-      const onlyCreated = created[0]?.deploymentId
-      if (onlyCreated) {
-        log(
-          `deployment=${onlyCreated} matched as the only deployment created after dispatch`,
-        )
-        return { deploymentId: onlyCreated }
-      }
-      const wait = Math.min(
-        opts.reconciliationPollMs ?? 1000,
-        deadline - Date.now(),
-      )
-      if (wait <= 0) return null
-      await sleep(wait)
-    }
+        if (matches.length > 1)
+          throw new DeploymentUncertainError(
+            `Multiple upstream deployments match job=${context.jobId}; manual investigation required`,
+          )
+        const id = matches[0]?.deploymentId
+        if (id) {
+          log(`deployment=${id} matched by dispatch title`)
+          return { deploymentId: id }
+        }
+        // Fallback: Dokploy ignored our identity. Builds for an application are
+        // serialised by the worker, so the single deployment created since our
+        // dispatch is ours. The health check still verifies the publicationId.
+        const created = findDeploymentsCreatedSince(deployments, context)
+        if (created.length > 1)
+          throw new DeploymentUncertainError(
+            `Multiple upstream deployments were created after dispatch for job=${context.jobId}; manual investigation required`,
+          )
+        const onlyCreated = created[0]?.deploymentId
+        if (onlyCreated) {
+          log(
+            `deployment=${onlyCreated} matched as the only deployment created after dispatch`,
+          )
+          return { deploymentId: onlyCreated }
+        }
+        return null
+      },
+    })
   }
 }
 
@@ -474,15 +441,14 @@ function findDeploymentsCreatedSince(
   deployments: DokployDeployment[],
   context: DeploymentContext,
 ) {
-  if (!context.dispatchedAt) return []
-  const since = context.dispatchedAt.getTime() - DISPATCH_CLOCK_SKEW_MS
-  return deployments.filter((item) => {
-    if (!item.deploymentId) return false
-    if (item.title?.startsWith('areca:')) return false
-    if (typeof item.createdAt !== 'string') return false
-    const created = Date.parse(item.createdAt)
-    return Number.isFinite(created) && created >= since
-  })
+  const since = dispatchedSince(context)
+  if (since === null) return []
+  return deployments.filter(
+    (item) =>
+      Boolean(item.deploymentId) &&
+      !item.title?.startsWith('areca:') &&
+      createdSince(item.createdAt, since),
+  )
 }
 
 function requireDokploy(target: DeploymentTarget): DokployDeploymentTarget {
@@ -503,20 +469,21 @@ function failureReason(error: unknown) {
     : 'no response'
 }
 
+/** Statuses a read or an identical idempotent write is retried on. */
+const RETRY_SAFE_STATUSES = [408, 429, 500, 502, 503, 504]
+
 /** Bounded retry only for read operations or an identical idempotent write. */
-async function retrySafe<T>(operation: () => Promise<T>): Promise<T> {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await operation()
-    } catch (error) {
-      if (
-        attempt >= 2 ||
-        (error instanceof DokployHttpError &&
-          ![408, 429, 500, 502, 503, 504].includes(error.status)) ||
-        error instanceof SyntaxError
-      )
-        throw error
-      await sleep(100 * 2 ** attempt)
-    }
-  }
+function retrySafe<T>(operation: () => Promise<T>): Promise<T> {
+  return retryTransient(operation, {
+    delays: [100, 200],
+    // Any failure but malformed JSON or another HTTP status, so a lost
+    // response or a failed body read is retried too.
+    isTransient: (error) =>
+      error instanceof DokployHttpError
+        ? RETRY_SAFE_STATUSES.includes(error.status)
+        : !(error instanceof SyntaxError),
+    sleep,
+    now: Date.now,
+    deadline: Infinity,
+  })
 }
