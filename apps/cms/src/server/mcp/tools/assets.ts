@@ -241,6 +241,7 @@ export function registerAssetTools(registry: ToolCollector): void {
         organizationId: actor.organizationId,
         siteId: actor.siteId,
         userId: actor.userId,
+        credential: { kind: actor.credential, id: actor.keyId },
         purpose: input.purpose,
       })
       const { pageUrl, uploadUrl } = uploadSessionUrls(token)

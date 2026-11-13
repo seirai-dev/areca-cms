@@ -8,7 +8,15 @@ import {
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { db } from '#/db'
-import { asset, assetUploadSession, membership, user } from '#/db/schema'
+import {
+  asset,
+  assetUploadSession,
+  mcpConnection,
+  mcpKey,
+  membership,
+  oauthClient,
+  user,
+} from '#/db/schema'
 import { cleanupTestSite, createTestSite } from '#/server/content/test-utils'
 import { handleMcpRequest } from '#/server/mcp/http'
 import { createMcpKey } from '#/server/mcp/keys'
@@ -291,6 +299,110 @@ describe.skipIf(!hasDb)('upload links over MCP', () => {
     })
     expect(peek.isError).toBe(true)
     expect(peek.text).toContain('create_asset_upload')
+  })
+
+  it('stops working once the key that opened it is revoked', async () => {
+    const { token: keyToken, key } = await createMcpKey({
+      userId: ctx.actor.id,
+      siteId: ctx.site.id,
+      organizationId: ctx.org.id,
+      name: 'revoked later',
+      expiresInDays: 30,
+      allowGoLive: false,
+      role: 'owner',
+    })
+    const client = await connect(keyToken)
+    const created = await call(client, 'create_asset_upload', {})
+    const token = tokenOf(created.data.uploadUrl)
+    const [row] = await db
+      .select()
+      .from(assetUploadSession)
+      .where(eq(assetUploadSession.id, String(created.data.uploadId)))
+    expect(row).toMatchObject({ mcpKeyId: key.id, mcpConnectionId: null })
+    expect((await put(token, await png('#111111'))).status).toBe(201)
+
+    await db
+      .update(mcpKey)
+      .set({ revokedAt: new Date() })
+      .where(eq(mcpKey.id, key.id))
+    const assetCount = async () =>
+      (
+        await db
+          .select()
+          .from(asset)
+          .where(eq(asset.organizationId, ctx.org.id))
+      ).length
+    const before = await assetCount()
+
+    const response = await put(token, await png('#222222'))
+    expect(response.status).toBe(404)
+    expect(await assetCount()).toBe(before)
+    expect((await handleSessionInfo(token)).status).toBe(404)
+    expect((await handleSessionFinish(token)).status).toBe(404)
+  })
+
+  it('is deleted with the key that opened it', async () => {
+    const { key } = await createMcpKey({
+      userId: ctx.actor.id,
+      siteId: ctx.site.id,
+      organizationId: ctx.org.id,
+      name: 'deleted later',
+      expiresInDays: 30,
+      allowGoLive: false,
+      role: 'owner',
+    })
+    const { token } = await createUploadSession({
+      organizationId: ctx.org.id,
+      siteId: ctx.site.id,
+      userId: ctx.actor.id,
+      credential: { kind: 'key', id: key.id },
+    })
+    await db.delete(mcpKey).where(eq(mcpKey.id, key.id))
+    expect((await put(token, await png('#333333'))).status).toBe(404)
+  })
+
+  it('stops working once the OAuth connection that opened it is revoked', async () => {
+    const clientId = `upload-test-${crypto.randomUUID()}`
+    await db.insert(oauthClient).values({
+      id: crypto.randomUUID(),
+      clientId,
+      redirectUris: ['http://localhost/callback'],
+    })
+    try {
+      const [connection] = await db
+        .insert(mcpConnection)
+        .values({
+          userId: ctx.actor.id,
+          siteId: ctx.site.id,
+          clientId,
+          clientName: 'Test app',
+        })
+        .returning()
+      const { token } = await createUploadSession({
+        organizationId: ctx.org.id,
+        siteId: ctx.site.id,
+        userId: ctx.actor.id,
+        credential: { kind: 'oauth', id: connection.id },
+      })
+      expect((await put(token, await png('#444444'))).status).toBe(201)
+      await db
+        .update(mcpConnection)
+        .set({ revokedAt: new Date() })
+        .where(eq(mcpConnection.id, connection.id))
+      expect((await put(token, await png('#555555'))).status).toBe(404)
+    } finally {
+      await db.delete(oauthClient).where(eq(oauthClient.clientId, clientId))
+    }
+  })
+
+  it('keeps working without a credential when no key or connection opened it', async () => {
+    const { token } = await createUploadSession({
+      organizationId: ctx.org.id,
+      siteId: ctx.site.id,
+      userId: ctx.actor.id,
+    })
+    expect((await put(token, await png('#666666'))).status).toBe(201)
+    expect((await handleSessionFinish(token)).status).toBe(200)
   })
 
   it('refuses an unknown link', async () => {
