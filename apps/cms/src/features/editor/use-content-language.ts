@@ -1,6 +1,8 @@
 import * as React from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 
+import { useStoredState } from '#/hooks/use-stored-state'
+import type { StoredCodec } from '#/hooks/use-stored-state'
 import type { SiteLanguages } from '#/lib/types'
 
 import { editorLanguages } from './language-state'
@@ -52,20 +54,9 @@ export function isLanguageShortcut(event: ShortcutEvent): -1 | 1 | null {
   return event.altKey ? -1 : 1
 }
 
-function readRemembered(siteId: string): string | null {
-  try {
-    return localStorage.getItem(`${LANGUAGE_STORAGE_PREFIX}${siteId}`)
-  } catch {
-    return null
-  }
-}
-
-function rememberLanguage(siteId: string, code: string) {
-  try {
-    localStorage.setItem(`${LANGUAGE_STORAGE_PREFIX}${siteId}`, code)
-  } catch {
-    /* localStorage unavailable: the URL still carries the choice */
-  }
+const REMEMBERED_LANGUAGE: StoredCodec<string | null> = {
+  parse: (raw) => raw,
+  serialize: (code) => code,
 }
 
 /**
@@ -93,7 +84,11 @@ export function useContentLanguage({
   )
   const main = config?.main ?? ''
   const all = config?.all ?? []
-  const remembered = config ? readRemembered(siteId) : null
+  const [stored, rememberLanguage] = useStoredState(
+    `${LANGUAGE_STORAGE_PREFIX}${siteId}`,
+    REMEMBERED_LANGUAGE,
+  )
+  const remembered = config ? stored : null
   const active = config
     ? resolveLanguage({ requested, remembered, main, all })
     : null
@@ -101,7 +96,7 @@ export function useContentLanguage({
   const setActive = React.useCallback(
     (code: string) => {
       if (!all.includes(code)) return
-      rememberLanguage(siteId, code)
+      rememberLanguage(code)
       void navigate({
         to: '.',
         search: (prev) => ({ ...prev, lang: code }),
@@ -110,7 +105,7 @@ export function useContentLanguage({
         viewTransition: false,
       })
     },
-    [all, navigate, siteId],
+    [all, navigate, rememberLanguage],
   )
 
   // Ctrl+Shift+L (and +Alt for previous) switches language anywhere in the editor. The key code is

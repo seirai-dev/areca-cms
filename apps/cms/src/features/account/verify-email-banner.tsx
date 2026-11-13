@@ -6,6 +6,8 @@ import { BannerRow } from '#/components/shell/banner-row'
 import { Button } from '#/components/ui/button'
 import { errorMessage } from '#/lib/admin/helpers'
 import { m } from '#/paraglide/messages'
+import { useStoredState } from '#/hooks/use-stored-state'
+import type { StoredCodec } from '#/hooks/use-stored-state'
 import type { Me } from '#/server/fn/me'
 import { requestVerificationEmailFn } from '#/server/fn/account'
 
@@ -16,6 +18,11 @@ import {
   withoutVerifiedParam,
 } from './verify-email-logic'
 
+const DISMISSED: StoredCodec<boolean> = {
+  parse: (raw) => raw === '1',
+  serialize: (dismissed) => (dismissed ? '1' : null),
+}
+
 /**
  * Asks people who have not confirmed their address to do so. "Not now" hides it
  * for this browser and account. The state is read after mount so the server
@@ -24,26 +31,15 @@ import {
 export function VerifyEmailBanner({ me }: { me: Me }) {
   const router = useRouter()
   const key = verifyEmailDismissedKey(me.user.id)
-  const [dismissed, setDismissed] = React.useState<boolean | null>(null)
+  const [dismissed, setDismissed] = useStoredState(key, DISMISSED, {
+    serverValue: null,
+  })
   const [pending, setPending] = React.useState(false)
-
-  React.useEffect(() => {
-    try {
-      setDismissed(localStorage.getItem(key) === '1')
-    } catch {
-      setDismissed(false)
-    }
-  }, [key])
 
   if (!needsEmailVerification(me) || dismissed !== false) return null
 
   function dismiss() {
     setDismissed(true)
-    try {
-      localStorage.setItem(key, '1')
-    } catch {
-      /* localStorage unavailable: the reminder returns on the next visit */
-    }
   }
 
   async function send() {

@@ -140,21 +140,27 @@ export function useRecentEmails(failedOnly: boolean) {
   })
 }
 
+export function useMailSettingsQuery() {
+  return useQuery({
+    queryKey: mailSettingsQueryKey,
+    queryFn: () => getMailSettingsFn(),
+  })
+}
+
 /**
  * Mail tab state. The form is a draft: verify and test run on it as typed,
  * save persists it. The password is write-only and never seeded back.
  */
-export function useMailSettings() {
+export function useMailSettings(saved: MailStatus) {
   const queryClient = useQueryClient()
   const stepUp = useStepUp()
-  const query = useQuery({
-    queryKey: mailSettingsQueryKey,
-    queryFn: () => getMailSettingsFn(),
-  })
-  const saved = query.data
 
-  const [fields, setFields] = React.useState<MailFields>(emptyFields)
-  const [baseline, setBaseline] = React.useState(() => serialize(emptyFields()))
+  // Starts from the settings loaded when the form mounts; a background refetch
+  // keeps the draft. Save and discard start it again.
+  const [fields, setFields] = React.useState(() =>
+    fieldsFromSettings(saved.settings),
+  )
+  const [baseline, setBaseline] = React.useState(() => serialize(fields))
   // Opened by switching "Use environment settings" off, before any save.
   const [formOpen, setFormOpen] = React.useState(false)
   const [verifyResult, setVerifyResult] =
@@ -181,14 +187,6 @@ export function useMailSettings() {
     },
     [],
   )
-
-  const seeded = React.useRef(false)
-  React.useEffect(() => {
-    if (saved && !seeded.current) {
-      seeded.current = true
-      seed(saved)
-    }
-  }, [saved, seed])
 
   const update = React.useCallback((patch: Partial<MailFields>) => {
     setFields((prev) => ({ ...prev, ...patch }))
@@ -280,17 +278,15 @@ export function useMailSettings() {
   })
 
   /** Using the environment is the source of truth until the form is opened. */
-  const usingEnvironment = saved?.source === 'env' && !formOpen
+  const usingEnvironment = saved.source === 'env' && !formOpen
 
   /** Shows the form, starting from the environment values when those are in use. */
   function openForm() {
-    if (saved?.env && saved.source === 'env')
-      setFields(fieldsFromEnv(saved.env))
+    if (saved.env && saved.source === 'env') setFields(fieldsFromEnv(saved.env))
     setFormOpen(true)
   }
 
   function discard() {
-    if (!saved) return
     seed(saved)
     setFormOpen(false)
     setVerifyResult(null)
@@ -299,7 +295,6 @@ export function useMailSettings() {
   }
 
   return {
-    query,
     saved,
     usingEnvironment,
     formOpen,

@@ -2,10 +2,9 @@ import * as React from 'react'
 import { CopySimple, Translate } from '@phosphor-icons/react'
 
 import { Button } from '#/components/ui/button'
+import { richTextPlainText } from '#/lib/richtext-text'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
-
-import { plainTextOf } from './seo-panel'
 
 /**
  * Plain text of a field value, for the reference row. Rich text uses the
@@ -17,7 +16,7 @@ export function referenceText(type: string, value: unknown): string {
     if (typeof markdown === 'string' && markdown.trim() !== '') {
       return markdown.trim()
     }
-    return plainTextOf(value)
+    return richTextPlainText(value)
   }
   if (typeof value === 'string') return value.trim()
   if (typeof value === 'number') return String(value)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { modifierLabels } from './kbd'
+import { modifierLabels, shortcutLabel } from './kbd'
 
 describe('modifierLabels', () => {
   it('uses the Command and Shift glyphs on Apple platforms', () => {
@@ -28,5 +28,18 @@ describe('modifierLabels', () => {
       shift: 'Shift',
       alt: 'Alt',
     })
+  })
+})
+
+describe('shortcutLabel', () => {
+  it('keeps the Apple glyphs on Apple platforms', () => {
+    expect(shortcutLabel('⌘⌥2', 'MacIntel')).toBe('⌘⌥2')
+    expect(shortcutLabel('⌘⇧Z', 'iPad')).toBe('⌘⇧Z')
+  })
+
+  it('spells the modifiers out elsewhere', () => {
+    expect(shortcutLabel('⌘⌥2', 'Win32')).toBe('Ctrl+Alt+2')
+    expect(shortcutLabel('⌘⇧8', 'Linux x86_64')).toBe('Ctrl+Shift+8')
+    expect(shortcutLabel('⌘B', '')).toBe('Ctrl+B')
   })
 })
