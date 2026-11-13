@@ -763,7 +763,13 @@ export async function listRevisions(
   entryId: string,
   options: { cursor?: string | null; limit?: number } = {},
 ): Promise<{ items: RevisionSummary[]; nextCursor: string | null }> {
-  const existing = await getEntry(entryId)
+  const existing = (
+    await db
+      .select({ id: entry.id })
+      .from(entry)
+      .where(eq(entry.id, entryId))
+      .limit(1)
+  ).at(0)
   if (!existing) {
     throw new NotFoundError(m.server_entry_not_found())
   }

@@ -3,6 +3,9 @@ import type { RateLimitStore } from './rate-limit.ts'
 // Bounds memory under a flood of distinct keys. Past this size the oldest
 // counters are dropped, so a determined flood can reset its own budgets.
 const MAX_KEYS = 50_000
+// A full store sweeps expired counters at most this often; between sweeps it
+// only drops the oldest key, so a flood does not walk every key per request.
+const SWEEP_INTERVAL_MS = 1_000
 
 /**
  * In-process counters with the same semantics as the Redis script: a window
@@ -14,9 +17,14 @@ export function createMemoryRateLimitStore(
 ): RateLimitStore {
   const counters = new Map<string, { count: number; expiresAt: number }>()
 
+  let nextSweepAt = 0
+
   function prune(at: number) {
-    for (const [key, counter] of counters) {
-      if (counter.expiresAt <= at) counters.delete(key)
+    if (at >= nextSweepAt) {
+      nextSweepAt = at + SWEEP_INTERVAL_MS
+      for (const [key, counter] of counters) {
+        if (counter.expiresAt <= at) counters.delete(key)
+      }
     }
     if (counters.size < MAX_KEYS) return
     const oldest = counters.keys().next()

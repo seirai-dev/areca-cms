@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
-import { eq, inArray } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { collection, entry } from '#/db/schema'
@@ -14,9 +14,12 @@ import { NotFoundError } from '#/server/content/errors'
 const activityFn = { strict: { output: false } as const }
 
 /** A readable title from entry data, without its schema (the feed's rule). */
+/** The draft keys a title is taken from, in order. Only these are read. */
+const TITLE_KEYS = ['title', 'name', 'heading', 'label']
+
 function titleOf(data: EntryData | null | undefined) {
   if (!data) return null
-  for (const key of ['title', 'name', 'heading', 'label']) {
+  for (const key of TITLE_KEYS) {
     const value = data[key]
     if (typeof value === 'string' && value.trim()) return value.trim()
   }
@@ -71,7 +74,10 @@ export const getActivityEntriesFn = createServerFn({
         id: entry.id,
         siteId: entry.siteId,
         slug: entry.slug,
-        draftData: entry.draftData,
+        draftData: sql<EntryData>`jsonb_build_object(${sql.join(
+          TITLE_KEYS.map((key) => sql`${key}::text, ${entry.draftData} -> ${key}`),
+          sql`, `,
+        )})`,
         collectionKey: collection.key,
         collectionKind: collection.kind,
         collectionEnabled: collection.enabled,
