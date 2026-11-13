@@ -50,7 +50,7 @@ import {
 } from './scheduler.ts'
 import {
   lockSiteLinkIndex,
-  syncEntryLinkIndex,
+  syncEntryLinkIndexes,
 } from '#/server/content/entry-link-index'
 import { siteCoreColumns } from '#/server/content/site-core'
 
@@ -550,8 +550,18 @@ export async function processJob(
           dispatchUncertain: false,
         })
         .where(eq(buildJob.id, job.id))
-      for (const selected of pub.entryVersions) {
-        if (!selected.scheduledVersion) continue
+      const released = pub.entryVersions.filter(
+        (selected) => selected.scheduledVersion,
+      )
+      if (released.length > 0) {
+        const ids = released.map((selected) => selected.entryId)
+        // Entry rows are locked in id order (see `lockSiteLinkIndex`).
+        await tx
+          .select({ id: entry.id })
+          .from(entry)
+          .where(and(eq(entry.siteId, job.siteId), inArray(entry.id, ids)))
+          .orderBy(entry.id)
+          .for('no key update')
         await tx
           .update(entry)
           .set({
@@ -570,12 +580,17 @@ export async function processJob(
           .where(
             and(
               eq(entry.siteId, job.siteId),
-              eq(entry.id, selected.entryId),
-              eq(entry.scheduledVersion, selected.scheduledVersion),
+              sql`(${entry.id}, ${entry.scheduledVersion}) IN (VALUES ${sql.join(
+                released.map(
+                  (selected) =>
+                    sql`(${selected.entryId}, ${selected.scheduledVersion})`,
+                ),
+                sql`, `,
+              )})`,
               eq(entry.status, 'scheduled'),
             ),
           )
-        await syncEntryLinkIndex(tx, selected.entryId)
+        await syncEntryLinkIndexes(tx, ids)
       }
     })
 
