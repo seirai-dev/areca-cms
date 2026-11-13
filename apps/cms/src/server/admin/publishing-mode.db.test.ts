@@ -75,7 +75,7 @@ async function goneLive(siteId: string) {
 
 describe.skipIf(!runnable)('publishing-mode rules and asset audits', () => {
   let world: World
-  let admin: TestSession
+  let admin: NonNullable<TestSession>
 
   beforeAll(async () => {
     world = await seedWorld()
