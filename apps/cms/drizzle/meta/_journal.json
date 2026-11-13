@@ -351,6 +351,13 @@
       "when": 1794570534369,
       "tag": "0049_perf_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1794573015569,
+      "tag": "0050_perf_search_slugs",
+      "breakpoints": true
     }
   ]
 }

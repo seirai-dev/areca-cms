@@ -2,7 +2,7 @@ import { and, eq, ne, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import type { DbExecutor, DbReader } from '#/db'
-import { collection, entry, site } from '#/db/schema'
+import { entry, site } from '#/db/schema'
 import {
   I18N_KEY,
   SLUG_KEY,
@@ -183,9 +183,10 @@ export async function validateLocaleSlugs(
   }
   if (candidates.length === 0) return errors
 
+  // Containment on `$i18n` is served by its GIN index (`entry_i18n_idx`).
   const conflictTerms = candidates.flatMap(([locale, slug]) => [
     eq(entry.slug, slug),
-    sql`${entry.draftData} #>> ARRAY[${I18N_KEY}::text, ${locale}::text, ${SLUG_KEY}::text] = ${slug}`,
+    sql`(${entry.draftData} -> '${sql.raw(I18N_KEY)}') @> ${JSON.stringify({ [locale]: { [SLUG_KEY]: slug } })}::jsonb`,
   ])
   const filters = [
     eq(entry.collectionId, input.collectionId),
@@ -195,16 +196,15 @@ export async function validateLocaleSlugs(
   const others = await connection
     .select({
       slug: entry.slug,
-      draftData: entry.draftData,
+      i18n: sql<unknown>`${entry.draftData} -> '${sql.raw(I18N_KEY)}'`,
     })
     .from(entry)
-    .innerJoin(collection, eq(entry.collectionId, collection.id))
     .where(and(...filters))
 
   for (const [locale, slug] of candidates) {
     const taken = others.some((other) => {
       if (other.slug === slug) return true
-      const slot = other.draftData[I18N_KEY]
+      const slot = other.i18n
       const own = isPlainObject(slot) ? slot[locale] : undefined
       return isPlainObject(own) && own[SLUG_KEY] === slug
     })

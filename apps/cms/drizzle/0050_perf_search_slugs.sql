@@ -1,0 +1,1 @@
+CREATE INDEX "entry_i18n_idx" ON "entry" USING gin (("draft_data" -> '$i18n') jsonb_path_ops);

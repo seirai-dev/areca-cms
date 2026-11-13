@@ -430,6 +430,12 @@ export const entry = pgTable(
       'gin',
       sql`(${t.draftData}::text) gin_trgm_ops`,
     ),
+    // Translated-slug uniqueness (`validateLocaleSlugs`) asks
+    // `draft_data -> '$i18n' @> {"<locale>": {"$slug": …}}`.
+    index('entry_i18n_idx').using(
+      'gin',
+      sql`(${t.draftData} -> '$i18n') jsonb_path_ops`,
+    ),
   ],
 )
 
