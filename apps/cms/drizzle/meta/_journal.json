@@ -330,6 +330,13 @@
       "when": 1794062143507,
       "tag": "0046_entry_heading_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1794569717795,
+      "tag": "0047_perf_indexes",
+      "breakpoints": true
     }
   ]
 }
