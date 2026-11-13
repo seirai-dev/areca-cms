@@ -35,7 +35,6 @@ import {
   activityScope,
   collapseRepeats,
 } from '#/features/activity/activity-sentence'
-import type { ActivityRow } from '#/features/activity/activity-list'
 import { m } from '#/paraglide/messages'
 import { getLocale } from '#/paraglide/runtime'
 import type { Me } from '#/server/fn/me'
@@ -309,7 +308,7 @@ function Scheduled() {
 
 function RecentActivity() {
   const activity = useQuery(homeActivityQuery())
-  const rows = (activity.data?.activity ?? []) as unknown as ActivityRow[]
+  const rows = activity.data?.activity ?? []
   const entries = useActivityEntries(rows)
   if (activity.isError) {
     return (

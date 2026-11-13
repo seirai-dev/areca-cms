@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useNavigate } from '@tanstack/react-router'
 
+import { contentRoute } from '#/lib/content-route'
 import { seoClickFields } from '#/features/visual/click-fields'
 import type { ClickSource } from '#/features/visual/preview-pane'
 import type { Field } from '#/lib/types'
@@ -45,23 +46,16 @@ export function useClickSource({
     onOpenOwner: (owner) => {
       void (async () => {
         await editor.persist().catch(() => null)
-        if (owner.kind === 'entry') {
-          await navigate({
-            to: '/sites/$siteId/c/$collectionKey/$entryId',
-            params: {
-              siteId,
-              collectionKey: owner.collectionKey,
-              entryId: owner.entryId,
-            },
-            search: { view: 'visual' },
-          })
-        } else {
-          await navigate({
-            to: '/sites/$siteId/globals/$globalKey',
-            params: { siteId, globalKey: owner.globalKey },
-            search: { view: 'visual' },
-          })
-        }
+        await navigate({
+          ...contentRoute({
+            siteId,
+            collectionKey:
+              owner.kind === 'entry' ? owner.collectionKey : owner.globalKey,
+            entryId: owner.entryId,
+            global: owner.kind === 'global',
+          }),
+          search: { view: 'visual' },
+        })
       })()
     },
   }

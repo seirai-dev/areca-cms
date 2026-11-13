@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { ArrowLeft, Stack } from '@phosphor-icons/react'
 
-import { queryKeys } from '#/lib/content/query-keys'
+import { queryKeys } from '#/lib/query-keys'
+import { richTextPlainText } from '#/lib/richtext-text'
 import { collectionsQuery as collectionsOptions } from '#/lib/content/queries'
 import { initialEntryData } from '#/lib/content/utils'
 import { TOGGLE_DETAILS_EVENT } from '#/components/shell/shortcuts'
@@ -60,7 +61,7 @@ import { uiLanguageName } from '#/lib/site-languages'
 import { LocaleFieldsContext } from './locale-fields'
 import { ScheduledVersion } from './scheduled-version'
 import { ScheduleForm } from './schedule-form'
-import { SeoPanel, plainTextOf } from './seo-panel'
+import { SeoPanel } from './seo-panel'
 import { useClickSource } from './use-click-source'
 import { useEditorSession } from './use-editor-session'
 import { useEntryEditor } from './use-entry-editor'
@@ -107,9 +108,7 @@ export function EditorScreen({
     return (
       <QueryError
         title={m.sites_collections_load_error()}
-        error={collectionsQuery.error}
-        onRetry={() => void collectionsQuery.refetch()}
-        retrying={collectionsQuery.isFetching}
+        query={collectionsQuery}
       />
     )
   }
@@ -341,10 +340,8 @@ function EntryEditorView({
         data-ready="false"
       >
         <QueryError
-          error={editor.entryQuery.error}
+          query={editor.entryQuery}
           title={m.editor_could_not_load_entry()}
-          onRetry={() => void editor.entryQuery.refetch()}
-          retrying={editor.entryQuery.isFetching}
         />
         <Button asChild variant="secondary" className="w-fit">
           <Link
@@ -410,7 +407,7 @@ function EntryEditorView({
   const fallbackDescription = excerptField
     ? (view[excerptField.key] as string)
     : bodyField
-      ? plainTextOf(view[bodyField.key]) || null
+      ? richTextPlainText(view[bodyField.key]) || null
       : null
   // The slug field edits the language's own `$slug` on translations.
   const detailsData =

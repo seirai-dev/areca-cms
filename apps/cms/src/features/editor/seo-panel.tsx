@@ -78,9 +78,6 @@ export function previewAddress({
   return slug ? entryPublicUrl(productionUrl, routePattern, slug) : null
 }
 
-/** Text of a TipTap document, for the description fallback preview: the same text the server publishes. */
-export { richTextPlainText as plainTextOf } from '#/lib/richtext-text'
-
 const isEmpty = (value: unknown) =>
   value == null ||
   value === '' ||

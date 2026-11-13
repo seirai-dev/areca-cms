@@ -5,6 +5,7 @@ import { QueryError } from '#/components/ui/query-error'
 import { Skeleton } from '#/components/ui/skeleton'
 import { EntryPill } from '#/features/collection/entry-pill'
 import type { LiveMembership } from '#/features/golive/entry-live-state'
+import { contentRoute } from '#/lib/content-route'
 import { queryKeys } from '#/lib/query-keys'
 import { uiLanguageName } from '#/lib/site-languages'
 import { m } from '#/paraglide/messages'
@@ -120,28 +121,15 @@ function SourceLink({
   siteId: string
   source: LinkedFromSource
 }) {
-  const className =
-    'text-callout font-medium text-text-default underline-offset-2 hover:underline'
-  if (source.kind === 'global') {
-    return (
-      <Link
-        to="/sites/$siteId/globals/$globalKey"
-        params={{ siteId, globalKey: source.collectionKey }}
-        className={className}
-      >
-        {source.title}
-      </Link>
-    )
-  }
   return (
     <Link
-      to="/sites/$siteId/c/$collectionKey/$entryId"
-      params={{
+      {...contentRoute({
         siteId,
         collectionKey: source.collectionKey,
         entryId: source.id,
-      }}
-      className={className}
+        global: source.kind === 'global',
+      })}
+      className="text-callout font-medium text-text-default underline-offset-2 hover:underline"
     >
       {source.title}
     </Link>
