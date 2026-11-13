@@ -73,8 +73,14 @@ function notFound() {
   return json({ error: 'Not found' }, 404)
 }
 
-/** The request body as text, or null when it passes the cap (chunked or not). */
-async function readCappedText(request: Request): Promise<string | null> {
+/**
+ * The request body as text, `null` when it passes the cap (chunked or not), or
+ * `undefined` when the stream fails because the editor aborted the request
+ * before it was read (a newer value, or the page closing).
+ */
+async function readCappedText(
+  request: Request,
+): Promise<string | null | undefined> {
   const declared = request.headers.get('content-length')
   if (declared && Number(declared) > MAX_BODY_BYTES) return null
   if (!request.body) return ''
@@ -84,7 +90,9 @@ async function readCappedText(request: Request): Promise<string | null> {
   let text = ''
   try {
     for (;;) {
-      const { done, value } = await reader.read()
+      const chunk = await reader.read().catch(() => undefined)
+      if (!chunk) return undefined
+      const { done, value } = chunk
       if (done) return text + decoder.decode()
       bytes += value.byteLength
       if (bytes > MAX_BODY_BYTES) {
@@ -200,6 +208,7 @@ export async function postLivePreview(request: Request): Promise<Response> {
 
   const text = await readCappedText(request)
   if (text === null) return json({ error: 'Payload too large' }, 413)
+  if (text === undefined) return json({ error: 'Invalid request' }, 400)
 
   let raw: unknown
   try {
