@@ -508,6 +508,35 @@ export async function requestRollback(input: {
   })
 }
 
+/** Publication columns the release lists show; never the snapshot. */
+const publicationSummary = {
+  id: publication.id,
+  siteId: publication.siteId,
+  snapshotHash: publication.snapshotHash,
+  requestedBy: publication.requestedBy,
+  status: publication.status,
+  publishingMode: publication.publishingMode,
+  wasLive: publication.wasLive,
+  origin: publication.origin,
+  createdAt: publication.createdAt,
+  deployedAt: publication.deployedAt,
+}
+
+/** Build job columns the job lists show; logs load per job with getBuildJob. */
+const buildJobSummary = {
+  id: buildJob.id,
+  siteId: buildJob.siteId,
+  publicationId: buildJob.publicationId,
+  priority: buildJob.priority,
+  status: buildJob.status,
+  attempts: buildJob.attempts,
+  dispatchUncertain: buildJob.dispatchUncertain,
+  startedAt: buildJob.startedAt,
+  finishedAt: buildJob.finishedAt,
+  error: buildJob.error,
+  createdAt: buildJob.createdAt,
+}
+
 export async function listPublications(
   siteId: string,
   options: { limit?: number; offset?: number } = {},
@@ -516,7 +545,7 @@ export async function listPublications(
   const offset = options.offset ?? 0
   const items = await db
     .select({
-      publication,
+      publication: publicationSummary,
       requestedByName: user.name,
     })
     .from(publication)
@@ -528,7 +557,7 @@ export async function listPublications(
 
   const jobs = items.length
     ? await db
-        .select()
+        .selectDistinctOn([buildJob.publicationId], buildJobSummary)
         .from(buildJob)
         .where(
           inArray(
@@ -536,15 +565,10 @@ export async function listPublications(
             items.map((item) => item.publication.id),
           ),
         )
-        .orderBy(desc(buildJob.createdAt))
+        .orderBy(buildJob.publicationId, desc(buildJob.createdAt))
     : []
 
-  const latestJob = new Map<string, typeof buildJob.$inferSelect>()
-  for (const job of jobs) {
-    if (!latestJob.has(job.publicationId)) {
-      latestJob.set(job.publicationId, job)
-    }
-  }
+  const latestJob = new Map(jobs.map((job) => [job.publicationId, job]))
 
   return items.map(({ publication: item, requestedByName }) => ({
     ...item,
@@ -566,7 +590,7 @@ export async function listBuildJobs(
 ) {
   const limit = options.limit ?? 50
   return db
-    .select()
+    .select(buildJobSummary)
     .from(buildJob)
     .where(eq(buildJob.siteId, siteId))
     .orderBy(desc(buildJob.createdAt))
@@ -664,13 +688,28 @@ const ACTIVE_JOB_STATUSES: BuildJobStatus[] = [
   'deploying',
 ]
 
+async function latestPublicationSummary(
+  siteId: string,
+  status: 'live' | 'demo',
+) {
+  const row = (
+    await db
+      .select(publicationSummary)
+      .from(publication)
+      .where(and(eq(publication.siteId, siteId), eq(publication.status, status)))
+      .orderBy(desc(publication.createdAt))
+      .limit(1)
+  ).at(0)
+  return row ?? null
+}
+
 export async function getSiteReleaseStatus(siteId: string) {
   const existingSite = await getSiteOrThrow(siteId)
-  const live = await getLivePublication(siteId)
-  const demo = await getDemoPublication(siteId)
+  const live = await latestPublicationSummary(siteId, 'live')
+  const demo = await latestPublicationSummary(siteId, 'demo')
   const activeJob = (
     await db
-      .select()
+      .select(buildJobSummary)
       .from(buildJob)
       .where(
         and(
@@ -686,7 +725,7 @@ export async function getSiteReleaseStatus(siteId: string) {
     activeJob
       ? [null]
       : await db
-          .select()
+          .select(buildJobSummary)
           .from(buildJob)
           .where(
             and(eq(buildJob.siteId, siteId), eq(buildJob.status, 'queued')),
