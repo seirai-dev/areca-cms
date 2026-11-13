@@ -28,6 +28,7 @@ import {
   requestRollback,
 } from '#/server/publishing/publications'
 import { listPendingRelease } from '#/server/publishing/release-diff'
+import { siteCoreColumns } from '#/server/content/site-core'
 
 const loose = { strict: { output: false } as const }
 
@@ -42,7 +43,11 @@ async function requireSiteAccess(
   // look identical (NotFound), so other tenants' ids cannot be probed.
   await requireUser()
   const found = (
-    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
+    await db
+      .select(siteCoreColumns)
+      .from(site)
+      .where(eq(site.id, siteId))
+      .limit(1)
   ).at(0)
   if (!found) {
     throw new NotFoundError(notFoundMessage())

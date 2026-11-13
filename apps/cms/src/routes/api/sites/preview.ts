@@ -12,6 +12,7 @@ import {
   decodePreviewToken,
   verifyPreviewToken,
 } from '#/server/content/preview-token'
+import { siteCoreColumns } from '#/server/content/site-core'
 
 // Preview payloads are draft content behind a signed, expiring token: never let
 // a browser, proxy or CDN store any response from this route (401/404 included).
@@ -36,7 +37,11 @@ export async function getSitesPreview(request: Request) {
   }
 
   const found = (
-    await db.select().from(site).where(eq(site.id, decoded.siteId)).limit(1)
+    await db
+      .select(siteCoreColumns)
+      .from(site)
+      .where(eq(site.id, decoded.siteId))
+      .limit(1)
   ).at(0)
   if (!found) {
     return previewJson({ error: 'Unauthorized' }, 401)

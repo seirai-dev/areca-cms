@@ -32,6 +32,7 @@ import { NotFoundError, ValidationError } from '#/server/content/errors'
 import { assertSiteVisibleTo } from '#/server/security/site-visibility'
 import { resolveSlug, validateEntryData } from '#/server/content/validation'
 import { allowUserAction } from '#/server/http/rate-limit.server'
+import { siteCoreColumns } from '#/server/content/site-core'
 
 const aiFn = { strict: { output: false } as const }
 
@@ -95,7 +96,11 @@ export const generateEntrySeoFn = createServerFn({ method: 'POST', ...aiFn })
   .handler(async ({ data }) => {
     await requireUser()
     const found = (
-      await db.select().from(site).where(eq(site.id, data.siteId)).limit(1)
+      await db
+        .select(siteCoreColumns)
+        .from(site)
+        .where(eq(site.id, data.siteId))
+        .limit(1)
     ).at(0)
     if (!found) throw new NotFoundError(m.server_site_not_found())
     // Access before anything that depends on the site's settings: a locale

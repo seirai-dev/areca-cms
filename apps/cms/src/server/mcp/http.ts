@@ -25,6 +25,7 @@ import { verifyMcpAccessToken } from './oauth-tokens'
 import { createArecaMcpServer } from './server'
 import { isSiteContext, loadSiteContext } from './site-context'
 import type { McpSiteContext } from './site-context'
+import { siteCoreColumns } from '#/server/content/site-core'
 
 const log = createLogger('mcp')
 
@@ -204,7 +205,7 @@ export async function handleSiteMcpRequest(
   siteSlug: string,
 ): Promise<Response> {
   const [found] = await db
-    .select()
+    .select(siteCoreColumns)
     .from(site)
     .where(eq(site.slug, siteSlug))
     .limit(1)

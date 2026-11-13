@@ -13,6 +13,7 @@ import { getBuildJob, getPublication } from '#/server/publishing/publications'
 
 import { McpNotFoundError } from './errors'
 import type { McpActor } from './keys'
+import { siteCoreColumns } from '#/server/content/site-core'
 
 /**
  * Tenancy checks for every id an agent sends. Services do not check the site,
@@ -33,7 +34,11 @@ function belongsTo<T extends { siteId: string }>(
 
 export async function loadSiteRow(actor: McpActor) {
   const row = (
-    await db.select().from(site).where(eq(site.id, actor.siteId)).limit(1)
+    await db
+      .select(siteCoreColumns)
+      .from(site)
+      .where(eq(site.id, actor.siteId))
+      .limit(1)
   ).at(0)
   if (!row) throw new McpNotFoundError('This site no longer exists.')
   return row

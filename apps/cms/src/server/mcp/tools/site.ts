@@ -1,7 +1,7 @@
 import { z } from '#/lib/zod'
 
 import { isTranslatable } from '#/lib/content-locale'
-import type { site } from '#/db/schema'
+import type { SiteCore } from '#/server/content/site-core'
 import { listCollections } from '#/server/content/collections'
 import { listGlobals } from '#/server/content/globals'
 import { deploymentBlockers } from '#/server/publishing/publications'
@@ -67,7 +67,7 @@ export function cannotDoFor(
  * Reuses deploymentBlockers, which skips the check for demo sites, so the
  * site is checked as production.
  */
-export function isDeploymentConfigured(row: typeof site.$inferSelect): boolean {
+export function isDeploymentConfigured(row: SiteCore): boolean {
   return (
     deploymentBlockers({ ...row, publishingMode: 'production' }).length === 0
   )

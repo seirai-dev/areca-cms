@@ -13,6 +13,7 @@ import type {
 } from '#/lib/types'
 import { buildSnapshot } from '#/server/content/snapshot'
 import type { LinkWarning } from '#/server/content/snapshot'
+import { siteCoreColumns } from '#/server/content/site-core'
 
 /**
  * Approved-candidate vs live (or demo) snapshot.
@@ -373,7 +374,11 @@ export async function diffApprovedRelease(
   siteId: string,
 ): Promise<ApprovedReleaseDiff> {
   const existingSite = (
-    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
+    await db
+      .select(siteCoreColumns)
+      .from(site)
+      .where(eq(site.id, siteId))
+      .limit(1)
   ).at(0)
   const publishingMode = existingSite?.publishingMode ?? 'production'
   const live = await latestPublication(siteId, 'live')

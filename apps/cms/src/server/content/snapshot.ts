@@ -74,6 +74,8 @@ import type { LinkTargetRow } from './entry-links.ts'
 import { buildEntrySeo } from './seo.ts'
 import { buildSnapshotSchema } from './snapshot-schema.ts'
 import { pickDeclaredFields, validateEntryData } from './validation.ts'
+import { siteCoreColumns } from './site-core.ts'
+import type { SiteCore } from './site-core.ts'
 
 type IncludedEntry = {
   collectionKey: string
@@ -148,7 +150,11 @@ export async function buildSnapshot(
   | { ok: false; errors: string[] }
 > {
   const existingSite = (
-    await connection.select().from(site).where(eq(site.id, siteId)).limit(1)
+    await connection
+      .select(siteCoreColumns)
+      .from(site)
+      .where(eq(site.id, siteId))
+      .limit(1)
   ).at(0)
   if (!existingSite) {
     throw new NotFoundError(m.server_site_not_found())
@@ -880,7 +886,7 @@ function previewLocaleStatus(
   )
 }
 
-type PreviewSite = typeof site.$inferSelect
+type PreviewSite = SiteCore
 type PreviewCollection = NonNullable<Awaited<ReturnType<typeof getCollection>>>
 type PreviewGlobalRow = NonNullable<
   Awaited<ReturnType<typeof getGlobalEntry>>
@@ -897,7 +903,11 @@ export async function buildPreviewGlobal(
 ): Promise<PreviewGlobal | null> {
   const found = await getGlobalEntry(siteId, key)
   const existingSite = (
-    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
+    await db
+      .select(siteCoreColumns)
+      .from(site)
+      .where(eq(site.id, siteId))
+      .limit(1)
   ).at(0)
   if (!found || !existingSite) return null
   return buildPreviewGlobalFromDraft({
@@ -991,7 +1001,11 @@ export async function buildPreviewEntry(
 ): Promise<PreviewEntry | null> {
   const col = await getCollection(siteId, collectionKey)
   const existingSite = (
-    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
+    await db
+      .select(siteCoreColumns)
+      .from(site)
+      .where(eq(site.id, siteId))
+      .limit(1)
   ).at(0)
   if (!col || !existingSite) return null
 

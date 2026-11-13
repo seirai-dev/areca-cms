@@ -40,6 +40,7 @@ import { SLUG_PATTERN } from '#/lib/slug'
 import { summaryFromParts, toEntrySummary } from '#/lib/content/entry-summary'
 import { firstTextField } from '#/lib/content/utils'
 import { isMultilingual } from '#/lib/site-languages'
+import type { SiteCore } from './site-core.ts'
 import type { EntrySummary } from '#/lib/content/entry-summary'
 import {
   claimedSlugs,
@@ -1524,7 +1525,7 @@ async function loadCollectionContext(siteId: string, collectionKey: string) {
 type EntryContext = {
   entry: typeof entry.$inferSelect
   collection: typeof collection.$inferSelect
-  site: typeof site.$inferSelect
+  site: SiteCore
 }
 
 async function loadEntryContext(
@@ -1564,7 +1565,7 @@ function assertCollectionEntry(target: { kind: ContentKind }) {
 
 function importEntryImages(
   ctx: {
-    site: typeof site.$inferSelect
+    site: SiteCore
     collection: typeof collection.$inferSelect
   },
   data: EntryData,

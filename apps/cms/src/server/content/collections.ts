@@ -24,6 +24,7 @@ import { lockSiteLinkIndex } from './entry-link-index.ts'
 import { ensureGlobalEntry } from './globals.ts'
 import { normalizeRequiredLanguages } from './locale-validation.ts'
 import { NotFoundError, ValidationError } from './errors.ts'
+import { siteCoreColumns } from './site-core.ts'
 
 export async function listCollections(
   siteId: string,
@@ -100,7 +101,11 @@ export async function syncManifest(
     assertPreviewPath(def.previewPath, key)
   }
   const existingSite = (
-    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
+    await db
+      .select(siteCoreColumns)
+      .from(site)
+      .where(eq(site.id, siteId))
+      .limit(1)
   ).at(0)
   if (!existingSite) {
     throw new NotFoundError(m.server_site_not_found())
@@ -388,7 +393,11 @@ export async function upsertCollection(
 ) {
   const prepared = prepareCollectionUpsert(input)
   const existingSite = (
-    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
+    await db
+      .select(siteCoreColumns)
+      .from(site)
+      .where(eq(site.id, siteId))
+      .limit(1)
   ).at(0)
   if (!existingSite) {
     throw new NotFoundError(m.server_site_not_found())

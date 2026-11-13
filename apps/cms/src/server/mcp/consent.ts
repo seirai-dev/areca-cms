@@ -29,6 +29,7 @@ import type { McpRole } from './keys'
 import { mcpResourceTarget } from './oauth-resource'
 import type { McpResourceTarget } from './oauth-resource'
 import { requireMcpSiteAccess } from './site-access'
+import { siteCoreColumns } from '#/server/content/site-core'
 
 /**
  * The consent screen's view of a signed authorization request (the `oauth_query`
@@ -254,7 +255,7 @@ export async function describeConsentRequest(
   const siteSlug = parsed.target.slug
 
   const [target] = await db
-    .select()
+    .select(siteCoreColumns)
     .from(site)
     .where(eq(site.slug, siteSlug))
     .limit(1)
