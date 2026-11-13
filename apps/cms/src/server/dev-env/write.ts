@@ -52,16 +52,10 @@ export type DevEntryState = Pick<
   | 'originBaseline'
 >
 
-/** Keeps the production draft that a dev push or copy is about to replace, as a revision. */
-export async function keepDraftRevision(
-  tx: Tx,
-  row: { id: string; draftData: EntryData },
-  actorId: string,
-) {
-  await keepDraftRevisions(tx, [row], actorId)
-}
+/** The revision note of a production draft a dev push or copy replaces. */
+export const BEFORE_DEV_PUSH_NOTE = 'before dev push'
 
-/** `keepDraftRevision` for several rows, in one insert. */
+/** Keeps the production drafts that a dev push is about to replace, as revisions, in one insert. */
 export async function keepDraftRevisions(
   tx: Tx,
   rows: { id: string; draftData: EntryData }[],
@@ -74,7 +68,7 @@ export async function keepDraftRevisions(
         entryId: row.id,
         data: row.draftData,
         createdBy: actorId,
-        note: 'before dev push',
+        note: BEFORE_DEV_PUSH_NOTE,
         kind: 'milestone' as const,
       })),
     )

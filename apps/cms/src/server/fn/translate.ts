@@ -7,8 +7,7 @@ import { localeTagSchema } from '#/lib/locale-tag-schema'
 import { m } from '#/paraglide/messages'
 import { loadAssetLookup } from '#/server/assets'
 import { richTextAssetRefs } from '#/server/assets/richtext-ownership'
-import { AiGenerationError } from '#/server/ai/seo-generate'
-import { loadAiRuntimeConfig } from '#/server/ai/settings'
+import { requireAiBudget } from '#/server/ai/budget'
 import { translateContent } from '#/server/ai/translate'
 import { audit } from '#/server/audit'
 import { requireSiteAccess } from '#/server/content/access'
@@ -16,14 +15,6 @@ import { getCollection } from '#/server/content/collections'
 import { getEntry } from '#/server/content/entries'
 import { NotFoundError, ValidationError } from '#/server/content/errors'
 import { languageName } from '#/server/content/locale-validation'
-import { allowUserAction } from '#/server/http/rate-limit.server'
-
-/**
- * Same paid-AI quota as generateEntrySeoFn (one bucket, so suggestions and
- * translations share the hourly cap). Keep these numbers in step with ai.ts.
- */
-const AI_BUCKET = 'ai-seo'
-const GENERATE_RULE = { limit: 30, windowSeconds: 60 * 60 }
 
 /**
  * AI translation of one entry or site content section into another language.
@@ -98,19 +89,7 @@ export const translateContentFn = createServerFn({
       throw new NotFoundError(m.server_collection_not_found())
     }
 
-    const config = await loadAiRuntimeConfig()
-    if (!config) {
-      throw new AiGenerationError(
-        'AI is not set up yet. An agency admin can configure it under Agency → AI.',
-        'not_configured',
-      )
-    }
-    if (!(await allowUserAction(AI_BUCKET, session.user.id, GENERATE_RULE))) {
-      throw new AiGenerationError(
-        'You have reached the hourly limit for AI suggestions. Try again later.',
-        'rate_limited',
-      )
-    }
+    const config = await requireAiBudget(session.user.id)
 
     const ctx = {
       main: languages.main,

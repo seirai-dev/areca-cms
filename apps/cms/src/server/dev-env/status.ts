@@ -1,6 +1,7 @@
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, or } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbReader } from '#/db'
 import { environmentPush, publication, site, user } from '#/db/schema'
 
 /** Most recent fork, reset, push and copy rows shown on the production site. */
@@ -47,13 +48,22 @@ export async function getDevEnvironmentStatus(productionSiteId: string) {
 /**
  * Whether a site has ever gone live: a release was live for it. A development
  * environment can be created once the site is in Production mode or has gone
- * live (docs/design/dev-environments.md, Decision 5).
+ * live (docs/design/dev-environments.md, Decision 5), and a site that has gone
+ * live cannot switch back to Demo mode.
  */
-export async function hasGoneLive(siteId: string): Promise<boolean> {
-  const rows = await db
+export async function hasGoneLive(
+  siteId: string,
+  reader: DbReader = db,
+): Promise<boolean> {
+  const rows = await reader
     .select({ id: publication.id })
     .from(publication)
-    .where(and(eq(publication.siteId, siteId), eq(publication.wasLive, true)))
+    .where(
+      and(
+        eq(publication.siteId, siteId),
+        or(eq(publication.wasLive, true), eq(publication.status, 'live')),
+      ),
+    )
     .limit(1)
   return rows.length > 0
 }

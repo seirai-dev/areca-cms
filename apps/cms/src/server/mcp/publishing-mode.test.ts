@@ -274,7 +274,7 @@ describe.skipIf(!hasDb)('MCP set_publishing_mode and deployment info', () => {
     })
     const result = await call(agency, 'set_publishing_mode', { mode: 'demo' })
     expect(result.isError).toBe(true)
-    expect(result.text).toContain('Settings › Deployment')
+    expect(result.text).toContain('has gone live in production')
     const [row] = await db
       .select({ mode: site.publishingMode })
       .from(site)

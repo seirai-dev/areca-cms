@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { and, count, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import type { McpScope } from '#/db/schema'
 import { mcpKey, site, user } from '#/db/schema'
 import { env } from '#/env'
@@ -111,6 +112,105 @@ async function userNameOf(
   return found?.name ?? null
 }
 
+/** A new key: the user's personal site key, or their agency key. */
+type NewKey = {
+  userId: string
+  name: string
+  expiresInDays: 30 | 90 | 365 | null
+  now: Date
+} & (
+  | {
+      scope: 'site'
+      siteId: string
+      organizationId: string
+      allowGoLive: boolean
+    }
+  | { scope: 'agency' }
+)
+
+/** The trimmed key name, refused when empty or too long. */
+function keyName(raw: string): string {
+  const name = raw.trim()
+  if (name.length < 1 || name.length > NAME_MAX_LENGTH) {
+    throw new ValidationError([
+      { path: '', message: m.server_mcp_key_name_invalid() },
+    ])
+  }
+  return name
+}
+
+/** Serializes the count/insert pair across processes for one user and slot (a site id, or 'agency'). */
+async function lockKeySlot(tx: Tx, userId: string, slot: string) {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify(['mcp-key', userId, slot])}, 0))`,
+  )
+}
+
+/**
+ * Inserts a key and its audit row, under the caller's `lockKeySlot`. Refused
+ * when the user already has the most active keys for that site (or agency).
+ */
+async function insertKey(tx: Tx, spec: NewKey) {
+  const siteKey = spec.scope === 'site' ? spec : null
+  const [active] = await tx
+    .select({ value: count() })
+    .from(mcpKey)
+    .where(
+      and(
+        eq(mcpKey.userId, spec.userId),
+        siteKey
+          ? eq(mcpKey.siteId, siteKey.siteId)
+          : eq(mcpKey.scope, 'agency'),
+        isNull(mcpKey.revokedAt),
+        or(isNull(mcpKey.expiresAt), gt(mcpKey.expiresAt, spec.now)),
+      ),
+    )
+  if (Number(active?.value ?? 0) >= MAX_ACTIVE_KEYS_PER_USER_PER_SITE) {
+    throw new ConflictError(m.server_mcp_key_limit_reached())
+  }
+
+  const expiresAt =
+    spec.expiresInDays === null
+      ? null
+      : new Date(spec.now.getTime() + spec.expiresInDays * DAY_MS)
+  const allowGoLive = siteKey?.allowGoLive ?? false
+  const generated = generateMcpKey()
+  const [row] = await tx
+    .insert(mcpKey)
+    .values({
+      userId: spec.userId,
+      scope: spec.scope,
+      siteId: siteKey?.siteId ?? null,
+      name: spec.name,
+      tokenPrefix: generated.tokenPrefix,
+      tokenHash: generated.tokenHash,
+      allowGoLive,
+      expiresAt,
+      createdAt: spec.now,
+    })
+    .returning()
+  if (!row) throw new Error('Failed to create MCP key')
+
+  await audit(
+    {
+      organizationId: siteKey?.organizationId ?? null,
+      siteId: siteKey?.siteId ?? null,
+      actorId: spec.userId,
+      action: 'mcp_key.create',
+      targetType: 'mcp_key',
+      targetId: row.id,
+      meta: {
+        name: spec.name,
+        ...(siteKey ? {} : { scope: 'agency' }),
+        allowGoLive,
+        expiresAt: expiresAt?.toISOString() ?? null,
+      },
+    },
+    tx,
+  )
+  return { row, token: generated.token }
+}
+
 export async function createMcpKey(input: {
   userId: string
   siteId: string
@@ -121,78 +221,26 @@ export async function createMcpKey(input: {
   role: McpRole
   now?: Date
 }): Promise<{ key: McpKeySummary; token: string }> {
-  const now = input.now ?? new Date()
-  const name = input.name.trim()
-  if (name.length < 1 || name.length > NAME_MAX_LENGTH) {
-    throw new ValidationError([
-      { path: '', message: m.server_mcp_key_name_invalid() },
-    ])
-  }
+  const name = keyName(input.name)
   if (input.allowGoLive && input.role === 'editor') {
     throw new ForbiddenError(m.server_mcp_key_go_live_owners_only())
   }
 
   return db.transaction(async (tx) => {
-    // Serialize the count/insert pair across processes for this user and site.
-    await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify(['mcp-key', input.userId, input.siteId])}, 0))`,
-    )
-    const [active] = await tx
-      .select({ value: count() })
-      .from(mcpKey)
-      .where(
-        and(
-          eq(mcpKey.userId, input.userId),
-          eq(mcpKey.siteId, input.siteId),
-          isNull(mcpKey.revokedAt),
-          or(isNull(mcpKey.expiresAt), gt(mcpKey.expiresAt, now)),
-        ),
-      )
-    if (Number(active?.value ?? 0) >= MAX_ACTIVE_KEYS_PER_USER_PER_SITE) {
-      throw new ConflictError(m.server_mcp_key_limit_reached())
-    }
-
-    const expiresAt =
-      input.expiresInDays === null
-        ? null
-        : new Date(now.getTime() + input.expiresInDays * DAY_MS)
-    const generated = generateMcpKey()
-    const [row] = await tx
-      .insert(mcpKey)
-      .values({
-        userId: input.userId,
-        scope: 'site',
-        siteId: input.siteId,
-        name,
-        tokenPrefix: generated.tokenPrefix,
-        tokenHash: generated.tokenHash,
-        allowGoLive: input.allowGoLive,
-        expiresAt,
-        createdAt: now,
-      })
-      .returning()
-    if (!row) throw new Error('Failed to create MCP key')
-
-    await audit(
-      {
-        organizationId: input.organizationId,
-        siteId: input.siteId,
-        actorId: input.userId,
-        action: 'mcp_key.create',
-        targetType: 'mcp_key',
-        targetId: row.id,
-        meta: {
-          name,
-          allowGoLive: input.allowGoLive,
-          expiresAt: expiresAt?.toISOString() ?? null,
-        },
-      },
-      tx,
-    )
-
+    await lockKeySlot(tx, input.userId, input.siteId)
+    const { row, token } = await insertKey(tx, {
+      scope: 'site',
+      userId: input.userId,
+      siteId: input.siteId,
+      organizationId: input.organizationId,
+      name,
+      expiresInDays: input.expiresInDays,
+      allowGoLive: input.allowGoLive,
+      now: input.now ?? new Date(),
+    })
     return {
       key: toSummary(row, await userNameOf(input.userId, tx)),
-      token: generated.token,
+      token,
     }
   })
 }
@@ -449,18 +497,10 @@ export async function createAgencyMcpKey(input: {
   expiresInDays: 30 | 90 | 365 | null
   now?: Date
 }): Promise<{ key: McpKeySummary; token: string }> {
-  const now = input.now ?? new Date()
-  const name = input.name.trim()
-  if (name.length < 1 || name.length > NAME_MAX_LENGTH) {
-    throw new ValidationError([
-      { path: '', message: m.server_mcp_key_name_invalid() },
-    ])
-  }
+  const name = keyName(input.name)
 
   return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify(['mcp-key', input.userId, 'agency'])}, 0))`,
-    )
+    await lockKeySlot(tx, input.userId, 'agency')
     const [owner] = await tx
       .select({
         id: user.id,
@@ -478,60 +518,14 @@ export async function createAgencyMcpKey(input: {
       throw new ForbiddenError(AGENCY_KEY_REFUSAL[status])
     }
 
-    const [active] = await tx
-      .select({ value: count() })
-      .from(mcpKey)
-      .where(
-        and(
-          eq(mcpKey.userId, input.userId),
-          eq(mcpKey.scope, 'agency'),
-          isNull(mcpKey.revokedAt),
-          or(isNull(mcpKey.expiresAt), gt(mcpKey.expiresAt, now)),
-        ),
-      )
-    if (Number(active?.value ?? 0) >= MAX_ACTIVE_KEYS_PER_USER_PER_SITE) {
-      throw new ConflictError(m.server_mcp_key_limit_reached())
-    }
-
-    const expiresAt =
-      input.expiresInDays === null
-        ? null
-        : new Date(now.getTime() + input.expiresInDays * DAY_MS)
-    const generated = generateMcpKey()
-    const [row] = await tx
-      .insert(mcpKey)
-      .values({
-        userId: input.userId,
-        scope: 'agency',
-        siteId: null,
-        name,
-        tokenPrefix: generated.tokenPrefix,
-        tokenHash: generated.tokenHash,
-        allowGoLive: false,
-        expiresAt,
-        createdAt: now,
-      })
-      .returning()
-    if (!row) throw new Error('Failed to create agency MCP key')
-
-    await audit(
-      {
-        organizationId: null,
-        actorId: input.userId,
-        action: 'mcp_key.create',
-        targetType: 'mcp_key',
-        targetId: row.id,
-        meta: {
-          name,
-          scope: 'agency',
-          allowGoLive: false,
-          expiresAt: expiresAt?.toISOString() ?? null,
-        },
-      },
-      tx,
-    )
-
-    return { key: toSummary(row, owner.name), token: generated.token }
+    const { row, token } = await insertKey(tx, {
+      scope: 'agency',
+      userId: input.userId,
+      name,
+      expiresInDays: input.expiresInDays,
+      now: input.now ?? new Date(),
+    })
+    return { key: toSummary(row, owner.name), token }
   })
 }
 

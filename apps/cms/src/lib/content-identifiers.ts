@@ -1,4 +1,9 @@
-const reserved = new Set([
+/**
+ * Names no collection, site content section or field may take. Matched
+ * case-insensitively. The SDK keeps the same list
+ * (packages/site-sdk/src/identifiers.ts); a test keeps them in step.
+ */
+export const RESERVED_IDENTIFIERS: readonly string[] = [
   '__proto__',
   'prototype',
   'constructor',
@@ -9,7 +14,9 @@ const reserved = new Set([
   'nul',
   ...Array.from({ length: 9 }, (_, i) => `com${i + 1}`),
   ...Array.from({ length: 9 }, (_, i) => `lpt${i + 1}`),
-])
+]
+
+const reserved = new Set(RESERVED_IDENTIFIERS)
 
 /**
  * Names the generated content object uses for its own members. Only collection
@@ -17,9 +24,10 @@ const reserved = new Set([
  * `href` or `resolve`. `globals` is the generated accessor for site content.
  * Stored lowercase; `previewglobals` is `content.previewGlobals` folded.
  * `in`, `languages` and `matchlocale` are the content languages members
- * (`content.in()`, `content.languages`, `content.matchLocale()`).
+ * (`content.in()`, `content.languages`, `content.matchLocale()`). The SDK
+ * keeps the same names in member case (`RESERVED_CONTENT_KEYS`).
  */
-const reservedCollectionKeys = new Set([
+export const RESERVED_COLLECTION_KEYS: readonly string[] = [
   'resolve',
   'href',
   'preview',
@@ -29,7 +37,9 @@ const reservedCollectionKeys = new Set([
   'in',
   'languages',
   'matchlocale',
-])
+]
+
+const reservedCollectionKeys = new Set(RESERVED_COLLECTION_KEYS)
 
 /**
  * The key's name as a member of the generated object: the SDK camelCases

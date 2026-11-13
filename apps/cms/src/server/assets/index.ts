@@ -18,6 +18,7 @@ import { env } from '#/env'
 import { m } from '#/paraglide/messages'
 import { NotFoundError } from '#/server/content/errors'
 import { AppError } from '#/server/http/app-error'
+import { audit } from '#/server/audit'
 
 import {
   assetAttachLock,
@@ -40,6 +41,29 @@ export { AssetValidationError } from './errors'
 export { drainStorageObjectDeletions } from './storage-cleanup'
 
 export type Asset = InferSelectModel<typeof asset>
+
+/** Who changed an asset, for its audit row. `siteId` is the site it was changed from, if any. */
+export type AssetActor = { actorId: string; siteId?: string | null }
+
+function auditAsset(
+  tx: Tx,
+  action: 'asset.update' | 'asset.delete',
+  row: Asset,
+  by: AssetActor,
+) {
+  return audit(
+    {
+      organizationId: row.organizationId,
+      siteId: by.siteId ?? null,
+      actorId: by.actorId,
+      action,
+      targetType: 'asset',
+      targetId: row.id,
+      meta: { filename: row.originalFilename },
+    },
+    tx,
+  )
+}
 
 export type ResolvedAssetValue = {
   url: string
@@ -227,29 +251,33 @@ export async function updateAsset(
     mainLocale?: string | null
   },
   organizationId: string,
+  by?: AssetActor,
 ): Promise<Asset> {
   const translation =
     patch.locale && patch.locale !== patch.mainLocale ? patch.locale : null
-  const row = (
-    await db
-      .update(asset)
-      .set(
-        translation
-          ? {
-              altI18n:
-                patch.altText.trim() === ''
-                  ? sql`${asset.altI18n} - ${translation}::text`
-                  : sql`jsonb_set(${asset.altI18n}, ARRAY[${translation}::text], to_jsonb(${patch.altText}::text), true)`,
-            }
-          : { altText: patch.altText },
-      )
-      .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
-      .returning()
-  ).at(0)
-  if (!row) {
-    throw new NotFoundError(m.server_asset_not_found())
-  }
-  return row
+  return db.transaction(async (tx) => {
+    const row = (
+      await tx
+        .update(asset)
+        .set(
+          translation
+            ? {
+                altI18n:
+                  patch.altText.trim() === ''
+                    ? sql`${asset.altI18n} - ${translation}::text`
+                    : sql`jsonb_set(${asset.altI18n}, ARRAY[${translation}::text], to_jsonb(${patch.altText}::text), true)`,
+              }
+            : { altText: patch.altText },
+        )
+        .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
+        .returning()
+    ).at(0)
+    if (!row) {
+      throw new NotFoundError(m.server_asset_not_found())
+    }
+    if (by) await auditAsset(tx, 'asset.update', row, by)
+    return row
+  })
 }
 
 async function retainedAssetUsage(tx: Tx, existing: Asset): Promise<number> {
@@ -332,6 +360,7 @@ export async function assetUsage(
 export async function deleteAsset(
   id: string,
   organizationId: string,
+  by?: AssetActor,
 ): Promise<void> {
   await db.transaction(async (tx) => {
     await assetExclusiveLock(tx, organizationId)
@@ -353,6 +382,7 @@ export async function deleteAsset(
       )
       .onConflictDoNothing()
     await tx.delete(asset).where(eq(asset.id, id))
+    if (by) await auditAsset(tx, 'asset.delete', existing, by)
   })
   await drainStorageObjectDeletions()
 }

@@ -20,6 +20,7 @@ import { handleMetricsRequest } from '#/server/ops/metrics'
 import { ACTORS, seedWorld } from './authz-harness'
 import type { ActorName, World } from './authz-harness'
 import { setCurrentSession } from './authz-state'
+import type { TestSession } from './authz-state'
 
 vi.hoisted(() => {
   process.env.ADMIN_MFA_REQUIRED = 'true'
@@ -210,6 +211,21 @@ describe.skipIf(!runnable)('API routes: session-authenticated uploads', () => {
       if (actor === 'adminNoMfa') expect(await res.text()).toBe('MFA_REQUIRED')
     })
   }
+
+  it('refuses a branding upload from a blocked agency admin', async () => {
+    const admin = w.sessions.adminMfa!
+    setCurrentSession({
+      ...admin,
+      user: { ...admin.user, blockedAt: new Date() },
+    } as TestSession)
+    const res = await handlerOf(
+      brandingUploadRoute,
+      'POST',
+    )({
+      request: multipart({ file: text(), kind: 'nope' }),
+    })
+    expect(res.status).toBe(401)
+  })
 })
 
 describe.skipIf(!runnable)('API routes: site token authentication', () => {

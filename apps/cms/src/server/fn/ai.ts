@@ -10,17 +10,14 @@ import {
   requireUser,
 } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
+import { requireAiBudget } from '#/server/ai/budget'
 import { listOpenRouterModels } from '#/server/ai/openrouter'
-import {
-  AiGenerationError,
-  generateSeoSuggestion,
-} from '#/server/ai/seo-generate'
+import { generateSeoSuggestion } from '#/server/ai/seo-generate'
 import {
   AI_MODEL_MAX_LENGTH,
   AI_PROMPT_MAX_LENGTH,
   getAiSettingsStatus,
   isAiEnabled,
-  loadAiRuntimeConfig,
   saveAiSettings,
 } from '#/server/ai/settings'
 import { audit } from '#/server/audit'
@@ -28,13 +25,10 @@ import { requireSiteAccess } from '#/server/content/access'
 import { getCollection } from '#/server/content/collections'
 import { NotFoundError, ValidationError } from '#/server/content/errors'
 import { resolveSlug, validateEntryData } from '#/server/content/validation'
-import { allowUserAction } from '#/server/http/rate-limit.server'
 
 const aiFn = { strict: { output: false } as const }
 
 /** Paid calls: generous for real editing, tight enough to cap a runaway. */
-const GENERATE_RULE = { limit: 30, windowSeconds: 60 * 60 }
-
 export const getAiSettingsFn = createServerFn({
   method: 'GET',
   ...aiFn,
@@ -119,17 +113,7 @@ export const generateEntrySeoFn = createServerFn({ method: 'POST', ...aiFn })
     })
     if (!parsed.ok) throw new ValidationError(parsed.errors)
 
-    const config = await loadAiRuntimeConfig()
-    if (!config)
-      throw new AiGenerationError(
-        'AI is not set up yet. An agency admin can configure it under Agency → AI.',
-        'not_configured',
-      )
-    if (!(await allowUserAction('ai-seo', session.user.id, GENERATE_RULE)))
-      throw new AiGenerationError(
-        'You have reached the hourly limit for AI suggestions. Try again later.',
-        'rate_limited',
-      )
+    const config = await requireAiBudget(session.user.id)
 
     const result = await generateSeoSuggestion({
       config,
