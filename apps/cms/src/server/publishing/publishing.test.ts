@@ -10,6 +10,7 @@ import {
   publication,
   schedulerBackoff,
   site,
+  user,
 } from '#/db/schema'
 import {
   createEntry,
@@ -389,6 +390,61 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         }),
       )
     })
+  })
+
+  it('treats a person whose note says "scheduled" as a manual release', async () => {
+    const [scheduler] = await db
+      .insert(user)
+      .values({
+        id: crypto.randomUUID(),
+        name: 'Scheduler',
+        email: `scheduler-${crypto.randomUUID()}@test.local`,
+        emailVerified: true,
+      })
+      .returning()
+    try {
+      await withTestSite(async (ctx) => {
+        await setDeploymentTarget(ctx.site.id)
+        await createTestCollection(ctx.site.id)
+        const scheduled = await createEntry({
+          siteId: ctx.site.id,
+          collectionKey: 'articles',
+          data: {
+            title: 'Scheduled',
+            slug: `sched-${ctx.suffix}`,
+            body: sampleRichText,
+          },
+          actorId: scheduler.id,
+        })
+        await scheduleEntry(scheduled.id, dueScheduleIso(), 'UTC', scheduler.id)
+
+        const result = await requestPublication({
+          siteId: ctx.site.id,
+          actorId: ctx.actor.id,
+          note: 'scheduled',
+        })
+        if (!result.ok) throw new Error(result.errors.join('; '))
+        expect(result.publication.origin).toBe('manual')
+        expect(result.publication.scheduledBy).toEqual([])
+        expect(result.publication.requestedBy).toBe(ctx.actor.id)
+        const requested = (
+          await db
+            .select()
+            .from(auditLog)
+            .where(
+              and(
+                eq(auditLog.targetId, result.publication.id),
+                eq(auditLog.action, 'publication.requested'),
+              ),
+            )
+        ).at(0)
+        expect(requested?.actorId).toBe(ctx.actor.id)
+        expect(requested?.meta).not.toHaveProperty('scheduledBy')
+        expect(requested?.meta).not.toHaveProperty('approvers')
+      })
+    } finally {
+      await db.delete(user).where(eq(user.id, scheduler.id))
+    }
   })
 
   it('claims only one active job per site', async () => {

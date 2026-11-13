@@ -2,6 +2,7 @@ import { isIP } from 'node:net'
 import { lookup } from 'node:dns/promises'
 
 import { AppError } from './app-error'
+import { isPublicAddress } from './ip-address'
 
 export type ResolveHost = (hostname: string) => Promise<string[]>
 
@@ -64,7 +65,10 @@ export async function resolveSafeHealthCheckUrl(
   const addresses = isIP(hostname)
     ? [hostname]
     : await (options.resolve ?? resolveHost)(hostname)
-  if (addresses.length === 0 || addresses.some(isPrivateOrReservedAddress)) {
+  if (
+    addresses.length === 0 ||
+    addresses.some((address) => !isPublicAddress(address))
+  ) {
     throw new UnsafeOutboundUrlError(
       'Health-check URL resolves to a private or reserved address',
     )
@@ -85,41 +89,4 @@ function unbracketHostname(hostname: string) {
   return hostname.startsWith('[') && hostname.endsWith(']')
     ? hostname.slice(1, -1)
     : hostname
-}
-
-export function isPrivateOrReservedAddress(address: string) {
-  if (isIP(address) === 4) {
-    const parts = address.split('.').map(Number)
-    const [a, b] = parts
-    return (
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 0) ||
-      (a === 192 && b === 168) ||
-      (a === 198 && (b === 18 || b === 19)) ||
-      (a === 198 && b === 51) ||
-      (a === 203 && b === 0) ||
-      a >= 224
-    )
-  }
-  if (isIP(address) === 6) {
-    const normalized = address.toLowerCase()
-    if (normalized.startsWith('::ffff:')) {
-      return isPrivateOrReservedAddress(normalized.slice(7))
-    }
-    return (
-      normalized === '::' ||
-      normalized === '::1' ||
-      normalized.startsWith('fc') ||
-      normalized.startsWith('fd') ||
-      /^fe[89ab]/.test(normalized) ||
-      normalized.startsWith('ff') ||
-      normalized.startsWith('2001:db8:')
-    )
-  }
-  return true
 }

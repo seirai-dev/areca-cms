@@ -37,7 +37,7 @@ minimumReleaseAgeExclude:
 overrides:
   "@esbuild-kit/core-utils>esbuild": 0.25.12
   # Patched transitive versions (pnpm audit --prod). Remove once the parent packages ship them.
-  seroval: ">=1.6.3"
+  seroval: ">=1.6.12 <1.7.0"
   source-map-js: ">=1.2.2"
   "@vitest/mocker": ">=5.0.3"
   vite: ">=8.3.3"

@@ -97,7 +97,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         await expect(
           requestPublication({
             siteId: ctx.site.id,
-            actorId: ctx.actor.id,
+            actorId: 'system',
             requestKey,
             note: 'scheduled',
             scheduledBy: [crypto.randomUUID()],

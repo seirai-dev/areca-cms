@@ -278,7 +278,7 @@ Areca follows up to four redirects, and checks the final response. If the check 
 Areca enforces these rules on every outbound connection to Dokploy and to health check URLs:
 
 - **The Dokploy API must use HTTPS.** Plain HTTP is accepted only for `localhost`, or when `DOKPLOY_ALLOW_INSECURE_HTTP=true`. Redirects are rejected, and the API URL must not contain a user name or password.
-- **Health checks must use HTTP or HTTPS.** Areca refuses a health check URL that resolves to a private or reserved address, such as a loopback, link-local or RFC 1918 address. It connects to the address it checked, so a name cannot be changed between the check and the request.
+- **Health checks must use HTTP or HTTPS.** Areca refuses a health check URL that resolves to a private or reserved address, such as a loopback, link-local or RFC 1918 address, or an IPv6 address that wraps one (IPv4-mapped, NAT64 or 6to4). It connects to the address it checked, so a name cannot be changed between the check and the request.
 - **Local and LAN testing needs two switches.** To test against a LAN address over HTTP, set `DOKPLOY_ALLOW_INSECURE_HTTP=true` and `ALLOW_PRIVATE_HEALTH_CHECKS=true`.
 
 <Callout type="warn" title="Do not enable these on a public CMS">
