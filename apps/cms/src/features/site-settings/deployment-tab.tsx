@@ -53,15 +53,21 @@ function isUrl(value: string) {
  * shared searchable target picker for the chosen provider, the health check
  * URL, and Stop deploying. Edits stay local until Save.
  */
-export function DeploymentTab({
-  site,
-  meSite,
-  settings,
-}: {
+export function DeploymentTab(props: DeploymentTabProps) {
+  const { site } = props
+  // The draft starts from the saved settings, and starts again whenever they
+  // change (after a save, or a refetch that brings new values).
+  const savedKey = JSON.stringify([site.publishingMode, site.deploymentTarget])
+  return <DeploymentForm key={savedKey} {...props} />
+}
+
+type DeploymentTabProps = {
   site: SiteRecord
   meSite: MeSite
   settings: ReturnType<typeof useSiteSettings>
-}) {
+}
+
+function DeploymentForm({ site, meSite, settings }: DeploymentTabProps) {
   const formId = React.useId()
   const client = meSite.organizationName
   const dokploy = useDokployApplications(site.organizationId)
@@ -105,22 +111,6 @@ export function DeploymentTab({
   const [stopOpen, setStopOpen] = React.useState(false)
   // This tab's own save. The settings mutation is shared with the other tabs.
   const [saving, setSaving] = React.useState(false)
-
-  // Re-seed the draft whenever the saved settings change (after a save, or a refetch).
-  React.useEffect(() => {
-    setMode(site.publishingMode)
-    setProvider(savedProvider)
-    setAppId(savedApp)
-    setSelection(savedSelection)
-    setHealth(savedHealth)
-    setErrors({})
-  }, [
-    site.publishingMode,
-    savedProvider,
-    savedApp,
-    savedHealth,
-    savedSelection,
-  ])
 
   const listed =
     selection && targets.data ? findListed(selection, targets.data) : null
