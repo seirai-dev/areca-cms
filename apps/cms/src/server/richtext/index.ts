@@ -24,7 +24,7 @@ export type {
   EntryLinkResolution,
   EntryLinkTarget,
 } from './entry-links'
-export { richTextPlainText } from './markdown'
+export { richTextPlainText } from '#/lib/richtext-text'
 export {
   markdownToRichText,
   normalizeRichTextInput,

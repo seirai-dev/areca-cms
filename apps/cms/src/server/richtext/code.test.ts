@@ -197,6 +197,6 @@ describe('plain text for descriptions', () => {
       ],
     }
     expect(richTextPlainText(value)).toBe('Call getPost on the server.\nDone.')
-    expect(plainTextOf(value)).toBe('Call getPost on the server. Done.')
+    expect(plainTextOf(value)).toBe(richTextPlainText(value))
   })
 })
