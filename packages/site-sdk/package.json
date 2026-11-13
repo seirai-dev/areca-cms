@@ -93,7 +93,7 @@
     "@types/react-dom": "^19.3.0"
   },
   "dependencies": {
-    "@clack/prompts": "^1.8.1",
+    "@clack/prompts": "^1.9.0",
     "@tanstack/markdown": "1.2.0"
   },
   "peerDependencies": {
