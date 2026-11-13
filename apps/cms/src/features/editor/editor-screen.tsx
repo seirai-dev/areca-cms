@@ -1,15 +1,12 @@
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link, useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, Stack, WarningCircle } from '@phosphor-icons/react'
+import { Link } from '@tanstack/react-router'
+import { ArrowLeft, Stack } from '@phosphor-icons/react'
 
 import { queryKeys } from '#/lib/content/query-keys'
-import {
-  aiAvailabilityQuery,
-  collectionsQuery as collectionsOptions,
-} from '#/lib/content/queries'
+import { collectionsQuery as collectionsOptions } from '#/lib/content/queries'
 import { initialEntryData } from '#/lib/content/utils'
-import { TOGGLE_DETAILS_EVENT, useShortcut } from '#/components/shell/shortcuts'
+import { TOGGLE_DETAILS_EVENT } from '#/components/shell/shortcuts'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,12 +24,11 @@ import { Popover, PopoverAnchor, PopoverContent } from '#/components/ui/popover'
 import { QueryError } from '#/components/ui/query-error'
 import { SlideOver } from '#/components/ui/slide-over'
 import { entryTransitionName } from '#/features/collection/entry-item'
-import { baseLocale, readLocale, SLUG_KEY } from '#/lib/content-locale'
+import { SLUG_KEY } from '#/lib/content-locale'
 import {
   entryUiStatus,
   isEditedSinceReady,
 } from '#/features/golive/entry-live-state'
-import { useCopyEntryAction } from '#/features/dev-env/use-copy-to-production'
 import { canGoLive } from '#/features/golive/go-live-gate'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { usePanel } from '#/features/shell/panel'
@@ -41,16 +37,14 @@ import { previewOrigin } from '#/lib/preview-url'
 import { isDevSite } from '#/lib/site-environment'
 import { canManageSite } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
-import type { Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 import { readEntrySeo, SEO_KEY } from '#/lib/seo'
+import type { listCollectionsFn } from '#/server/fn/content'
 import { listInboundReferencesFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 
 import { LazyAiSeoDialog } from './lazy-parts'
-import { TranslateLanguageButton } from './translate-language-button'
-import { useAiTranslation } from './use-ai-translation'
 
 import { DetailsPanel } from './details-panel'
 import type { LanguageRow } from './details-panel'
@@ -59,46 +53,28 @@ import { EditorCanvas } from './editor-canvas'
 import { EditorSkeleton } from './editor-skeleton'
 import { EditorTopBar } from './editor-top-bar'
 import type { PrimaryState } from './editor-top-bar'
-import { LanguageBar } from './language-bar'
+import { EditorLanguageBar } from './editor-language-bar'
+import { EditorNotices } from './editor-notices'
 import { LanguageFade } from './language-fade'
 import { uiLanguageName } from '#/lib/site-languages'
-import {
-  blockersFor,
-  fieldLabels,
-  localeContext,
-  localeSummaries,
-  requiredLocales,
-} from './language-state'
-import type { LocaleBlocker } from './language-state'
 import { LocaleFieldsContext } from './locale-fields'
-import type { LocaleFields } from './locale-fields'
 import { ScheduledVersion } from './scheduled-version'
 import { ScheduleForm } from './schedule-form'
-import { conflictReadyBlock, EditorConflictNotice } from './conflict-notice'
 import { SeoPanel, plainTextOf } from './seo-panel'
-import { useContentLanguage } from './use-content-language'
+import { useClickSource } from './use-click-source'
+import { useEditorSession } from './use-editor-session'
 import { useEntryEditor } from './use-entry-editor'
 import { LazyPreviewPane } from '#/features/visual/lazy-preview-pane'
 import { VisualEditorLayout } from '#/features/visual/visual-editor-layout'
 import { VisualFullScreenProvider } from '#/features/visual/visual-context'
 import { VisualShortcuts } from '#/features/visual/visual-shortcuts'
-import { seoClickFields } from '#/features/visual/click-fields'
-import type { ClickSource } from '#/features/visual/preview-pane'
-import { announceReveal, pulseField } from './reveal-field'
+import { revealField } from './reveal-field'
 import {
   VISUAL_TOKEN_REFRESH_MS,
   useVisualMode,
 } from '#/features/visual/visual-mode'
 
-type CollectionRecord = {
-  key: string
-  label: string
-  routePattern: string
-  enabled: boolean
-  fields: Field[]
-  /** Languages besides main that must be complete before going live. */
-  requiredLanguages?: string[]
-}
+type CollectionRecord = Awaited<ReturnType<typeof listCollectionsFn>>[number]
 
 const DETAILS_KEY = 'areca.editor.details'
 
@@ -122,9 +98,9 @@ export function EditorScreen({
   onDeleted: () => Promise<unknown> | void
 }) {
   const collectionsQuery = useQuery(collectionsOptions(site.id))
-  const collection = (
-    collectionsQuery.data as CollectionRecord[] | undefined
-  )?.find((item) => item.key === collectionKey)
+  const collection = collectionsQuery.data?.find(
+    (item) => item.key === collectionKey,
+  )
 
   if (collectionsQuery.isLoading) return <EditorSkeleton />
   if (collectionsQuery.isError) {
@@ -222,14 +198,6 @@ function EntryEditorView({
   const [titleVisible, setTitleVisible] = React.useState(true)
 
   const fields = collection.fields
-  const navigate = useNavigate()
-  const clickFields = React.useMemo(
-    () => [
-      ...fields.map((field) => ({ key: field.key, label: field.label })),
-      ...seoClickFields(),
-    ],
-    [fields],
-  )
   // Visual mode (docs/design/visual-editor.md). A new entry has no preview
   // until its first save, so it does not reopen in Visual by itself.
   const visual = useVisualMode({ autoEnter: Boolean(routeEntryId) })
@@ -240,118 +208,23 @@ function EntryEditorView({
     entryId: routeEntryId,
     onCreated,
     onDeleted,
-    onRevealError: (key) => revealField(key),
+    onRevealError: reveal,
     previewRefetchInterval: visual.active ? VISUAL_TOKEN_REFRESH_MS : undefined,
   })
   const { entry, data, titleField, slugField } = editor
 
-  // Content languages (multilingual sites only; null otherwise). The editor
-  // keeps the full entry in `data`; the fields show one language of it.
-  const lang = useContentLanguage({ siteId, languages: site.languages })
-  const active = lang.active
-  const ctx = React.useMemo(
-    () => (lang.languages ? localeContext(lang.languages, fields) : null),
-    [lang.languages, fields],
-  )
-  const requiredLanguages = collection.requiredLanguages ?? []
-  const requiredKey = requiredLanguages.join('|')
-  const required = lang.languages
-    ? requiredLocales(lang.languages, requiredLanguages)
-    : []
-  const summaries = React.useMemo(
-    () => (ctx ? localeSummaries(data, ctx, required) : []),
-    // `requiredKey` stands in for the contents of `required`.
-    [data, ctx, requiredKey],
-  )
-  const view = React.useMemo(
-    () => (ctx && active ? readLocale(data, active, ctx) : data),
-    [data, ctx, active],
-  )
-  const mainView = React.useMemo(
-    () => (ctx ? readLocale(data, lang.main, ctx) : data),
-    [data, ctx, lang.main],
-  )
-  const notMainLocale = Boolean(ctx && active && !lang.isMain)
-  const aiQuery = useQuery(aiAvailabilityQuery())
-  // AI translation needs AI set up and a saved entry (the server reads it).
-  const translateEnabled =
-    aiQuery.data?.enabled === true && Boolean(editor.entryId)
-  const translate = useAiTranslation({
-    siteId,
-    entryId: editor.entryId ?? '',
+  const session = useEditorSession({
+    editor,
+    site,
     fields,
-    main: lang.main,
-    active: active ?? lang.main,
-    source: mainView,
-    target: view,
+    requiredLanguages: collection.requiredLanguages,
     seoEnabled: true,
-    applyPatch: (patch) => {
-      if (ctx && active) editor.updateLocaleFields(patch, active, ctx)
-    },
-    save: editor.save,
+    translatedSlug: true,
+    copyDestination: { kind: 'collection', collectionKey: collection.key },
+    reveal,
   })
-
-  const localeFields: LocaleFields | null =
-    ctx && active
-      ? {
-          active,
-          main: lang.main,
-          mainName: uiLanguageName(lang.main),
-          mainView,
-          isMain: lang.isMain,
-          onTranslateField: translateEnabled ? translate.translateField : null,
-          translatingKey:
-            translate.pendingScope === 'language'
-              ? null
-              : translate.pendingScope,
-        }
-      : null
-  const blockers: LocaleBlocker[] = ctx ? blockersFor(data, ctx, required) : []
-  const blocker: LocaleBlocker | null =
-    editor.serverBlockers.at(0) ?? blockers.at(0) ?? null
-
-  // A required language that blocks ready: switch to it and focus the first
-  // missing field.
-  function focusBlocker(item: LocaleBlocker) {
-    lang.setActive(item.locale)
-    const first = item.missing[0]
-    if (first) requestAnimationFrame(() => revealField(first))
-  }
-
-  const languageBlock = blocker
-    ? {
-        message: m.editor_language_blocker({
-          language: uiLanguageName(blocker.locale),
-          fields: fieldLabels(blocker.missing, fields).join(', '),
-        }),
-        onFix: () => focusBlocker(blocker),
-      }
-    : null
-  const conflictBlock = conflictReadyBlock(
-    editor.conflict,
-    () => void editor.reloadServerDraft(),
-  )
-  const readyBlock = conflictBlock ?? languageBlock
-
-  // Writes the active language. On the main language (and single-language
-  // sites) this is the ordinary update, which also keeps the slug in step
-  // with the title.
-  function onLocaleChange(key: string, value: unknown) {
-    if (!ctx || !active) {
-      editor.updateField(key, value)
-      return
-    }
-    if (lang.isMain && baseLocale(data, ctx) === lang.main) {
-      editor.updateField(key, value)
-      return
-    }
-    editor.updateLocaleField(
-      !lang.isMain && key === slugField?.key ? SLUG_KEY : key,
-      value,
-      active,
-      ctx,
-    )
-  }
+  const { lang, ctx, active, view, mainView, summaries } = session
+  const notMainLocale = Boolean(ctx && active && !lang.isMain)
 
   const languageRows: LanguageRow[] | undefined =
     lang.languages && ctx
@@ -360,6 +233,14 @@ function EntryEditorView({
           name: uiLanguageName(summary.locale),
         }))
       : undefined
+  const clickSource = useClickSource({
+    editor,
+    siteId,
+    fields,
+    seo: true,
+    globalKey: null,
+    reveal,
+  })
   const mainSlugValue = slugField ? mainView[slugField.key] : undefined
   const inboundQuery = useQuery({
     queryKey: queryKeys.inboundReferences(editor.entryId ?? ''),
@@ -391,37 +272,21 @@ function EntryEditorView({
   }
 
   /**
-   * Scrolls to and focuses a field. Panels that hide it open first (the
-   * details panel, a collapsed SEO group). `pulse` makes it glow briefly, for
-   * a click in the visual preview.
+   * Scrolls to and focuses a field. The details panel opens first when it
+   * holds the field. `pulse` makes it glow briefly, for a click in the visual
+   * preview.
    */
-  function revealField(key: string, options: { pulse?: boolean } = {}) {
-    const inPanel =
-      key === slugField?.key ||
-      key.startsWith(`${SEO_KEY}.`) ||
-      panelFields.some((field) => field.key === key)
-    if (inPanel) openDetails()
-    announceReveal(key)
-    const attempt = (tries: number) => {
-      const node = document.querySelector<HTMLElement>(
-        `[data-field="${CSS.escape(key)}"]`,
-      )
-      if (!node) {
-        if (tries > 0) window.setTimeout(() => attempt(tries - 1), 120)
-        return
-      }
-      node.scrollIntoView({ block: 'center', behavior: 'smooth' })
-      const focusable = node.matches(
-        'input, textarea, [contenteditable="true"], button',
-      )
-        ? node
-        : node.querySelector<HTMLElement>(
-            'input, textarea, [contenteditable="true"], button',
-          )
-      focusable?.focus({ preventScroll: true })
-      if (options.pulse) pulseField(node)
-    }
-    requestAnimationFrame(() => attempt(5))
+  function reveal(key: string, options: { pulse?: boolean } = {}) {
+    revealField(key, {
+      pulse: options.pulse,
+      beforeReveal: () => {
+        const inPanel =
+          key === slugField?.key ||
+          key.startsWith(`${SEO_KEY}.`) ||
+          panelFields.some((field) => field.key === key)
+        if (inPanel) openDetails()
+      },
+    })
   }
 
   React.useEffect(() => {
@@ -429,8 +294,6 @@ function EntryEditorView({
     window.addEventListener(TOGGLE_DETAILS_EVENT, onToggle)
     return () => window.removeEventListener(TOGGLE_DETAILS_EVENT, onToggle)
   })
-
-  useShortcut('mod+s', () => void editor.save())
 
   // The small title in the top bar fades in once the big one scrolls away.
   React.useEffect(() => {
@@ -443,17 +306,6 @@ function EntryEditorView({
     observer.observe(node)
     return () => observer.disconnect()
   }, [editor.loading])
-
-  // Copy to production: dev envs only (docs/design/dev-environments.md, Decision 18).
-  const copyAction = useCopyEntryAction({
-    devSiteId: siteId,
-    productionSiteId: site.parentSiteId,
-    isDevelopment: isDev,
-    collectionKey: collection.key,
-    destination: { kind: 'collection', collectionKey: collection.key },
-    devEntryId: editor.entryId,
-    save: editor.save,
-  })
 
   // A development environment has no releases: no "unreleased changes" dot.
   const editedSinceReady = React.useMemo(
@@ -578,7 +430,7 @@ function EntryEditorView({
       titleField={titleField}
       data={detailsData}
       errors={editor.fieldErrors}
-      onChange={onLocaleChange}
+      onChange={session.onLocaleChange}
       slugManual={editor.slugManual && !notMainLocale}
       onResetSlug={editor.resetSlugFromTitle}
       slugPlaceholder={
@@ -599,7 +451,7 @@ function EntryEditorView({
       seoPanel={
         <SeoPanel
           seo={seo}
-          onChange={(next) => onLocaleChange(SEO_KEY, next)}
+          onChange={(next) => session.onLocaleChange(SEO_KEY, next)}
           errors={editor.fieldErrors}
           organizationId={site.organizationId}
           productionUrl={site.productionUrl}
@@ -613,7 +465,7 @@ function EntryEditorView({
               : title
           }
           fallbackDescription={fallbackDescription}
-          aiEnabled={aiQuery.data?.enabled === true}
+          aiEnabled={session.aiEnabled}
           onGenerate={() => setAiOpen(true)}
         />
       }
@@ -635,42 +487,13 @@ function EntryEditorView({
     />
   )
 
-  const hasErrors = editor.errorCount > 0 || Boolean(editor.formError)
-  const errorKeys = Object.keys(editor.fieldErrors).filter(Boolean)
-
-  const languageBar =
-    lang.languages && ctx && active ? (
-      <LanguageBar
-        main={lang.main}
-        active={active}
-        summaries={summaries}
-        fields={fields}
-        onSelect={lang.setActive}
-        trailing={
-          translateEnabled && !lang.isMain ? (
-            <TranslateLanguageButton
-              label={m.editor_translate_language({
-                language: uiLanguageName(lang.main),
-              })}
-              running={translate.pendingScope === 'language'}
-              disabled={!translate.hasSource}
-              disabledReason={m.editor_translate_add_source({
-                language: uiLanguageName(lang.main),
-              })}
-              onClick={translate.translateLanguage}
-            />
-          ) : undefined
-        }
-      />
-    ) : undefined
-
   const canvas = (
     <EditorCanvas
       titleField={titleField}
       canvasFields={canvasFields}
       data={view}
       errors={editor.fieldErrors}
-      onChange={onLocaleChange}
+      onChange={session.onLocaleChange}
       organizationId={site.organizationId}
       linkContext={linkContext}
       previewing={previewing}
@@ -685,84 +508,24 @@ function EntryEditorView({
   // Shared by both layouts: the same notices, in the same order.
   const notices = (
     <>
-      <EditorConflictNotice
-        conflict={editor.conflict}
-        approvalConflict={editor.approvalConflict}
-        recoveredDraft={Boolean(editor.recoveredDraft)}
-        className="mx-auto grid w-full max-w-[720px] gap-3 rounded-card border border-border-error/30 p-4"
-        onReload={() => void editor.reloadServerDraft()}
-        onReapply={() => void editor.reapplyRecoveredDraft()}
-        onDiscard={editor.discardRecoveredDraft}
-      />
-      {editor.restoreSkippedFields.length > 0 ? (
-        <section
-          role="status"
-          className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"
-        >
-          <h2 className="font-semibold">
-            {m.editor_revision_skipped_fields()}
-          </h2>
-          <p className="mt-1">{m.editor_revision_keep_current()}</p>
-          <ul className="mt-3 list-disc space-y-1 pl-5">
-            {editor.restoreSkippedFields.map((field) => (
-              <li key={field.key}>
-                <strong>{field.label}</strong>: {field.reason}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-      {entry?.status === 'scheduled' &&
-      entry.scheduledData &&
-      entry.scheduledSlug ? (
-        <ScheduledVersion
-          fields={fields}
-          data={entry.scheduledData}
-          slug={entry.scheduledSlug}
-          siteId={siteId}
-          organizationId={site.organizationId}
-        />
-      ) : null}
-      {hasErrors ? (
-        <div
-          role="alert"
-          data-testid="editor-errors"
-          className="mx-auto flex w-full max-w-[720px] items-start gap-3 rounded-card border border-border-error/30 bg-status-error-bg px-4 py-3 text-[14px] leading-5 text-text-primary"
-        >
-          <WarningCircle
-            weight="fill"
-            className="mt-0.5 size-4 shrink-0 text-icon-error"
+      <EditorNotices
+        editor={editor}
+        fields={fields}
+        onReveal={reveal}
+        className="mx-auto w-full max-w-[720px]"
+      >
+        {entry?.status === 'scheduled' &&
+        entry.scheduledData &&
+        entry.scheduledSlug ? (
+          <ScheduledVersion
+            fields={fields}
+            data={entry.scheduledData}
+            slug={entry.scheduledSlug}
+            siteId={siteId}
+            organizationId={site.organizationId}
           />
-          <span className="grid gap-0.5">
-            <span className="font-medium">
-              {editor.errorCount > 0
-                ? editor.errorCount === 1
-                  ? m.editor_save_fix_one()
-                  : m.editor_save_fix_other({ count: editor.errorCount })
-                : m.editor_save_failed()}
-            </span>
-            {errorKeys.length > 0 ? (
-              <span className="flex flex-wrap gap-x-3 gap-y-1">
-                {errorKeys.map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => revealField(key)}
-                    className="text-callout font-medium text-text-primary underline decoration-border-error underline-offset-4 hover:decoration-current"
-                  >
-                    {fieldLabels([key], fields)[0] ?? key}
-                  </button>
-                ))}
-              </span>
-            ) : null}
-            {editor.formError ? (
-              <span className="text-callout text-text-secondary">
-                {editor.formError}
-              </span>
-            ) : null}
-          </span>
-        </div>
-      ) : null}
+        ) : null}
+      </EditorNotices>
       {previewing ? (
         <div className="mx-auto flex w-full max-w-[720px] items-center justify-between gap-3 rounded-[12px] bg-accent-soft px-4 py-2.5 text-callout text-accent-text">
           <span>{m.editor_previewing_formatting()}</span>
@@ -783,36 +546,6 @@ function EntryEditorView({
     canvas
   )
 
-  // Click to edit: the fields a preview may open, and where "Open" goes.
-  const clickSource: ClickSource = {
-    self: { entryId: editor.entryId ?? null, globalKey: null },
-    fields: clickFields,
-    onSelectField: (key) => revealField(key, { pulse: true }),
-    onOpenOwner: (owner) => {
-      void (async () => {
-        // Save first, so nothing typed here is left behind.
-        await editor.persist().catch(() => null)
-        if (owner.kind === 'entry') {
-          await navigate({
-            to: '/sites/$siteId/c/$collectionKey/$entryId',
-            params: {
-              siteId,
-              collectionKey: owner.collectionKey,
-              entryId: owner.entryId,
-            },
-            search: { view: 'visual' },
-          })
-        } else {
-          await navigate({
-            to: '/sites/$siteId/globals/$globalKey',
-            params: { siteId, globalKey: owner.globalKey },
-            search: { view: 'visual' },
-          })
-        }
-      })()
-    },
-  }
-
   // Visual mode has no preview until the entry has a URL (Tier 0).
   const canVisual = Boolean(editor.previewUrl)
   const previewReason = canVisual
@@ -826,7 +559,7 @@ function EntryEditorView({
   return (
     <VisualFullScreenProvider active={visual.active}>
       <VisualShortcuts mode={visual} canVisual={canVisual} />
-      <LocaleFieldsContext.Provider value={localeFields}>
+      <LocaleFieldsContext.Provider value={session.localeFields}>
         <div
           data-testid="entry-editor"
           data-ready={editor.ready ? 'true' : 'false'}
@@ -836,7 +569,7 @@ function EntryEditorView({
           style={
             {
               // Sticky offsets below the header: 56px row, plus the 44px language row.
-              '--editor-bar-h': languageBar ? '100px' : '56px',
+              '--editor-bar-h': session.multilingual ? '100px' : '56px',
             } as React.CSSProperties
           }
           className={
@@ -844,60 +577,16 @@ function EntryEditorView({
           }
         >
           <EditorTopBar
-            languageBar={languageBar}
-            readyBlock={readyBlock}
-            copyAction={copyAction}
+            editor={editor}
             siteId={siteId}
-            collectionKey={collection.key}
-            collectionLabel={collection.label}
-            title={title}
-            showTitle={!titleVisible}
             uiStatus={uiStatus}
-            backendStatus={entry?.status ?? 'draft'}
-            scheduledAt={entry?.scheduledAt}
             editedSinceReady={editedSinceReady}
-            saveStatus={editor.status}
-            conflict={editor.conflict}
-            isNew={editor.isNew}
-            lastSavedAt={editor.lastSavedAt}
-            updatedAt={entry?.updatedAt}
-            errorCount={editor.errorCount}
-            onSave={() => void editor.save()}
-            previewUrl={editor.previewUrl}
             canManage={canManage}
-            primary={primary}
-            busy={editor.busy}
-            primaryPending={editor.markReadyPending || editor.goLiveNowPending}
-            scheduled={entry?.status === 'scheduled'}
-            canUnpublish={entry?.status === 'published'}
-            canArchive={entry?.status !== 'archived'}
-            hasRichText={canvasFields.some(
-              (field) => field.type === 'richtext',
-            )}
-            previewing={previewing}
-            onTogglePreviewing={() => setPreviewing((value) => !value)}
-            onGenerateSeo={
-              aiQuery.data?.enabled === true ? () => setAiOpen(true) : undefined
+            readyBlock={session.readyBlock}
+            copyAction={session.copyAction}
+            languageBar={
+              <EditorLanguageBar session={session} fields={fields} />
             }
-            onMarkReady={editor.markReady}
-            onGoLiveNow={() => void goLiveNow()}
-            goLiveBlocked={
-              !canGoLive({
-                canPublish: canManage,
-                blockers: release.data?.blockers,
-              })
-            }
-            // A development environment has no releases and no scheduling.
-            canGoLive={!isDev}
-            onSchedule={() => setScheduleOpen(true)}
-            canSchedule={!isDev}
-            onCancelSchedule={editor.cancelSchedule}
-            onUnpublish={editor.unpublish}
-            onArchive={editor.archive}
-            onDelete={() => setDeleteOpen(true)}
-            detailsOpen={detailsOpen}
-            onToggleDetails={toggleDetails}
-            showDetailsToggle={!visual.active}
             visualMode={
               visual.available
                 ? {
@@ -908,7 +597,36 @@ function EntryEditorView({
                   }
                 : undefined
             }
-            entryId={editor.entryId}
+            collection={collection}
+            title={title}
+            showTitle={!titleVisible}
+            primary={primary}
+            devSite={isDev}
+            goLiveBlocked={
+              !canGoLive({
+                canPublish: canManage,
+                blockers: release.data?.blockers,
+              })
+            }
+            formatting={
+              canvasFields.some((field) => field.type === 'richtext')
+                ? {
+                    on: previewing,
+                    onToggle: () => setPreviewing((value) => !value),
+                  }
+                : null
+            }
+            onGenerateSeo={
+              session.aiEnabled ? () => setAiOpen(true) : undefined
+            }
+            onGoLiveNow={() => void goLiveNow()}
+            onSchedule={() => setScheduleOpen(true)}
+            onDelete={() => setDeleteOpen(true)}
+            details={
+              visual.active
+                ? null
+                : { open: detailsOpen, onToggle: toggleDetails }
+            }
             scheduleAnchor={(node) =>
               mobile ? (
                 node
@@ -1020,7 +738,7 @@ function EntryEditorView({
             </SlideOver>
           ) : null}
 
-          {translate.dialog}
+          {session.translate.dialog}
 
           <LazyAiSeoDialog
             open={aiOpen}
@@ -1031,7 +749,7 @@ function EntryEditorView({
             locale={ctx ? active : null}
             data={view}
             seo={seo}
-            onApply={(next) => onLocaleChange(SEO_KEY, next)}
+            onApply={(next) => session.onLocaleChange(SEO_KEY, next)}
           />
 
           <ConfirmDialog

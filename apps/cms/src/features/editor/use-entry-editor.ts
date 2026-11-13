@@ -1,14 +1,13 @@
 import * as React from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useBlocker } from '@tanstack/react-router'
+import {
+  useIsMutating,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import { toast } from 'sonner'
 
-import {
-  createDraftWriter,
-  persistDraft,
-  readRecoveredDraft,
-  shouldKeepEditorOpen,
-} from './draft-recovery'
+import { useDraftRecovery } from './draft-recovery'
 import { authClient } from '#/lib/auth-client'
 import { readLocale, writeLocale } from '#/lib/content-locale'
 import { isValidSlug } from '#/lib/slug'
@@ -24,22 +23,18 @@ import {
 } from '#/lib/content/utils'
 import type { FieldErrorMap } from '#/lib/content/utils'
 import { isEditedSinceReady } from '#/features/golive/entry-live-state'
-import {
-  invalidateGoLiveKeys,
-  useGoLive,
-  useInvalidateGoLive,
-} from '#/features/golive/use-go-live'
+import { invalidateGoLiveKeys, useGoLive } from '#/features/golive/use-go-live'
 import { invalidateDevSync } from '#/features/dev-env/invalidate'
-import type { EntryData, EntryStatus, Field } from '#/lib/types'
+import type { EntryData, Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import type { LocaleBlocker } from './language-state'
-import {
-  DRAFT_WRITE_DELAY,
-  autosaveDelay,
-  scheduledPollInterval,
-} from './editor-timing'
-import { isExplicitTrigger } from './save-intent'
+import { scheduledPollInterval } from './editor-timing'
 import type { SaveTrigger } from './save-intent'
+import { useAutosave } from './use-autosave'
+import type { SaveContext, SaveOutcome } from './use-autosave'
+import { useEntryAction } from './use-entry-action'
+import type { EntryActionDeps } from './use-entry-action'
+import type { listRevisionsFn } from '#/server/fn/content'
 import {
   archiveEntryFn,
   cancelScheduleFn,
@@ -62,45 +57,18 @@ import type {
   SectionLinkUpdate,
 } from '#/server/content/section-link-updates'
 
-/** Navigation waits at most this long for a pending save. */
-const LEAVE_WAIT = 3000
+/** An entry as the editor loads it. */
+export type EntryRecord = Awaited<ReturnType<typeof getEntryFn>>
 
-export type EntryRecord = {
-  id: string
-  slug: string
-  status: EntryStatus
-  draftVersion: number
-  scheduledSlug?: string | null
-  scheduledData?: EntryData | null
-  draftData: EntryData
-  publishedData?: EntryData | null
-  scheduledAt: string | Date | null
-  scheduleTimezone?: string | null
-  publishedAt: string | Date | null
-  createdAt: string | Date
-  updatedAt: string | Date
-  createdBy?: string | null
-  createdByName?: string | null
-  updatedByName?: string | null
-}
+/** A save's response: the draft without the ready and scheduled copies. */
+type SaveResult =
+  | Awaited<ReturnType<typeof updateDraftFn>>
+  | Awaited<ReturnType<typeof updateGlobalDraftFn>>
+  | Awaited<ReturnType<typeof createEntryFn>>
 
-/** Save and approve responses: external images copied into the media library. */
-type ImageImportResult = {
-  importedImages?: number
-  importWarnings?: string[]
-}
-
-/** A save's response: the entry, plus the headings links point to that it changed. */
-type SaveResult = EntryRecord &
-  ImageImportResult & { sectionChanges?: SectionChangeWithLinks[] }
-
-export type RevisionRecord = {
-  id: string
-  createdAt: string | Date
-  note: string | null
-  createdBy?: string | null
-  createdByName?: string | null
-}
+export type RevisionRecord = Awaited<
+  ReturnType<typeof listRevisionsFn>
+>['items'][number]
 
 /**
  * - `idle`    nothing saved in this session yet
@@ -110,7 +78,17 @@ export type RevisionRecord = {
  * - `blocked` a new entry cannot be created yet: it has no valid slug
  */
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed' | 'blocked'
-type Outcome = 'saved' | 'failed' | 'blocked'
+
+/**
+ * The draft moved on the server. `save`: a save was refused; the local edits
+ * are kept on offer. `approval`: Mark ready or Schedule was refused, because
+ * the draft changed after review; nothing was approved. Either blocks saving
+ * until the latest version is loaded.
+ */
+export type DraftConflict = 'save' | 'approval' | null
+
+/** A record the server returned with the entry's draft in it. */
+type ServerDraft = Pick<EntryRecord, 'id' | 'draftData' | 'draftVersion'>
 
 function payloadFromData(data: EntryData) {
   const next: EntryData = {}
@@ -121,19 +99,20 @@ function payloadFromData(data: EntryData) {
   return next
 }
 
-const sleep = (ms: number) =>
-  new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), ms))
+function importWarnings(result: unknown): string[] {
+  if (typeof result !== 'object' || result === null) return []
+  const warnings = (result as { importWarnings?: unknown }).importWarnings
+  return Array.isArray(warnings) ? warnings : []
+}
 
 /**
  * Everything the editor does, without markup (brief §3.5, §5.2):
  *
  * - loads the entry, its revisions and the signed preview URL;
  * - keeps the local draft, the slug-follows-title rule and field errors;
- * - **autosave**: 3s after the last change, but at most 10s after the first
- *   unsaved change while typing; also on window blur / tab hide, before
- *   navigation (up to 3s) and on ⌘S; one save in flight, edits made
- *   meanwhile are kept and saved next; a new entry is created on the first
- *   save that has a valid slug;
+ * - autosaves (use-autosave.ts) and keeps a browser copy for crash recovery
+ *   (draft-recovery.ts); a new entry is created on the first save that has a
+ *   valid slug;
  * - the entry actions (mark as ready, go live now, schedule, cancel, move
  *   back to draft, archive, delete, restore), each flushing the draft first.
  */
@@ -172,7 +151,6 @@ export function useEntryEditor({
   const sessionQuery = authClient.useSession()
   const recoveryUserId = sessionQuery.data?.user.id
   const queryClient = useQueryClient()
-  const invalidateGoLive = useInvalidateGoLive(siteId)
   const goLive = useGoLive(siteId)
 
   const [createdId, setCreatedId] = React.useState<string | undefined>()
@@ -193,13 +171,13 @@ export function useEntryEditor({
     // check already protects against a concurrent edit.
     refetchOnWindowFocus: false,
     refetchInterval: (query) => {
-      const data = query.state.data as EntryRecord | undefined
+      const data = query.state.data
       return data?.status === 'scheduled'
         ? scheduledPollInterval(data.scheduledAt, Date.now())
         : false
     },
   })
-  const entry = (entryQuery.data ?? null) as EntryRecord | null
+  const entry = entryQuery.data ?? null
 
   const previewQuery = useQuery({
     queryKey: globalKey
@@ -241,16 +219,12 @@ export function useEntryEditor({
   const [formError, setFormError] = React.useState<string | null>(null)
   const [status, setStatus] = React.useState<SaveStatus>('idle')
   const versionRef = React.useRef<number>(1)
-  const conflictRef = React.useRef(false)
-  const [conflict, setConflict] = React.useState(false)
-  /** The conflict came from Mark ready or Schedule: the draft moved after review. */
-  const [approvalConflict, setApprovalConflict] = React.useState(false)
-  const [recoveredDraft, setRecoveredDraft] = React.useState<EntryData | null>(
-    null,
-  )
-  const recoveryKey = `areca:draft:${recoveryUserId ?? 'pending'}:${siteId}:${collectionKey}:${entryId ?? 'new'}`
-  const recoveryKeyRef = React.useRef(recoveryKey)
-  recoveryKeyRef.current = recoveryKey
+  const [conflict, setConflictState] = React.useState<DraftConflict>(null)
+  const conflictRef = React.useRef<DraftConflict>(null)
+  const setConflict = React.useCallback((next: DraftConflict) => {
+    conflictRef.current = next
+    setConflictState(next)
+  }, [])
   const [lastSavedAt, setLastSavedAt] = React.useState<Date | null>(null)
 
   const setData = React.useCallback((next: EntryData) => {
@@ -272,58 +246,20 @@ export function useEntryEditor({
     [data, baseline],
   )
 
-  // The browser copy for crash recovery is written once typing pauses, and at
-  // once when the tab is hidden or closed, before navigation and on unmount.
-  const recoveryReady =
-    Boolean(recoveryUserId) && !(entryId && hydratedId !== entryId)
-  const recoveryReadyRef = React.useRef(recoveryReady)
-  recoveryReadyRef.current = recoveryReady
-  // Reads only refs, so the writer made on the first render stays correct.
-  const [draftWriter] = React.useState(() =>
-    createDraftWriter(() => {
-      if (!recoveryReadyRef.current || !isDirtyNow()) return
-      try {
-        persistDraft(
-          localStorage,
-          recoveryKeyRef.current,
-          dataRef.current,
-          versionRef.current,
-        )
-      } catch {
-        setFormError(m.editor_draft_recovery_unavailable())
-      }
-    }, DRAFT_WRITE_DELAY),
-  )
-  const flushDraft = draftWriter.flush
-
-  React.useEffect(() => {
-    if (dirty && recoveryReady) draftWriter.schedule()
-  }, [data, dirty, recoveryKey, recoveryReady, draftWriter])
-
-  React.useEffect(() => {
-    const onHide = () => {
-      if (document.visibilityState === 'hidden') flushDraft()
-    }
-    document.addEventListener('visibilitychange', onHide)
-    window.addEventListener('pagehide', flushDraft)
-    return () => {
-      document.removeEventListener('visibilitychange', onHide)
-      window.removeEventListener('pagehide', flushDraft)
-      flushDraft()
-    }
-  }, [flushDraft])
-
-  React.useEffect(() => {
-    setRecoveredDraft(null)
-    if (!recoveryUserId || (entryId && hydratedId !== entryId)) return
-    const recovery = readRecoveredDraft(localStorage, recoveryKey)
-    if (recovery && JSON.stringify(recovery) !== baselineRef.current)
-      setRecoveredDraft(recovery)
-  }, [recoveryKey, recoveryUserId, entryId, hydratedId])
+  const recovery = useDraftRecovery({
+    key: `areca:draft:${recoveryUserId ?? 'pending'}:${siteId}:${collectionKey}:${entryId ?? 'new'}`,
+    ready: Boolean(recoveryUserId) && !(entryId && hydratedId !== entryId),
+    data,
+    dirty,
+    read: () => ({ data: dataRef.current, version: versionRef.current }),
+    isDirty: isDirtyNow,
+    baseline: () => baselineRef.current,
+    onUnavailable: () => setFormError(m.editor_draft_recovery_unavailable()),
+  })
 
   /** Take the server's draft, unless local edits are still unsaved. */
   const hydrate = React.useCallback(
-    (record: EntryRecord, force: boolean) => {
+    (record: ServerDraft, force: boolean) => {
       const next = initialEntryData(fields, record.draftData)
       const json = JSON.stringify(next)
       if (!force && json === serverJsonRef.current) return
@@ -337,13 +273,31 @@ export function useEntryEditor({
     [fields, isDirtyNow, setData, setBaseline],
   )
 
+  /**
+   * Makes a record the server returned the editor's copy: its draft (when
+   * `take`), the cached entry, and no errors. Conflict and the recovery copy
+   * are cleared only where the caller says so.
+   */
+  function adoptServerRecord(
+    record: ServerDraft & Partial<EntryRecord>,
+    options: { take: boolean; clearConflict: boolean; clearRecovery: boolean },
+  ) {
+    if (options.take) hydrate(record, true)
+    if (options.clearConflict) setConflict(null)
+    if (options.clearRecovery) recovery.clear()
+    setFieldErrors({})
+    setFormError(null)
+    queryClient.setQueryData(
+      queryKeys.entry(record.id),
+      (old: EntryRecord | undefined) => ({ ...old, ...record }),
+    )
+  }
+
   React.useEffect(() => {
     if (!entry) return
     if (hydratedId !== entry.id) {
       hydrate(entry, true)
-      conflictRef.current = false
-      setConflict(false)
-      setApprovalConflict(false)
+      setConflict(null)
       // A never-published draft whose slug still matches its title keeps
       // following the title; anything else keeps its address.
       const title = titleField ? entry.draftData[titleField.key] : undefined
@@ -357,7 +311,7 @@ export function useEntryEditor({
       return
     }
     hydrate(entry, false)
-  }, [entry, hydratedId, hydrate, titleField])
+  }, [entry, hydratedId, hydrate, titleField, setConflict])
 
   /** Stores `next` as the whole entry, clearing errors for the touched keys. */
   const commitData = React.useCallback(
@@ -431,34 +385,16 @@ export function useEntryEditor({
     if (!slugField || !titleField) return
     const title = dataRef.current[titleField.key]
     setSlugManual(false)
-    updateFieldRaw(
-      slugField.key,
-      slugify(typeof title === 'string' ? title : ''),
-    )
-  }
-
-  function updateFieldRaw(key: string, value: unknown) {
-    setData({ ...dataRef.current, [key]: value })
+    setData({
+      ...dataRef.current,
+      [slugField.key]: slugify(typeof title === 'string' ? title : ''),
+    })
   }
 
   /* ----------------------------------------------------------------------
-     Autosave
+     Saving
   ---------------------------------------------------------------------- */
 
-  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
-  /** When the first change not yet saved was made; null when none is pending. */
-  const firstChangeAtRef = React.useRef<number | null>(null)
-  const runningRef = React.useRef<Promise<Outcome> | null>(null)
-  const pendingRef = React.useRef(false)
-  /** The running save was asked for (⌘S, Save, an action), not a timer. */
-  const explicitRef = React.useRef(false)
-  /**
-   * The last save that went through was not explicit, or none has gone through
-   * on this page yet: an explicit save must still run, because a background save
-   * before this page left the baseline behind the draft.
-   */
-  const unexplicitSaveRef = React.useRef(true)
-  const explicitSaveDue = () => explicitRef.current && unexplicitSaveRef.current
   /** Headings that links point to and the last explicit save changed (decision 21). */
   const [sectionChanges, setSectionChanges] = React.useState<
     SectionChangeWithLinks[]
@@ -467,8 +403,6 @@ export function useEntryEditor({
   React.useEffect(() => {
     setSectionChanges([])
   }, [routeEntryId])
-  const leavingRef = React.useRef(false)
-  const bypassRef = React.useRef(false)
   const fieldsRef = React.useRef(fields)
   fieldsRef.current = fields
   const onCreatedRef = React.useRef(onCreated)
@@ -480,8 +414,7 @@ export function useEntryEditor({
   // every autosave.
   const warnedImagesRef = React.useRef(new Set<string>())
   const warnImageImports = React.useCallback((result: unknown) => {
-    const warnings = (result as ImageImportResult | null)?.importWarnings ?? []
-    for (const warning of warnings) {
+    for (const warning of importWarnings(result)) {
       if (warnedImagesRef.current.has(warning)) continue
       warnedImagesRef.current.add(warning)
       toast.warning(warning)
@@ -532,7 +465,38 @@ export function useEntryEditor({
     [queryClient, siteId, collectionKey],
   )
 
-  const saveOnce = React.useCallback(async (): Promise<Outcome> => {
+  /**
+   * Sends the draft. Only an explicit entry save reports the headings that
+   * links point to and that it changed; sections and new entries report none.
+   */
+  async function submit(
+    id: string | undefined,
+    payload: EntryData,
+    explicit: boolean,
+  ): Promise<{
+    saved: SaveResult
+    linkedSections: SectionChangeWithLinks[]
+  }> {
+    const expectedVersion = versionRef.current
+    if (globalKey) {
+      const saved = await updateGlobalDraftFn({
+        data: { siteId, key: globalKey, data: payload, expectedVersion },
+      })
+      return { saved, linkedSections: [] }
+    }
+    if (!id) {
+      const saved = await createEntryFn({
+        data: { siteId, collectionKey, data: payload },
+      })
+      return { saved, linkedSections: [] }
+    }
+    const saved = await updateDraftFn({
+      data: { id, data: payload, expectedVersion, explicit },
+    })
+    return { saved, linkedSections: saved.sectionChanges }
+  }
+
+  async function saveOnce(save: SaveContext): Promise<SaveOutcome> {
     if (conflictRef.current) return 'failed'
     const snapshot = dataRef.current
     const submitted = JSON.stringify(snapshot)
@@ -549,75 +513,41 @@ export function useEntryEditor({
       }
     }
     setStatus('saving')
-    const explicit = explicitRef.current
+    const explicit = save.explicit()
     try {
-      const payload = payloadFromData(snapshot)
-      const saved = (
-        globalKey
-          ? await updateGlobalDraftFn({
-              data: {
-                siteId,
-                key: globalKey,
-                data: payload,
-                expectedVersion: versionRef.current,
-              },
-            })
-          : id
-            ? await updateDraftFn({
-                data: {
-                  id,
-                  data: payload,
-                  expectedVersion: versionRef.current,
-                  explicit,
-                },
-              })
-            : await createEntryFn({
-                data: { siteId, collectionKey, data: payload },
-              })
-      ) as SaveResult
+      const { saved, linkedSections } = await submit(
+        id,
+        payloadFromData(snapshot),
+        explicit,
+      )
       versionRef.current = saved.draftVersion
-      unexplicitSaveRef.current = !explicit
       if (explicit) {
-        setSectionChanges(saved.sectionChanges ?? [])
+        setSectionChanges(linkedSections)
         // The headings may have moved, so "Linked from" reads the section again.
         void queryClient.invalidateQueries({
           queryKey: queryKeys.linkedFrom(saved.id),
         })
       }
-      const serverData = initialEntryData(fieldsRef.current, saved.draftData)
-      serverJsonRef.current = JSON.stringify(serverData)
+      serverJsonRef.current = JSON.stringify(
+        initialEntryData(fieldsRef.current, saved.draftData),
+      )
       const settled = JSON.stringify(dataRef.current) === submitted
       // The server may store a different copy of the draft: it swaps external
       // images for library copies and rewrites entry links. Show that copy, so
       // Mark ready compares what the editor shows with what was saved. With
       // newer local edits the next save receives the same changes.
       const normalised = serverJsonRef.current !== submitted
-      if ((normalised || (saved.importedImages ?? 0) > 0) && settled) {
-        setData(serverData)
-        setBaseline(serverJsonRef.current)
-      } else {
-        setBaseline(submitted)
-      }
+      const imported = 'importedImages' in saved && saved.importedImages > 0
+      const take = (normalised || imported) && settled
+      adoptServerRecord(saved, {
+        take,
+        clearConflict: false,
+        clearRecovery: settled,
+      })
+      if (!take) setBaseline(submitted)
       warnImageImports(saved)
-      if (settled) {
-        try {
-          localStorage.removeItem(recoveryKeyRef.current)
-        } catch {
-          /* best effort */
-        }
-        setRecoveredDraft(null)
-      }
-      setFieldErrors({})
-      setFormError(null)
       setLastSavedAt(new Date())
       setStatus('saved')
-      queryClient.setQueryData(
-        queryKeys.entry(saved.id),
-        (old: EntryRecord | undefined) => ({
-          ...old,
-          ...saved,
-        }),
-      )
       // A save is not a milestone: the lists reload when next shown.
       void invalidateLists(saved.id, false)
       if (!id) {
@@ -629,11 +559,8 @@ export function useEntryEditor({
         entryIdRef.current = saved.id
         setCreatedId(saved.id)
         setHydratedId(saved.id)
-        if (!leavingRef.current) {
-          bypassRef.current = true
-          void Promise.resolve(onCreatedRef.current?.(saved.id)).finally(() => {
-            bypassRef.current = false
-          })
+        if (!save.leaving()) {
+          save.bypassUntil(Promise.resolve(onCreatedRef.current?.(saved.id)))
         }
       }
       return 'saved'
@@ -645,9 +572,8 @@ export function useEntryEditor({
           'DRAFT_CONFLICT',
         )
       ) {
-        conflictRef.current = true
-        setConflict(true)
-        setRecoveredDraft(dataRef.current)
+        setConflict('save')
+        recovery.setRecovered(dataRef.current)
         setFieldErrors({})
         setFormError(null)
         setStatus('failed')
@@ -663,131 +589,19 @@ export function useEntryEditor({
             : errorMessage(error, m.editor_could_not_save())),
       )
       setStatus('failed')
-      if (explicitRef.current) reveal(parsed.fieldErrors)
+      if (save.explicit()) reveal(parsed.fieldErrors)
       return 'failed'
     }
-  }, [
-    slugField,
-    siteId,
-    collectionKey,
-    globalKey,
-    queryClient,
-    setBaseline,
-    setData,
-    invalidateLists,
-    reveal,
-    warnImageImports,
-  ])
+  }
 
-  const requested = () => pendingRef.current
-  const run = React.useCallback((): Promise<Outcome> => {
-    if (runningRef.current) {
-      pendingRef.current = true
-      return runningRef.current
-    }
-    const loop = (async () => {
-      // Yield first so `runningRef` is set before the loop can finish.
-      await Promise.resolve()
-      let outcome: Outcome = 'saved'
-      try {
-        do {
-          pendingRef.current = false
-          if (!isDirtyNow() && !explicitSaveDue()) break
-          outcome = await saveOnce()
-          if (outcome !== 'saved') break
-        } while (requested() && (isDirtyNow() || explicitSaveDue()))
-      } finally {
-        runningRef.current = null
-        explicitRef.current = false
-      }
-      return outcome
-    })()
-    runningRef.current = loop
-    return loop
-  }, [isDirtyNow, saveOnce])
-
-  /**
-   * Saves now. Only the triggers `isExplicitTrigger` names (Save, ⌘S, Mark
-   * ready) are explicit; a background save never advances the heading baseline
-   * or opens the section link dialog (decision 21).
-   */
-  const flush = React.useCallback(
-    (trigger: SaveTrigger = 'background'): Promise<Outcome> => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current)
-        timerRef.current = null
-      }
-      firstChangeAtRef.current = null
-      if (isExplicitTrigger(trigger)) explicitRef.current = true
-      return run()
-    },
-    [run],
-  )
-
-  const runRef = React.useRef(run)
-  runRef.current = run
-
-  // Debounce: save 3s after the last change, and at most 10s after the first
-  // unsaved change (see editor-timing.ts). Each change restarts the timer.
-  React.useEffect(() => {
-    if (!dirty) {
-      firstChangeAtRef.current = null
-      return
-    }
-    if (firstChangeAtRef.current === null) firstChangeAtRef.current = Date.now()
-    if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(
-      () => {
-        timerRef.current = null
-        firstChangeAtRef.current = null
-        void runRef.current()
-      },
-      autosaveDelay(Date.now(), firstChangeAtRef.current),
-    )
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-    }
-  }, [data, dirty])
-
-  // Blur of the window or a hidden tab saves at once.
-  React.useEffect(() => {
-    const onHide = () => {
-      if (document.visibilityState === 'hidden' && isDirtyNow())
-        void flush('background')
-    }
-    const onBlur = () => {
-      if (isDirtyNow()) void flush('background')
-    }
-    document.addEventListener('visibilitychange', onHide)
-    window.addEventListener('blur', onBlur)
-    return () => {
-      document.removeEventListener('visibilitychange', onHide)
-      window.removeEventListener('blur', onBlur)
-    }
-  }, [flush, isDirtyNow])
-
-  // Leaving: wait (max 3s) for the save; ask only when it could not save.
-  const blocker = useBlocker({
-    shouldBlockFn: async ({ current, next }) => {
-      flushDraft()
-      if (bypassRef.current) return false
-      if (current.pathname === next.pathname) return false
-      if (!isDirtyNow() && !runningRef.current) return false
-      leavingRef.current = true
-      try {
-        const outcome = await Promise.race([
-          flush('background'),
-          sleep(LEAVE_WAIT),
-        ])
-        return shouldKeepEditorOpen(outcome, isDirtyNow())
-      } finally {
-        leavingRef.current = false
-      }
-    },
-    enableBeforeUnload: () =>
-      !bypassRef.current && (isDirtyNow() || Boolean(runningRef.current)),
-    withResolver: true,
+  const autosave = useAutosave({
+    data,
+    dirty,
+    isDirty: isDirtyNow,
+    save: saveOnce,
+    beforeLeave: recovery.flush,
   })
+  const flush = autosave.flush
 
   /* ----------------------------------------------------------------------
      Actions
@@ -842,13 +656,20 @@ export function useEntryEditor({
     const failed = actionError(fallback)
     return (error: unknown) => {
       if (errorMessage(error, fallback).includes('DRAFT_CONFLICT')) {
-        conflictRef.current = true
-        setConflict(true)
-        setApprovalConflict(true)
+        setConflict('approval')
         return
       }
       failed(error)
     }
+  }
+
+  // The actions `busy` waits for share this key.
+  const actionKey = ['entry-action', React.useId()] as const
+  const actionDeps: EntryActionDeps = {
+    mutationKey: actionKey,
+    ensureSaved,
+    currentId: () => entryIdRef.current,
+    invalidateEntry,
   }
 
   /** Points links at the sections a save changed (decision 21). */
@@ -878,29 +699,25 @@ export function useEntryEditor({
     },
   })
 
-  const markReadyMutation = useMutation({
-    mutationFn: async (options: { quiet?: boolean } = {}) => {
-      const id = await ensureSaved('mark-ready')
-      if (!id) return null
+  const markReadyMutation = useEntryAction<{ quiet?: boolean }>(actionDeps, {
+    save: 'mark-ready',
+    run: async (id) =>
       warnImageImports(
         await publishEntryFn({
           data: { id, expectedVersion: versionRef.current },
         }),
-      )
-      return { id, quiet: options.quiet }
-    },
-    onSuccess: async (result) => {
-      if (!result) return
-      if (!result.quiet)
+      ),
+    success: (input) => {
+      if (!input.quiet)
         toast.success(m.editor_marked_ready(), {
           description: m.editor_marked_ready_description(),
         })
-      await invalidateEntry(result.id)
     },
-    onError: approvalError(m.editor_could_not_mark_ready()),
+    error: approvalError(m.editor_could_not_mark_ready()),
   })
 
   const goLiveNowMutation = useMutation({
+    mutationKey: actionKey,
     mutationFn: async (markFirst: boolean) => {
       if (markFirst) {
         const marked = await markReadyMutation.mutateAsync({ quiet: true })
@@ -910,86 +727,59 @@ export function useEntryEditor({
     },
   })
 
-  const scheduleMutation = useMutation({
-    mutationFn: async (input: { at: Date; timeZone: string }) => {
-      const id = await ensureSaved()
-      if (!id) return null
-      warnImageImports(
-        await scheduleEntryFn({
-          data: {
-            id,
-            scheduledAt: input.at.toISOString(),
-            timezone: input.timeZone,
-            expectedVersion: versionRef.current,
-          },
-        }),
-      )
-      return id
+  const scheduleMutation = useEntryAction<{ at: Date; timeZone: string }>(
+    actionDeps,
+    {
+      save: 'action',
+      run: async (id, input) =>
+        warnImageImports(
+          await scheduleEntryFn({
+            data: {
+              id,
+              scheduledAt: input.at.toISOString(),
+              timezone: input.timeZone,
+              expectedVersion: versionRef.current,
+            },
+          }),
+        ),
+      success: () => toast.success(m.editor_scheduled_toast()),
+      error: approvalError(m.editor_could_not_schedule()),
     },
-    onSuccess: async (id) => {
-      if (!id) return
-      toast.success(m.editor_scheduled_toast())
-      await invalidateEntry(id)
-    },
-    onError: approvalError(m.editor_could_not_schedule()),
+  )
+
+  const cancelScheduleMutation = useEntryAction(actionDeps, {
+    save: 'none',
+    run: (id) => cancelScheduleFn({ data: { id } }),
+    success: () => toast.success(m.editor_schedule_cancelled()),
+    error: actionError(m.editor_could_not_cancel_schedule()),
   })
 
-  const cancelScheduleMutation = useMutation({
-    mutationFn: () => cancelScheduleFn({ data: { id: entryIdRef.current! } }),
-    onSuccess: async () => {
-      toast.success(m.editor_schedule_cancelled())
-      await invalidateEntry(entryIdRef.current!)
-    },
-    onError: actionError(m.editor_could_not_cancel_schedule()),
+  const unpublishMutation = useEntryAction(actionDeps, {
+    save: 'action',
+    run: (id) => unpublishEntryFn({ data: { id } }),
+    success: () => toast.success(m.editor_moved_to_draft()),
+    error: actionError(m.editor_could_not_unpublish()),
   })
 
-  const unpublishMutation = useMutation({
-    mutationFn: async () => {
-      const id = await ensureSaved()
-      if (!id) return null
-      await unpublishEntryFn({ data: { id } })
-      return id
-    },
-    onSuccess: async (id) => {
-      if (!id) return
-      toast.success(m.editor_moved_to_draft())
-      await invalidateEntry(id)
-    },
-    onError: actionError(m.editor_could_not_unpublish()),
-  })
-
-  const archiveMutation = useMutation({
-    mutationFn: async () => {
-      const id = await ensureSaved()
-      if (!id) return null
-      await archiveEntryFn({ data: { id } })
-      return id
-    },
-    onSuccess: async (id) => {
-      if (!id) return
-      toast.success(m.editor_entry_archived())
-      await invalidateEntry(id)
-    },
-    onError: actionError(m.editor_could_not_archive()),
+  const archiveMutation = useEntryAction(actionDeps, {
+    save: 'action',
+    run: (id) => archiveEntryFn({ data: { id } }),
+    success: () => toast.success(m.editor_entry_archived()),
+    error: actionError(m.editor_could_not_archive()),
   })
 
   const deleteMutation = useMutation({
+    mutationKey: actionKey,
     mutationFn: () => deleteEntryFn({ data: { id: entryIdRef.current! } }),
     onSuccess: async () => {
       toast.success(m.editor_entry_deleted())
-      bypassRef.current = true
-      if (timerRef.current) clearTimeout(timerRef.current)
+      autosave.bypass()
+      autosave.cancel()
       await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ['entries', siteId, collectionKey],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ['entries', siteId, OVERVIEW_ENTRIES],
-        }),
+        invalidateLists(),
         queryClient.invalidateQueries({
           queryKey: queryKeys.entryCounts(siteId),
         }),
-        invalidateGoLive(),
       ])
       await onDeleted?.()
     },
@@ -998,33 +788,19 @@ export function useEntryEditor({
 
   /** Site content: back to the ready version. No confirmation, by design. */
   const discardMutation = useMutation({
+    mutationKey: actionKey,
     mutationFn: async () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current)
-        timerRef.current = null
-      }
+      autosave.cancel()
       // A save already in flight must land before the draft is replaced.
-      await runningRef.current?.catch(() => undefined)
+      await autosave.settled()
       return discardGlobalDraftFn({ data: { siteId, key: globalKey! } })
     },
-    onSuccess: async (discarded) => {
-      const record = discarded as EntryRecord
-      hydrate(record, true)
-      conflictRef.current = false
-      setConflict(false)
-      setApprovalConflict(false)
-      setRecoveredDraft(null)
-      setFieldErrors({})
-      setFormError(null)
-      try {
-        localStorage.removeItem(recoveryKeyRef.current)
-      } catch {
-        /* best effort */
-      }
-      queryClient.setQueryData(
-        queryKeys.entry(record.id),
-        (old: EntryRecord | undefined) => ({ ...old, ...record }),
-      )
+    onSuccess: async (record) => {
+      adoptServerRecord(record, {
+        take: true,
+        clearConflict: true,
+        clearRecovery: true,
+      })
       toast.success(m.globals_discarded())
       await invalidateEntry(record.id)
     },
@@ -1032,31 +808,28 @@ export function useEntryEditor({
   })
 
   const restoreMutation = useMutation({
+    mutationKey: actionKey,
     mutationFn: async (revisionId: string) => {
       const id = await ensureSaved()
       if (!id)
         throw new Error(m.editor_save_or_resolve_conflict_before_restore())
-      const restored = await restoreRevisionFn({
+      return restoreRevisionFn({
         data: {
-          entryId: entryIdRef.current!,
+          entryId: id,
           revisionId,
           expectedVersion: versionRef.current,
         },
       })
-      return restored
     },
     onSuccess: async (restored) => {
-      hydrate(restored, true)
+      // Restoring needs a clean save first, so there is no conflict and no
+      // recovery copy to clear.
+      adoptServerRecord(restored, {
+        take: true,
+        clearConflict: false,
+        clearRecovery: false,
+      })
       setRestoreSkippedFields(restored.skippedFields)
-      setFieldErrors({})
-      setFormError(null)
-      queryClient.setQueryData(
-        queryKeys.entry(restored.id),
-        (old: EntryRecord | undefined) => ({
-          ...old,
-          ...restored,
-        }),
-      )
       if (restored.skippedFields.length)
         toast.warning(m.editor_revision_restored_partial())
       else toast.success(m.editor_revision_restored())
@@ -1094,40 +867,36 @@ export function useEntryEditor({
     () => isMarkable(deferredData),
     [isMarkable, deferredData],
   )
-  const busy =
-    markReadyMutation.isPending ||
-    goLiveNowMutation.isPending ||
-    scheduleMutation.isPending ||
-    cancelScheduleMutation.isPending ||
-    unpublishMutation.isPending ||
-    archiveMutation.isPending ||
-    deleteMutation.isPending ||
-    restoreMutation.isPending ||
-    discardMutation.isPending
+  const busy = useIsMutating({ mutationKey: actionKey }) > 0
   const loading =
     Boolean(routeEntryId) &&
     (entryQuery.isLoading || hydratedId !== routeEntryId)
   const ready = Boolean(entry) && hydratedId === entryId && status !== 'saving'
 
+  /**
+   * Loads the latest server draft after a conflict. `reapply` puts the local
+   * edits back on top; otherwise they stay on offer.
+   */
   async function resolveDraftConflict(reapply: boolean) {
-    const recovery = recoveredDraft ?? (isDirtyNow() ? dataRef.current : null)
-    if (entryIdRef.current) {
-      const latest = (await getEntryFn({
-        data: { id: entryIdRef.current },
-      })) as EntryRecord
-      hydrate(latest, true)
-      queryClient.setQueryData(queryKeys.entry(latest.id), latest)
-    }
-    conflictRef.current = false
-    setConflict(false)
-    setApprovalConflict(false)
-    setFormError(null)
-    setStatus('idle')
-    if (reapply && recovery) {
-      setData(recovery)
-      setRecoveredDraft(null)
+    const local = recovery.recovered ?? (isDirtyNow() ? dataRef.current : null)
+    const id = entryIdRef.current
+    if (id) {
+      adoptServerRecord(await getEntryFn({ data: { id } }), {
+        take: true,
+        clearConflict: true,
+        clearRecovery: false,
+      })
     } else {
-      setRecoveredDraft(recovery)
+      // A new entry has no server draft, only the recovered copy to decide on.
+      setConflict(null)
+      setFormError(null)
+    }
+    setStatus('idle')
+    if (reapply && local) {
+      setData(local)
+      recovery.setRecovered(null)
+    } else {
+      recovery.setRecovered(local)
     }
   }
 
@@ -1138,18 +907,10 @@ export function useEntryEditor({
       applySectionChangesMutation.mutateAsync(updates),
     applyingSectionChanges: applySectionChangesMutation.isPending,
     conflict,
-    approvalConflict,
-    recoveredDraft,
+    recoveredDraft: recovery.recovered,
     reloadServerDraft: () => resolveDraftConflict(false),
     reapplyRecoveredDraft: () => resolveDraftConflict(true),
-    discardRecoveredDraft: () => {
-      setRecoveredDraft(null)
-      try {
-        localStorage.removeItem(recoveryKey)
-      } catch {
-        /* best effort */
-      }
-    },
+    discardRecoveredDraft: recovery.clear,
     entryId,
     isNew,
     entry,
@@ -1178,12 +939,7 @@ export function useEntryEditor({
     busy,
     markReady: () => markReadyMutation.mutate({}),
     markReadyPending: markReadyMutation.isPending,
-    goLiveNow: async () => {
-      const result = await goLiveNowMutation.mutateAsync(
-        isMarkable(dataRef.current),
-      )
-      return result
-    },
+    goLiveNow: () => goLiveNowMutation.mutateAsync(isMarkable(dataRef.current)),
     goLiveNowPending: goLiveNowMutation.isPending || goLive.isPending,
     schedule: (at: Date, timeZone: string) =>
       scheduleMutation.mutateAsync({ at, timeZone }),
@@ -1196,11 +952,8 @@ export function useEntryEditor({
     discard: () => discardMutation.mutateAsync(),
     discardPending: discardMutation.isPending,
     restoreSkippedFields,
-    blocker,
-    leaveAnyway: () => {
-      bypassRef.current = true
-      blocker.proceed?.()
-    },
+    blocker: autosave.blocker,
+    leaveAnyway: autosave.leaveAnyway,
   }
 }
 

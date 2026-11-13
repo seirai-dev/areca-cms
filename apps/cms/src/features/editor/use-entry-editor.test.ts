@@ -379,8 +379,7 @@ describe('useEntryEditor: conflicts', () => {
     await tick(3000)
     await tick()
     const state = view.result.current
-    expect(state.conflict).toBe(true)
-    expect(state.approvalConflict).toBe(false)
+    expect(state.conflict).toBe('save')
     expect(state.recoveredDraft).toEqual({ title: 'Mine', slug: 'hello-page' })
     expect(state.status).toBe('failed')
     expect(state.formError).toBeNull()
@@ -411,7 +410,7 @@ describe('useEntryEditor: conflicts', () => {
       await view.result.current.reloadServerDraft()
     })
     const state = view.result.current
-    expect(state.conflict).toBe(false)
+    expect(state.conflict).toBeNull()
     expect(state.data.title).toBe('Theirs')
     expect(state.dirty).toBe(false)
     expect(state.status).toBe('idle')
@@ -441,7 +440,7 @@ describe('useEntryEditor: conflicts', () => {
       await view.result.current.reapplyRecoveredDraft()
     })
     const state = view.result.current
-    expect(state.conflict).toBe(false)
+    expect(state.conflict).toBeNull()
     expect(state.data.title).toBe('Mine')
     expect(state.recoveredDraft).toBeNull()
     expect(state.dirty).toBe(true)
@@ -459,8 +458,7 @@ describe('useEntryEditor: conflicts', () => {
       id: 'entry-1',
       expectedVersion: 2,
     })
-    expect(view.result.current.conflict).toBe(true)
-    expect(view.result.current.approvalConflict).toBe(true)
+    expect(view.result.current.conflict).toBe('approval')
     expect(view.result.current.recoveredDraft).toBeNull()
   })
 })

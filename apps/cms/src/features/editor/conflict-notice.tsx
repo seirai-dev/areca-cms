@@ -1,5 +1,7 @@
 import { m } from '#/paraglide/messages'
 
+import type { DraftConflict } from './use-entry-editor'
+
 /** The header save status scrolls to this notice during a conflict. */
 export const CONFLICT_NOTICE_ID = 'editor-conflict-notice'
 
@@ -21,15 +23,13 @@ export function conflictReadyBlock(conflict: boolean, onReload: () => void) {
  */
 export function EditorConflictNotice({
   conflict,
-  approvalConflict,
   recoveredDraft,
   className,
   onReload,
   onReapply,
   onDiscard,
 }: {
-  conflict: boolean
-  approvalConflict: boolean
+  conflict: DraftConflict
   recoveredDraft: boolean
   className: string
   onReload: () => void
@@ -37,6 +37,7 @@ export function EditorConflictNotice({
   onDiscard: () => void
 }) {
   if (!conflict && !recoveredDraft) return null
+  const approvalConflict = conflict === 'approval'
   return (
     <div id={CONFLICT_NOTICE_ID} role="alert" className={className}>
       <p>

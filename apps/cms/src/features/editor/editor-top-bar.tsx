@@ -17,13 +17,11 @@ import {
   RocketLaunch,
   SidebarSimple,
   TextAa,
-  UploadSimple,
   Sparkle,
   Trash,
   WarningCircle,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
-import type { CopyEntryAction } from '#/features/dev-env/use-copy-to-production'
 
 import { Button, SplitButton } from '#/components/ui/button'
 import {
@@ -40,16 +38,14 @@ import { Hint } from '#/components/ui/tooltip'
 import { EntryPillView } from '#/features/collection/entry-pill'
 import { editorPublishReason } from '#/features/golive/golive-tray'
 import { FADE } from '#/lib/motion'
-import type { EntryUiStatus } from '#/lib/status'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
 import { VisualModeControl } from '#/features/visual/visual-mode-control'
 import { useVisualModeActive } from '#/features/visual/visual-mode'
-import type { EditorMode } from '#/features/visual/visual-preferences'
 
-import { SaveIndicator } from './save-indicator'
-import type { SaveStatus } from './use-entry-editor'
+import { CopyToProductionItem, EditorSaveIndicator } from './editor-bar-parts'
+import type { EditorBarCommon } from './editor-bar-parts'
 
 export type PrimaryState = 'new' | 'mark' | 'ready' | 'live'
 
@@ -60,125 +56,58 @@ export type PrimaryState = 'new' | 'mark' | 'ready' | 'live'
  * ("Mark as ready" ▾) and the details toggle.
  */
 export function EditorTopBar({
+  editor,
   siteId,
-  collectionKey,
-  collectionLabel,
+  uiStatus,
+  editedSinceReady,
+  canManage,
+  readyBlock,
+  copyAction,
+  languageBar,
+  visualMode,
+  collection,
   title,
   showTitle,
-  uiStatus,
-  backendStatus,
-  scheduledAt,
-  editedSinceReady,
-  saveStatus,
-  conflict = false,
-  isNew,
-  lastSavedAt,
-  updatedAt,
-  errorCount,
-  onSave,
-  previewUrl,
-  canManage,
   primary,
-  busy,
-  primaryPending,
-  scheduled,
-  canUnpublish,
-  canArchive,
-  hasRichText,
-  previewing,
-  onTogglePreviewing,
+  devSite,
+  goLiveBlocked,
+  formatting,
   onGenerateSeo,
-  onMarkReady,
   onGoLiveNow,
-  goLiveBlocked = false,
-  canGoLive = true,
   onSchedule,
-  canSchedule = true,
-  onCancelSchedule,
-  onUnpublish,
-  onArchive,
   onDelete,
-  detailsOpen,
-  onToggleDetails,
-  entryId,
+  details,
   scheduleAnchor,
-  languageBar,
-  readyBlock = null,
-  copyAction = null,
-  visualMode,
-  showDetailsToggle = true,
-}: {
-  siteId: string
-  collectionKey: string
-  collectionLabel: string
+}: EditorBarCommon & {
+  collection: { key: string; label: string }
   title: string
   showTitle: boolean
-  uiStatus: EntryUiStatus
-  backendStatus: string
-  scheduledAt?: string | Date | null
-  editedSinceReady: boolean
-  saveStatus: SaveStatus
-  /** The draft moved on the server; the header says so instead of Retry. */
-  conflict?: boolean
-  isNew: boolean
-  lastSavedAt: Date | null
-  updatedAt?: string | Date
-  errorCount: number
-  onSave: () => void
-  previewUrl?: string
-  canManage: boolean
   primary: PrimaryState
-  busy: boolean
-  primaryPending: boolean
-  scheduled: boolean
-  canUnpublish: boolean
-  canArchive: boolean
-  hasRichText: boolean
-  previewing: boolean
-  onTogglePreviewing: () => void
+  /** A development environment: no releases and no scheduling (Decisions 7, 8). */
+  devSite: boolean
+  /** A blocked site cannot go live; the menu item stays visible but disabled. */
+  goLiveBlocked: boolean
+  /** "Preview formatting", offered when the entry has rich text. */
+  formatting: { on: boolean; onToggle: () => void } | null
   /** Opens the AI SEO dialog. Omitted when AI is not set up. */
   onGenerateSeo?: () => void
-  onMarkReady: () => void
   onGoLiveNow: () => void
-  /** A blocked site cannot go live; the menu item stays visible but disabled. */
-  goLiveBlocked?: boolean
-  /** False on a development environment: it has no releases (Decision 7). */
-  canGoLive?: boolean
   onSchedule: () => void
-  /** False on a development environment: no scheduling (Decision 8). */
-  canSchedule?: boolean
-  onCancelSchedule: () => void
-  onUnpublish: () => void
-  onArchive: () => void
   onDelete: () => void
-  detailsOpen: boolean
-  onToggleDetails: () => void
-  entryId?: string
+  /** The details panel toggle; null in Visual mode, where the details live in the column. */
+  details: { open: boolean; onToggle: () => void } | null
   /** Wraps the split button so the schedule popover can anchor to it. */
   scheduleAnchor: (node: React.ReactElement) => React.ReactElement
-  /** The language bar, rendered as the second row of the sticky header. */
-  languageBar?: React.ReactNode
-  /**
-   * Set when a required language blocks ready and schedule. The primary
-   * action is disabled, and the menu offers the reason, which switches to
-   * that language.
-   */
-  readyBlock?: { message: string; onFix: () => void } | null
-  /** Copy to production as a draft (development environments only; null elsewhere). */
-  copyAction?: CopyEntryAction | null
-  /** The Write | Visual switch. Omitted where Visual mode is unavailable. */
-  visualMode?: {
-    active: boolean
-    canVisual: boolean
-    disabledReason: string | null
-    onSetMode: (mode: EditorMode) => void
-  }
-  /** False in Visual mode: the details live in the editor column there. */
-  showDetailsToggle?: boolean
 }) {
+  const { entry, entryId, isNew, previewUrl, busy } = editor
+  const status = entry?.status ?? 'draft'
+  const scheduled = status === 'scheduled'
+  const canGoLive = !devSite
+  const canSchedule = !devSite
+  const onSave = () => void editor.save()
   const reduce = useReducedMotion()
   const mod = useModifierKey()
-  const saving = saveStatus === 'saving'
+  const saving = editor.status === 'saving'
   // Full-bleed (Visual mode) drops the page padding the bar compensates for.
   const fullBleed = useVisualModeActive()
 
@@ -225,12 +154,12 @@ export function EditorTopBar({
           <span>{primaryLabel}</span>
         </>
       }
-      loading={primaryPending}
+      loading={editor.markReadyPending || editor.goLiveNowPending}
       disabled={primaryDisabled}
       menuDisabled={!canManage || busy || primary === 'new'}
       menuLabel={m.editor_publish_options()}
       menuProps={{ modal: false }}
-      onClick={onMarkReady}
+      onClick={editor.markReady}
       data-testid="publish-now"
       aria-label={primaryLabel}
       triggerProps={{ 'data-testid': 'publish-menu' }}
@@ -273,7 +202,7 @@ export function EditorTopBar({
         ) : null}
         {canSchedule && scheduled ? (
           <DropdownMenuItem
-            onSelect={onCancelSchedule}
+            onSelect={editor.cancelSchedule}
             data-testid="cancel-schedule"
           >
             <CalendarX />
@@ -314,13 +243,13 @@ export function EditorTopBar({
         >
           <Link
             to="/sites/$siteId/c/$collectionKey"
-            params={{ siteId, collectionKey }}
-            aria-label={m.editor_back_to({ name: collectionLabel })}
+            params={{ siteId, collectionKey: collection.key }}
+            aria-label={m.editor_back_to({ name: collection.label })}
             data-testid="editor-back"
           >
             <ArrowLeft weight="bold" />
             <span className="hidden max-w-40 truncate sm:inline">
-              {collectionLabel}
+              {collection.label}
             </span>
           </Link>
         </Button>
@@ -354,8 +283,8 @@ export function EditorTopBar({
           >
             <EntryPillView
               status={uiStatus}
-              backendStatus={backendStatus}
-              scheduledAt={scheduledAt}
+              backendStatus={status}
+              scheduledAt={entry?.scheduledAt}
               editedSinceReady={editedSinceReady}
               size="sm"
               testId="entry-status"
@@ -363,38 +292,14 @@ export function EditorTopBar({
           </span>
         </div>
 
-        {visualMode ? (
-          <VisualModeControl
-            active={visualMode.active}
-            canVisual={visualMode.canVisual}
-            disabledReason={visualMode.disabledReason}
-            onSetMode={visualMode.onSetMode}
-          />
-        ) : null}
+        {visualMode ? <VisualModeControl {...visualMode} /> : null}
 
         <div className="flex shrink-0 items-center gap-1">
           <div className="mr-1 hidden min-w-0 md:block">
-            <SaveIndicator
-              status={saveStatus}
-              conflict={conflict}
-              isNew={isNew}
-              lastSavedAt={lastSavedAt}
-              updatedAt={updatedAt}
-              errorCount={errorCount}
-              onRetry={onSave}
-            />
+            <EditorSaveIndicator editor={editor} />
           </div>
           <div className="md:hidden">
-            <SaveIndicator
-              compact
-              status={saveStatus}
-              conflict={conflict}
-              isNew={isNew}
-              lastSavedAt={lastSavedAt}
-              updatedAt={updatedAt}
-              errorCount={errorCount}
-              onRetry={onSave}
-            />
+            <EditorSaveIndicator editor={editor} compact />
           </div>
           <Hint label={m.editor_save_now_hint({ shortcut: `${mod}S` })}>
             <Button
@@ -514,12 +419,12 @@ export function EditorTopBar({
                 <Copy />
                 {m.editor_copy_id()}
               </DropdownMenuItem>
-              {hasRichText ? (
+              {formatting ? (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuCheckboxItem
-                    checked={previewing}
-                    onCheckedChange={onTogglePreviewing}
+                    checked={formatting.on}
+                    onCheckedChange={formatting.onToggle}
                     data-testid="preview-formatting"
                   >
                     <TextAa />
@@ -529,31 +434,16 @@ export function EditorTopBar({
               ) : null}
               <DropdownMenuSeparator />
               {copyAction ? (
-                <>
-                  <DropdownMenuItem
-                    disabled={
-                      copyAction.blockedReason !== null ||
-                      copyAction.pending ||
-                      busy ||
-                      !entryId
-                    }
-                    onSelect={copyAction.copy}
-                    data-testid="copy-to-production"
-                  >
-                    <UploadSimple />
-                    {m.dev_env_copy_menu()}
-                  </DropdownMenuItem>
-                  {copyAction.blockedReason ? (
-                    <DropdownMenuLabel className="max-w-64 pt-2 pb-2 text-caption font-normal tracking-normal whitespace-normal normal-case">
-                      {copyAction.blockedReason}
-                    </DropdownMenuLabel>
-                  ) : null}
-                </>
+                <CopyToProductionItem
+                  action={copyAction}
+                  disabled={busy || !entryId}
+                  noteClassName="pt-2 pb-2"
+                />
               ) : null}
-              {canUnpublish ? (
+              {status === 'published' ? (
                 <DropdownMenuItem
                   disabled={!canManage || busy}
-                  onSelect={onUnpublish}
+                  onSelect={editor.unpublish}
                   data-testid="unpublish-entry"
                 >
                   <ArrowUUpLeft />
@@ -561,8 +451,10 @@ export function EditorTopBar({
                 </DropdownMenuItem>
               ) : null}
               <DropdownMenuItem
-                disabled={!canManage || busy || !canArchive || !entryId}
-                onSelect={onArchive}
+                disabled={
+                  !canManage || busy || status === 'archived' || !entryId
+                }
+                onSelect={editor.archive}
                 data-testid="archive-entry"
               >
                 <Archive />
@@ -601,7 +493,7 @@ export function EditorTopBar({
             )}
           </div>
 
-          {showDetailsToggle ? (
+          {details ? (
             <Hint
               label={
                 <span className="inline-flex items-center gap-1.5">
@@ -615,16 +507,16 @@ export function EditorTopBar({
                 variant="quiet"
                 size="icon-sm"
                 aria-label={m.editor_details()}
-                aria-pressed={detailsOpen}
-                onClick={onToggleDetails}
+                aria-pressed={details.open}
+                onClick={details.onToggle}
                 data-testid="toggle-details"
                 className={cn(
                   'ml-1',
-                  detailsOpen && 'bg-surface-state-hover text-text-primary',
+                  details.open && 'bg-surface-state-hover text-text-primary',
                 )}
               >
                 <SidebarSimple
-                  weight={detailsOpen ? 'fill' : 'regular'}
+                  weight={details.open ? 'fill' : 'regular'}
                   className="-scale-x-100"
                 />
               </Button>
