@@ -1,0 +1,5 @@
+ALTER TABLE "asset_upload_session" ADD COLUMN "mcp_key_id" text;--> statement-breakpoint
+ALTER TABLE "asset_upload_session" ADD COLUMN "mcp_connection_id" text;--> statement-breakpoint
+ALTER TABLE "asset_upload_session" ADD CONSTRAINT "asset_upload_session_mcp_key_id_mcp_key_id_fk" FOREIGN KEY ("mcp_key_id") REFERENCES "public"."mcp_key"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "asset_upload_session" ADD CONSTRAINT "asset_upload_session_mcp_connection_id_mcp_connection_id_fk" FOREIGN KEY ("mcp_connection_id") REFERENCES "public"."mcp_connection"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "asset_upload_session" ADD CONSTRAINT "asset_upload_session_credential_check" CHECK ("asset_upload_session"."mcp_key_id" is null or "asset_upload_session"."mcp_connection_id" is null);

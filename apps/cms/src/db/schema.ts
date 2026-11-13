@@ -601,6 +601,18 @@ export const assetUploadSession = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
+    /**
+     * The credential that opened the session: an MCP key or an OAuth
+     * connection. Uploads stop once it is revoked or expires; deleting it
+     * deletes the session. Both null for a session opened without one.
+     */
+    mcpKeyId: text('mcp_key_id').references(() => mcpKey.id, {
+      onDelete: 'cascade',
+    }),
+    mcpConnectionId: text('mcp_connection_id').references(
+      () => mcpConnection.id,
+      { onDelete: 'cascade' },
+    ),
     /** What the AI asked for, shown on the upload page. */
     purpose: text('purpose'),
     maxFiles: integer('max_files').notNull(),
@@ -615,6 +627,10 @@ export const assetUploadSession = pgTable(
     check(
       'asset_upload_session_reserved_check',
       sql`${t.reservedCount} >= 0 and ${t.reservedCount} <= ${t.maxFiles}`,
+    ),
+    check(
+      'asset_upload_session_credential_check',
+      sql`${t.mcpKeyId} is null or ${t.mcpConnectionId} is null`,
     ),
   ],
 )

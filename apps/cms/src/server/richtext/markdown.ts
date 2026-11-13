@@ -20,9 +20,8 @@ function escapeText(value: string): string {
   return value
     .replace(/[\\`*_[\]<>~#-]/g, '\\$&')
     .replace(
-      /^(\s*)(\+|\d+[.)])(?=\s)/gm,
-      (_match, space: string, marker: string) =>
-        `${space}${marker.replace(/([+.)])$/, '\\$1')}`,
+      /(?=[+\d])(?<=(?:^|[\n\r\u2028\u2029])\s*)(\+|\d+[.)])(?=\s)/g,
+      (_match, marker: string) => marker.replace(/([+.)])$/, '\\$1'),
     )
 }
 
@@ -187,7 +186,9 @@ function serializeTableCell(node: PMNode | undefined): string {
   const value = (node.content ?? [])
     .map((child) => serializeBlock(child))
     .join(' ')
-  return value.replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ')
+  return value
+    .replace(/\|/g, '\\|')
+    .replace(/\s+/g, (run) => (run.includes('\n') ? ' ' : run))
 }
 
 function serializeTable(node: PMNode): string {
