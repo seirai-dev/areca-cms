@@ -25,6 +25,7 @@ import {
   mayReferenceAssets,
   referencesAsset,
 } from './usage'
+import { derivedStorageKeys } from './derived'
 import { AssetValidationError } from './errors'
 import { validateImageBytes } from './image-validation'
 import { missingAltFilter } from './missing-alt'
@@ -264,11 +265,10 @@ async function retainedAssetUsage(tx: Tx, existing: Asset): Promise<number> {
     .where(
       and(
         eq(site.organizationId, organizationId),
-        mayReferenceAssets([existing], [
-          entry.draftData,
-          entry.publishedData,
-          entry.scheduledData,
-        ]),
+        mayReferenceAssets(
+          [existing],
+          [entry.draftData, entry.publishedData, entry.scheduledData],
+        ),
       ),
     )
   const revisions = await tx
@@ -346,7 +346,11 @@ export async function deleteAsset(
     if (usage > 0) throw new AssetInUseError(usage)
     await tx
       .insert(storageObjectDeletion)
-      .values({ storageKey: existing.storageKey })
+      .values(
+        [existing.storageKey, ...derivedStorageKeys(existing.storageKey)].map(
+          (storageKey) => ({ storageKey }),
+        ),
+      )
       .onConflictDoNothing()
     await tx.delete(asset).where(eq(asset.id, id))
   })

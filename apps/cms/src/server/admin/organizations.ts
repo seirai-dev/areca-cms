@@ -12,6 +12,7 @@ import {
 import { m } from '#/paraglide/messages'
 import { assetExclusiveLock } from '#/server/assets/usage'
 import { drainStorageObjectDeletions } from '#/server/assets'
+import { derivedStorageKeys } from '#/server/assets/derived'
 import { audit } from '#/server/audit'
 import { ConflictError, NotFoundError } from '#/server/content/errors'
 import { lockOrganizationForMutation } from './organization-lock'
@@ -145,10 +146,15 @@ export async function deleteOrganization(id: string, actorId: string) {
       .select({ storageKey: asset.storageKey })
       .from(asset)
       .where(eq(asset.organizationId, id))
-    if (objects.length)
+    const keys = objects.flatMap(({ storageKey }) => [
+      storageKey,
+      ...derivedStorageKeys(storageKey),
+    ])
+    // Chunks stay below PostgreSQL's 65,535 bind-parameter limit.
+    for (let i = 0; i < keys.length; i += 5000)
       await tx
         .insert(storageObjectDeletion)
-        .values(objects)
+        .values(keys.slice(i, i + 5000).map((storageKey) => ({ storageKey })))
         .onConflictDoNothing()
     await tx.delete(organization).where(eq(organization.id, id))
     // The organization's own audit rows cascade away with it, so the deletion
