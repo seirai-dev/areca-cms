@@ -2,6 +2,10 @@ import { createFileRoute } from '@tanstack/react-router'
 import { z } from '#/lib/zod'
 
 import { CollectionScreen } from '#/features/collection/collection-screen'
+import {
+  collectionEntriesQuery,
+  missingLanguageFilter,
+} from '#/features/collection/use-collection-entries'
 
 /** `/sites/$siteId/c/$collectionKey`: one collection's entries. */
 export const Route = createFileRoute('/_app/sites/$siteId/c/$collectionKey/')({
@@ -9,6 +13,23 @@ export const Route = createFileRoute('/_app/sites/$siteId/c/$collectionKey/')({
     /** "Missing translation" filter: a language tag, in `?missing=`. */
     missing: z.string().min(1).max(40).optional().catch(undefined),
   }),
+  // The first page with the screen's initial filter, started early and not
+  // awaited (see the site layout's loader).
+  loaderDeps: ({ search }) => ({ missing: search.missing }),
+  loader: ({ context, params, deps }) => {
+    void context.queryClient.prefetchInfiniteQuery(
+      collectionEntriesQuery({
+        siteId: context.site.id,
+        collectionKey: params.collectionKey,
+        status: 'all',
+        search: '',
+        missingLanguage: missingLanguageFilter(
+          context.site.languages,
+          deps.missing,
+        ),
+      }),
+    )
+  },
   component: CollectionPage,
 })
 

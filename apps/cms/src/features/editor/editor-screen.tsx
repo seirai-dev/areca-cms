@@ -4,6 +4,10 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Stack, WarningCircle } from '@phosphor-icons/react'
 
 import { queryKeys } from '#/lib/content/query-keys'
+import {
+  aiAvailabilityQuery,
+  collectionsQuery as collectionsOptions,
+} from '#/lib/content/queries'
 import { initialEntryData } from '#/lib/content/utils'
 import { TOGGLE_DETAILS_EVENT, useShortcut } from '#/components/shell/shortcuts'
 import {
@@ -41,8 +45,7 @@ import type { Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 import { readEntrySeo, SEO_KEY } from '#/lib/seo'
-import { getAiAvailabilityFn } from '#/server/fn/ai'
-import { listCollectionsFn, listInboundReferencesFn } from '#/server/fn/content'
+import { listInboundReferencesFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 
 import { LazyAiSeoDialog } from './lazy-parts'
@@ -118,12 +121,7 @@ export function EditorScreen({
   onCreated: (id: string) => Promise<unknown> | void
   onDeleted: () => Promise<unknown> | void
 }) {
-  const collectionsQuery = useQuery({
-    queryKey: queryKeys.collections(site.id),
-    queryFn: () => listCollectionsFn({ data: { siteId: site.id } }),
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-  })
+  const collectionsQuery = useQuery(collectionsOptions(site.id))
   const collection = (
     collectionsQuery.data as CollectionRecord[] | undefined
   )?.find((item) => item.key === collectionKey)
@@ -274,11 +272,7 @@ function EntryEditorView({
     [data, ctx, lang.main],
   )
   const notMainLocale = Boolean(ctx && active && !lang.isMain)
-  const aiQuery = useQuery({
-    queryKey: queryKeys.aiAvailability(),
-    queryFn: () => getAiAvailabilityFn(),
-    staleTime: 30_000,
-  })
+  const aiQuery = useQuery(aiAvailabilityQuery())
   // AI translation needs AI set up and a saved entry (the server reads it).
   const translateEnabled =
     aiQuery.data?.enabled === true && Boolean(editor.entryId)

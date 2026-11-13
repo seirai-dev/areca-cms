@@ -1,9 +1,9 @@
 import * as React from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { queryOptions, useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { WarningCircle } from '@phosphor-icons/react'
 
-import { queryKeys } from '#/lib/content/query-keys'
+import { aiAvailabilityQuery } from '#/lib/content/queries'
 
 import { useShortcut } from '#/components/shell/shortcuts'
 import { NotFoundCard } from '#/components/shell/not-found'
@@ -58,7 +58,6 @@ import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 import { readEntrySeo, SEO_KEY } from '#/lib/seo'
 import { previewOrigin } from '#/lib/preview-url'
-import { getAiAvailabilityFn } from '#/server/fn/ai'
 import { getGlobalFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 import { LazyPreviewPane } from '#/features/visual/lazy-preview-pane'
@@ -98,6 +97,14 @@ export function globalQueryKey(siteId: string, key: string) {
   return ['global', siteId, key] as const
 }
 
+export function globalQuery(siteId: string, key: string) {
+  return queryOptions({
+    queryKey: globalQueryKey(siteId, key),
+    queryFn: () => getGlobalFn({ data: { siteId, key } }),
+    retry: false,
+  })
+}
+
 /**
  * Site content section editor (route `/sites/$siteId/globals/$globalKey`).
  * One form, no title and no slug: the section is a single entry that the
@@ -114,11 +121,7 @@ export function GlobalEditorScreen({
   globalKey: string
 }) {
   const isAgency = me.user.isAgencyAdmin
-  const query = useQuery({
-    queryKey: globalQueryKey(site.id, globalKey),
-    queryFn: () => getGlobalFn({ data: { siteId: site.id, key: globalKey } }),
-    retry: false,
-  })
+  const query = useQuery(globalQuery(site.id, globalKey))
 
   if (query.isLoading) return <GlobalEditorSkeleton />
   if (query.isError) {
@@ -219,11 +222,7 @@ function GlobalEditorView({
     [data, ctx, lang.main],
   )
   // AI translation needs AI set up and a saved section (the server reads it).
-  const aiQuery = useQuery({
-    queryKey: queryKeys.aiAvailability(),
-    queryFn: () => getAiAvailabilityFn(),
-    staleTime: 30_000,
-  })
+  const aiQuery = useQuery(aiAvailabilityQuery())
   const translateEnabled =
     aiQuery.data?.enabled === true && Boolean(editor.entryId)
   const translate = useAiTranslation({

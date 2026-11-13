@@ -14,6 +14,7 @@ import { readLocale, writeLocale } from '#/lib/content-locale'
 import { isValidSlug } from '#/lib/slug'
 import type { LocaleCtx } from '#/lib/content-locale'
 import { OVERVIEW_ENTRIES, queryKeys } from '#/lib/content/query-keys'
+import { entryQuery as entryOptions } from '#/lib/content/queries'
 import {
   errorMessage,
   fieldErrorsFromUnknown,
@@ -186,11 +187,8 @@ export function useEntryEditor({
   const slugField = fields.find((field) => field.type === 'slug')
 
   const entryQuery = useQuery({
-    queryKey: queryKeys.entry(entryId ?? 'new'),
-    queryFn: () => getEntryFn({ data: { id: entryId! } }),
+    ...entryOptions(entryId ?? 'new'),
     enabled: Boolean(entryId),
-    // Opening an entry always loads its current version.
-    staleTime: 0,
     // While editing, a focus refetch is wasted: the DRAFT_CONFLICT version
     // check already protects against a concurrent edit.
     refetchOnWindowFocus: false,
