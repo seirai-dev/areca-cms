@@ -112,7 +112,10 @@ const config = defineConfig(async ({ command }): Promise<UserConfig> => ({
       ],
       routeStrategies: [{ match: '/api/:path(.*)?', exclude: true }],
     }),
-    nitro({ rollupConfig: { external: [/^@sentry\//] } }),
+    nitro({
+      rollupConfig: { external: [/^@sentry\//] },
+      compressPublicAssets: { gzip: true, brotli: true },
+    }),
     tailwindcss(),
     tanstackStart({
       server: {
