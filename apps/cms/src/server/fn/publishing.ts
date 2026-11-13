@@ -1,21 +1,14 @@
 import { createServerFn } from '@tanstack/react-start'
-import { eq } from 'drizzle-orm'
 import { z } from '#/lib/zod'
 
-import { db } from '#/db'
-import { site } from '#/db/schema'
-import {
-  requireAgencyAdmin,
-  requireOrgMemberOrNotFound,
-  requireUser,
-} from '#/lib/session.server'
+import { requireAgencyAdmin, requireUser } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import {
   reconcileDeploymentJob,
   resolveUncertainDeploymentJob,
 } from '#/server/publishing/worker'
+import { requireSiteAccess } from '#/server/content/access'
 import { NotFoundError } from '#/server/content/errors'
-import { assertSiteVisibleTo } from '#/server/security/site-visibility'
 import { AppError } from '#/server/http/app-error'
 import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
 import {
@@ -28,50 +21,8 @@ import {
   requestRollback,
 } from '#/server/publishing/publications'
 import { listPendingRelease } from '#/server/publishing/release-diff'
-import { siteCoreColumns } from '#/server/content/site-core'
 
 const loose = { strict: { output: false } as const }
-
-async function requireSiteAccess(
-  siteId: string,
-  role?: 'owner',
-  notFoundMessage: () => ReturnType<
-    typeof m.server_site_not_found
-  > = m.server_site_not_found,
-) {
-  // Authenticate first; a missing site and a site the caller cannot access
-  // look identical (NotFound), so other tenants' ids cannot be probed.
-  await requireUser()
-  const found = (
-    await db
-      .select(siteCoreColumns)
-      .from(site)
-      .where(eq(site.id, siteId))
-      .limit(1)
-  ).at(0)
-  if (!found) {
-    throw new NotFoundError(notFoundMessage())
-  }
-  const member = await requireOrgMemberOrNotFound(
-    found.organizationId,
-    undefined,
-    () => new NotFoundError(notFoundMessage()),
-  )
-  // Before the role check: a dev env is NotFound for an editor as for an owner.
-  await assertSiteVisibleTo(
-    member,
-    found,
-    () => new NotFoundError(notFoundMessage()),
-  )
-  const session = role
-    ? await requireOrgMemberOrNotFound(
-        found.organizationId,
-        role,
-        () => new NotFoundError(notFoundMessage()),
-      )
-    : member
-  return { session, site: found }
-}
 
 async function requireJobAccess(jobId: string, role?: 'owner') {
   await requireUser()

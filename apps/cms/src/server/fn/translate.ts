@@ -1,16 +1,12 @@
 import { createServerFn } from '@tanstack/react-start'
-import { eq } from 'drizzle-orm'
 import { z } from '#/lib/zod'
 
-import { db } from '#/db'
-import { site } from '#/db/schema'
 import { ID_MAX_LENGTH } from '#/lib/content-limits'
 import {
   canonicalLocale,
   localeTagSchema,
   readLocale,
 } from '#/lib/content-locale'
-import { requireOrgMemberOrNotFound, requireUser } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { loadAssetLookup } from '#/server/assets'
 import { richTextAssetRefs } from '#/server/assets/richtext-ownership'
@@ -18,13 +14,12 @@ import { AiGenerationError } from '#/server/ai/seo-generate'
 import { loadAiRuntimeConfig } from '#/server/ai/settings'
 import { translateContent } from '#/server/ai/translate'
 import { audit } from '#/server/audit'
+import { requireSiteAccess } from '#/server/content/access'
 import { getCollection } from '#/server/content/collections'
 import { getEntry } from '#/server/content/entries'
 import { NotFoundError, ValidationError } from '#/server/content/errors'
-import { assertSiteVisibleTo } from '#/server/security/site-visibility'
 import { languageName } from '#/server/content/locale-validation'
 import { allowUserAction } from '#/server/http/rate-limit.server'
-import { siteCoreColumns } from '#/server/content/site-core'
 
 /**
  * Same paid-AI quota as generateEntrySeoFn (one bucket, so suggestions and
@@ -58,25 +53,7 @@ export const translateContentFn = createServerFn({
     }),
   )
   .handler(async ({ data }) => {
-    await requireUser()
-    const found = (
-      await db
-        .select(siteCoreColumns)
-        .from(site)
-        .where(eq(site.id, data.siteId))
-        .limit(1)
-    ).at(0)
-    if (!found) throw new NotFoundError(m.server_site_not_found())
-    const session = await requireOrgMemberOrNotFound(
-      found.organizationId,
-      undefined,
-      () => new NotFoundError(m.server_site_not_found()),
-    )
-    await assertSiteVisibleTo(
-      session,
-      found,
-      () => new NotFoundError(m.server_site_not_found()),
-    )
+    const { session, site: found } = await requireSiteAccess(data.siteId)
 
     const languages = found.languages
     if (!languages) {

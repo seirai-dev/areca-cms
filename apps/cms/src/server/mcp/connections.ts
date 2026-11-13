@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
-import { AsyncLocalStorage } from 'node:async_hooks'
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 
 import { Pool } from 'pg'
 
 import { db, pool } from '#/db'
 import { registerPool } from '#/db/pool-registry'
+import { createSessionLock } from '#/db/session-lock'
 import {
   mcpConnection,
   oauthAccessToken,
@@ -32,7 +32,7 @@ grantLockPool.on('error', (error) =>
   }),
 )
 registerPool('mcp', grantLockPool)
-const heldGrantLock = new AsyncLocalStorage<string>()
+const withGrantLock = createSessionLock(grantLockPool)
 
 export type McpConnectionRow = typeof mcpConnection.$inferSelect
 
@@ -86,40 +86,14 @@ export async function upsertConnection(input: {
 }
 
 /** Serialize approval and disconnect for the same grant across processes. */
-export async function withConnectionLock<T>(
+export function withConnectionLock<T>(
   input: { userId: string; siteId: string | null; clientId: string },
   run: () => Promise<T>,
 ): Promise<T> {
-  const key = JSON.stringify([input.userId, input.siteId, input.clientId])
-  if (heldGrantLock.getStore() === key) return run()
-  const lock = await grantLockPool.connect()
-  let acquired = false
-  let healthy = true
-  let connectionError: Error | undefined
-  const onError = (error: Error) => {
-    healthy = false
-    connectionError = error
-  }
-  lock.on('error', onError)
-  try {
-    await lock.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [key])
-    acquired = true
-    const result = await heldGrantLock.run(key, run)
-    if (connectionError) throw connectionError
-    return result
-  } finally {
-    if (acquired) {
-      try {
-        await lock.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [
-          key,
-        ])
-      } catch {
-        healthy = false
-      }
-    } else healthy = false
-    lock.removeListener('error', onError)
-    lock.release(!healthy)
-  }
+  return withGrantLock(
+    JSON.stringify([input.userId, input.siteId, input.clientId]),
+    run,
+  )
 }
 
 /**

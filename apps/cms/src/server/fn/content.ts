@@ -1,6 +1,5 @@
 import { isSafeIdentifier } from '#/lib/content-identifiers'
 import { localeTagSchema } from '#/lib/content-locale'
-import { previewBaseUrl } from '#/lib/preview-url'
 import {
   GLOBAL_GROUP_MAX_LENGTH,
   GLOBAL_PREVIEW_PATH_MAX_LENGTH,
@@ -75,11 +74,7 @@ import {
   upsertGlobal,
 } from '#/server/content/globals'
 import { fieldDataUsageForCollection } from '#/server/content/field-data'
-import {
-  buildGlobalPreviewUrl,
-  buildPreviewUrl,
-  signPreviewToken,
-} from '#/server/content/preview-token'
+import { previewLinkFor } from '#/server/content/preview-token'
 import { inArray } from 'drizzle-orm'
 
 const fieldTypes = [
@@ -571,23 +566,11 @@ export const getPreviewUrlFn = createServerFn({ method: 'GET' })
   )
   .handler(async ({ data }) => {
     const { site: found } = await requireSiteAccess(data.siteId)
-    const token = signPreviewToken({
-      siteId: found.id,
-      collection: data.collection,
-      slug: data.slug,
-      secret: found.previewSecret,
-      locale: data.locale,
-    })
-    return {
-      token,
-      url: buildPreviewUrl(
-        previewBaseUrl(found),
-        data.collection,
-        data.slug,
-        token,
-        data.locale,
-      ),
-    }
+    return previewLinkFor(
+      found,
+      { kind: 'collection', key: data.collection, slug: data.slug },
+      data.locale,
+    )
   })
 
 /**
@@ -761,22 +744,11 @@ export const getGlobalPreviewUrlFn = createServerFn({ method: 'GET' })
       data.siteId,
       data.key,
     )
-    if (!global.previewPath) return null
-    const token = signPreviewToken({
-      siteId: found.id,
-      global: data.key,
-      secret: found.previewSecret,
-      locale: data.locale,
-    })
-    return {
-      token,
-      url: buildGlobalPreviewUrl(
-        previewBaseUrl(found),
-        global.previewPath,
-        token,
-        data.locale,
-      ),
-    }
+    return previewLinkFor(
+      found,
+      { kind: 'global', key: data.key, previewPath: global.previewPath },
+      data.locale,
+    )
   })
 
 export const upsertGlobalFn = createServerFn({ method: 'POST' })
