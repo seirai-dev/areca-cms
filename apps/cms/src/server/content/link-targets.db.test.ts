@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { describe, expect, it, vi } from 'vitest'
 
 import { db } from '#/db'
@@ -635,6 +635,74 @@ describe.skipIf(!hasDb)('link targets: search', () => {
         enabledOnly: true,
       })
       expect(found.entries.map((hit) => hit.entryId)).toEqual([older[0].id])
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('pages on by slug and id when many candidates share one update time', async () => {
+    const ctx = await createTestSite({ languages })
+    try {
+      await createTestCollection(ctx.site.id, {
+        key: 'articles',
+        routePattern: '/blog/$slug',
+        localizedRoutes: { en: '/news/$slug' },
+      })
+      const [articles] = await db
+        .select({ id: collection.id })
+        .from(collection)
+        .where(
+          and(
+            eq(collection.siteId, ctx.site.id),
+            eq(collection.key, 'articles'),
+          ),
+        )
+      // One time with microseconds, which a JS Date cannot hold.
+      const sameTime = sql`'2026-03-01 10:00:00.123456+00'::timestamptz`
+      await db.insert(entry).values(
+        Array.from({ length: 60 }, (_, index) => ({
+          siteId: ctx.site.id,
+          collectionId: articles.id,
+          slug: `onvolledig-${String(index).padStart(2, '0')}`,
+          status: 'draft' as const,
+          draftData: {
+            title: `Onvolledig ${index}`,
+            $i18n: {
+              en: { title: `Incomplete ${index}`, $slug: `coffee-p-${index}` },
+            },
+          },
+          updatedAt: sameTime,
+        })),
+      )
+      const last = await db
+        .insert(entry)
+        .values({
+          siteId: ctx.site.id,
+          collectionId: articles.id,
+          slug: 'zz-laatste',
+          status: 'draft',
+          draftData: {
+            title: 'Laatste',
+            body: doc(['Oud']),
+            $i18n: {
+              en: {
+                title: 'Last',
+                $slug: 'coffee-last',
+                body: doc(['Last']),
+              },
+            },
+          },
+          updatedAt: sameTime,
+        })
+        .returning({ id: entry.id })
+
+      const found = await searchLinkTargets(ctx.site.id, {
+        query: '/news/cof',
+        locale: 'en',
+        limit: 5,
+        enabledOnly: true,
+      })
+      expect(found.entries.map((hit) => hit.entryId)).toEqual([last[0].id])
     } finally {
       await cleanupTestSite(ctx)
     }
