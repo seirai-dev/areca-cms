@@ -20,6 +20,7 @@ import {
 
 import { ValidationError } from './errors.ts'
 import { localeCtxFor } from './locale-validation.ts'
+import { isPlainObject } from '#/lib/is-plain-object'
 
 /**
  * Entry links in content: loading the entries they point at, the save check
@@ -196,10 +197,6 @@ export function placeLinkTarget(
         : target.slug,
     language: locale,
   }
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
 export type RichTextSlot = {

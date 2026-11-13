@@ -28,6 +28,7 @@ import type {
 
 import { findSlugCollisions } from './slug-collisions'
 import type { SlugCollision, SlugOwner } from './slug-collisions'
+import { isPlainObject } from '#/lib/is-plain-object'
 
 export type PlanItemKind =
   | 'schema.add'
@@ -447,10 +448,6 @@ function withoutKeysForCompare(data: EntryData, ignore: string[]): EntryData {
   return slots.length > 0
     ? { ...rest, [I18N_KEY]: Object.fromEntries(slots) }
     : rest
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /**

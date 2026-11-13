@@ -17,6 +17,7 @@ import { m } from '#/paraglide/messages'
 
 import type { LanguageBlockerDetail } from './errors.ts'
 import type { FieldError } from './validation.ts'
+import { isPlainObject } from '#/lib/is-plain-object'
 
 /**
  * Required-language codes as stored: canonical tags, without duplicates. Codes
@@ -114,10 +115,6 @@ export function toLanguageBlockerDetail(
     locale: blocker.locale,
     missing: blocker.missing.map((field) => field.key),
   }))
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
 /** Per-language slugs in `$i18n[locale].$slug` as `[locale, slug]` pairs. */

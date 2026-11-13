@@ -33,6 +33,7 @@ import { m } from '#/paraglide/messages'
 import { validateRichText } from '#/server/richtext'
 
 import { getCollection } from './collections.ts'
+import { isPlainObject } from '#/lib/is-plain-object'
 
 const ISO_DATETIME =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/
@@ -556,10 +557,6 @@ export function resolveSlug(
   if (!slugField) return undefined
   const value = data[slugField.key]
   return typeof value === 'string' && value.length > 0 ? value : undefined
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
 /**
