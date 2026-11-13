@@ -46,7 +46,7 @@ Sign-in with GitHub, Google, Discord, or Microsoft asks for the code too, right 
 
 ## Agency admins must have two-factor
 
-The `ADMIN_MFA_REQUIRED` setting controls this rule. It is `true` by default. Set it to `false` only on an isolated development or test instance. When it is `false`, admins do not need two-factor enabled or a local factor proof to use admin functions. For an admin who has two-factor enabled, step-up freshness is measured from session creation or a successful step-up code; an admin without two-factor skips the second-factor step-up check.
+The `ADMIN_MFA_REQUIRED` setting controls this rule. It is `true` by default. Set it to `false` only on an isolated development or test instance. When it is `false`, admins do not need two-factor enabled to use admin functions. An admin who has turned two-factor on still enters a code once per session, like everyone else. For an admin who has two-factor enabled, step-up freshness is measured from session creation or a successful step-up code; an admin without two-factor skips the second-factor step-up check.
 
 When it is on:
 
@@ -95,7 +95,7 @@ The lockout applies to the step-up check only. Requests to the sign-in and two-f
 A sign-in with GitHub, Google, Discord, or Microsoft Entra ID does not count as the CMS authenticator code. If two-factor is on for the account, the CMS opens **Two-factor authentication** on the Account page and asks for a code or a backup code before anything else. Until then the session can only enter the code, accept an invitation, or sign out. The consequences are:
 
 - Everyone with two-factor on enters a code once per session, whichever way they signed in. A password sign-in that already asked for the code does not ask again.
-- An AI app's consent screen asks for the code in a dialog before it allows the app.
+- An AI app's consent screen asks for the code in a dialog before it allows the app. This also applies when you approved the app before: the app is sent to the consent screen instead of being connected straight away.
 - Two-factor settings (turning it off, new backup codes) can't be changed until the code is entered.
 - People without two-factor are not asked for a code.
 - The agency admin requirement still applies. An agency admin's account must have two-factor on and a local factor verified in the current session before using admin functions.

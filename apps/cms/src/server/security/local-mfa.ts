@@ -47,25 +47,39 @@ async function readLocalMfaProof(principal: Principal, now: Date) {
   return proof?.createdAt ?? null
 }
 
-export async function requireAdminLocalMfa(principal: Principal) {
-  if (!env.ADMIN_MFA_REQUIRED || !principal.user.isAgencyAdmin) return
-  if (
-    !principal.user.twoFactorEnabled ||
+/** True when two-factor is on and this session has not entered a code yet. */
+export async function owesLocalMfa(principal: Principal) {
+  return (
+    Boolean(principal.user.twoFactorEnabled) &&
     !(await localMfaVerifiedAt(principal))
-  ) {
+  )
+}
+
+/**
+ * Agency admins: two-factor is required when `ADMIN_MFA_REQUIRED` is on, and
+ * an admin who has it on enters a code once per session either way.
+ */
+export async function requireAdminLocalMfa(principal: Principal) {
+  if (!principal.user.isAgencyAdmin) return
+  if (env.ADMIN_MFA_REQUIRED && !principal.user.twoFactorEnabled) {
     throw new MfaRequiredError()
+  }
+  if (await owesLocalMfa(principal)) {
+    throw new MfaRequiredError(
+      env.ADMIN_MFA_REQUIRED ? undefined : m.server_mfa_verification_required(),
+    )
   }
 }
 
 /**
- * Anyone else with two-factor on: this session must have passed a local TOTP
- * or backup code. Password sign-in does that in Better Auth's challenge;
- * social and SSO sign-ins skip it and meet it here. Agency admins are checked
- * by `requireAdminLocalMfa` instead.
+ * Anyone with two-factor on: this session must have passed a local TOTP or
+ * backup code. Password sign-in does that in Better Auth's challenge; social
+ * and SSO sign-ins skip it and meet it here. While `ADMIN_MFA_REQUIRED` is on,
+ * agency admins are checked by `requireAdminLocalMfa` instead.
  */
 export async function requireMemberLocalMfa(principal: Principal) {
-  if (principal.user.isAgencyAdmin || !principal.user.twoFactorEnabled) return
-  if (!(await localMfaVerifiedAt(principal))) {
+  if (principal.user.isAgencyAdmin && env.ADMIN_MFA_REQUIRED) return
+  if (await owesLocalMfa(principal)) {
     throw new MfaRequiredError(m.server_mfa_verification_required())
   }
 }

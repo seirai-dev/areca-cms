@@ -133,9 +133,12 @@ export function TimelineCard({
 /** Relative time with the absolute timestamp on hover. */
 export function RelativeTime({
   value,
+  title,
   className,
 }: {
   value: Date | string | null | undefined
+  /** Replaces the absolute timestamp tooltip. */
+  title?: string
   className?: string
 }) {
   const iso =
@@ -148,7 +151,7 @@ export function RelativeTime({
     <time
       dateTime={iso}
       className={cn('whitespace-nowrap', className)}
-      title={absoluteTimeLabel(value)}
+      title={title ?? absoluteTimeLabel(value)}
     >
       {formatRelativeTime(value)}
     </time>

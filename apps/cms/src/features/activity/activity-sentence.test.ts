@@ -5,6 +5,7 @@ import {
   activityText,
   collapseRepeats,
   entryTargetIds,
+  lastSavedAt,
   viaMcpKey,
 } from './activity-sentence'
 import type { ActivityLike } from './activity-sentence'
@@ -266,6 +267,36 @@ describe('collapseRepeats', () => {
       row({ createdAt: '2026-09-30T09:00:00Z', meta: { saves: 1 } }),
     ]
     expect(collapseRepeats(rows).map((group) => group.count)).toEqual([13, 1])
+  })
+
+  it('groups a shared row that stays at its first save by its newest save', () => {
+    const rows = [
+      row({ createdAt: '2026-09-30T10:30:00Z', meta: { saves: 1 } }),
+      row({
+        createdAt: '2026-09-30T10:00:00Z',
+        meta: {
+          saves: 4,
+          firstSavedAt: '2026-09-30T10:00:00Z',
+          lastSavedAt: '2026-09-30T10:20:00Z',
+        },
+      }),
+      row({ createdAt: '2026-09-30T09:30:00Z', meta: { saves: 2 } }),
+    ]
+    // 10:30 is 10 min after the shared row's last save (one group); 09:30 is
+    // 30 min before its first save (its own group).
+    expect(collapseRepeats(rows).map((group) => group.count)).toEqual([5, 2])
+  })
+})
+
+describe('lastSavedAt', () => {
+  it('reads the newest save of a shared autosave row', () => {
+    expect(
+      lastSavedAt(
+        row({ meta: { saves: 3, lastSavedAt: '2026-09-30T10:20:00Z' } }),
+      ),
+    ).toBe('2026-09-30T10:20:00Z')
+    expect(lastSavedAt(row({ meta: { saves: 1 } }))).toBeNull()
+    expect(lastSavedAt(row({ meta: { lastSavedAt: 'nope' } }))).toBeNull()
   })
 })
 
