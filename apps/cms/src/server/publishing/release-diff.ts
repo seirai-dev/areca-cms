@@ -4,6 +4,7 @@ import { db } from '#/db'
 import { collection, entry, publication, site, user } from '#/db/schema'
 import { entryTitle } from '#/lib/content/utils'
 import { globalsAsEntryLists } from '#/lib/globals'
+import { stableStringify } from '#/lib/stable-json'
 import type {
   Field,
   SeoMeta,
@@ -86,19 +87,9 @@ export type PendingReleaseChange = {
 type IndexedEntry = ReleaseDiffEntry &
   Pick<SnapshotEntry, 'seo' | 'publishedAt' | 'locales'>
 
-/** Order-insensitive JSON; same rule as `entry-live-state` `stable()`. */
-export function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value as Record<string, unknown>)
-      .sort()
-      .map(
-        (key) =>
-          `${JSON.stringify(key)}:${stableJson((value as Record<string, unknown>)[key])}`,
-      )
-      .join(',')}}`
-  }
-  return JSON.stringify(value ?? null)
+/** Order-insensitive JSON; same rule as `isEditedSinceReady`. */
+function stableJson(value: unknown): string {
+  return stableStringify(value, { undefinedAsNull: true })
 }
 
 function fingerprint(item: Pick<SnapshotEntry, 'id' | 'slug' | 'data'>) {

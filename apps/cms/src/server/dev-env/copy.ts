@@ -7,6 +7,7 @@ import {
 } from '#/lib/dev-env'
 import type { DevEnvWarning } from '#/lib/dev-env'
 import { entryTitle } from '#/lib/content/utils'
+import { stableEqual } from '#/lib/stable-json'
 import { db } from '#/db'
 import type { Tx } from '#/db'
 import { collection, entry, environmentPush, site } from '#/db/schema'
@@ -22,7 +23,6 @@ import {
 import { m } from '#/paraglide/messages'
 
 import { lockProductionSite } from './lock'
-import { deepEqual } from './plan'
 import { remapReferences } from './references'
 import {
   lockSiteLinkIndex,
@@ -163,7 +163,7 @@ async function runCopy(
   const productionDef = productionSchema.collections.find(
     (def) => def.key === devCollection.key,
   )
-  if (!devDef || !productionDef || !deepEqual(devDef, productionDef)) {
+  if (!devDef || !productionDef || !stableEqual(devDef, productionDef)) {
     throw new ConflictError('Push the schema first.')
   }
 

@@ -9,6 +9,7 @@ import type { Tx } from '#/db'
 import { collection, entry, environmentPush, site } from '#/db/schema'
 import { entryTitle } from '#/lib/content/utils'
 import { carryFieldValues, withoutFieldKeys } from '#/lib/field-content'
+import { stableStringify } from '#/lib/stable-json'
 import type {
   ContentKind,
   EntryData,
@@ -44,12 +45,7 @@ import { requestPublication } from '#/server/publishing/publications'
 
 import { lockProductionSite } from './lock'
 import { relinkProductionEntries } from './relink'
-import {
-  buildPlan,
-  removedFieldKeysOf,
-  selectPlanItems,
-  stableStringify,
-} from './plan'
+import { buildPlan, removedFieldKeysOf, selectPlanItems } from './plan'
 import type { PlanEntry, PlanInput, PlanItem } from './plan'
 import { findSlugCollisions } from './slug-collisions'
 import type { SlugOwner } from './slug-collisions'

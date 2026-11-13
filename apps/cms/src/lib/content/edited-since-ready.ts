@@ -1,3 +1,4 @@
+import { stableStringify } from '#/lib/stable-json'
 import type { EntryStatus } from '#/lib/types'
 
 /**
@@ -12,21 +13,6 @@ export type EditedSinceReadyInput = {
   publishedData?: unknown
 }
 
-/** Order-insensitive JSON for comparing draft and published data. */
-function stable(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value as Record<string, unknown>)
-      .sort()
-      .map(
-        (key) =>
-          `${JSON.stringify(key)}:${stable((value as Record<string, unknown>)[key])}`,
-      )
-      .join(',')}}`
-  }
-  return JSON.stringify(value ?? null)
-}
-
 /**
  * A published entry whose draft differs from what was marked ready
  * ("Edited since ready"). Needs both `draftData` and `publishedData`.
@@ -34,5 +20,8 @@ function stable(value: unknown): string {
 export function isEditedSinceReady(entry: EditedSinceReadyInput) {
   if (entry.status !== 'published') return false
   if (entry.draftData === undefined || entry.publishedData == null) return false
-  return stable(entry.draftData) !== stable(entry.publishedData)
+  return (
+    stableStringify(entry.draftData, { undefinedAsNull: true }) !==
+    stableStringify(entry.publishedData, { undefinedAsNull: true })
+  )
 }

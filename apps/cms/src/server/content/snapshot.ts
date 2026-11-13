@@ -54,6 +54,7 @@ import type {
   EntryLinkTarget,
 } from '#/server/richtext/entry-links'
 import { entryTitle } from '#/lib/content/utils'
+import { stableStringify } from '#/lib/stable-json'
 
 import { getCollection, listCollections } from './collections.ts'
 import { getGlobalEntry, listGlobals } from './globals.ts'
@@ -1314,9 +1315,7 @@ async function convertFields(
 }
 
 function hashContent(value: unknown) {
-  return createHash('sha256')
-    .update(JSON.stringify(sortValue(value)))
-    .digest('hex')
+  return createHash('sha256').update(stableStringify(value)).digest('hex')
 }
 
 function resolveOgImage(
@@ -1415,17 +1414,4 @@ async function loadPreviewLookups(
     })
   }
   return { assets, references }
-}
-
-function sortValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortValue)
-  if (value && typeof value === 'object') {
-    const obj = value as Record<string, unknown>
-    const out: Record<string, unknown> = {}
-    for (const key of Object.keys(obj).sort()) {
-      out[key] = sortValue(obj[key])
-    }
-    return out
-  }
-  return value
 }
