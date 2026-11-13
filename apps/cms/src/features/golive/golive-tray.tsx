@@ -244,7 +244,7 @@ export function GoLiveTray({
 }) {
   const release = useReleaseStatus(siteId)
   // A blocked site (site content never marked ready) cannot go live yet.
-  const blocked = (release.data?.blockers?.length ?? 0) > 0
+  const blocked = (release.data?.blockers.length ?? 0) > 0
   const canPublish = canGoLive({
     canPublish: canPublishRole,
     blockers: release.data?.blockers,
