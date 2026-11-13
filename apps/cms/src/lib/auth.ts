@@ -33,6 +33,7 @@ import { createLogger } from '#/server/log'
 import {
   recordLocalMfaForToken,
   requireAdminLocalMfa,
+  requireLocalMfa,
 } from '#/server/security/local-mfa'
 import {
   assertEmailMayRegister,
@@ -79,11 +80,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-async function assertAuthAdminMfa(
+async function assertAuthLocalMfa(
   principal: Parameters<typeof requireAdminLocalMfa>[0],
+  check: typeof requireAdminLocalMfa = requireAdminLocalMfa,
 ) {
   try {
-    await requireAdminLocalMfa(principal)
+    await check(principal)
   } catch (error) {
     if (!(error instanceof MfaRequiredError)) throw error
     throw new APIError('FORBIDDEN', {
@@ -447,7 +449,7 @@ const authBase = betterAuth({
       // the row when the authorization request names one, so the plugin accepts it.
       if (ctx.path === '/oauth2/authorize') {
         const session = await getSessionFromCtx(ctx)
-        if (session) await assertAuthAdminMfa(session)
+        if (session) await assertAuthLocalMfa(session)
         assertSingleMcpResource(ctx.query?.resource, true)
         for (const resource of resourceParams(ctx.query?.resource)) {
           await ensureMcpResource(resource)
@@ -515,7 +517,9 @@ const authBase = betterAuth({
           if (ctx.path === '/two-factor/get-totp-uri') {
             assertTotpUriAvailable(session.user.twoFactorEnabled)
           }
-          if (session.user.twoFactorEnabled) await assertAuthAdminMfa(session)
+          // Someone who signed in with a provider has not entered a code yet.
+          if (session.user.twoFactorEnabled)
+            await assertAuthLocalMfa(session, requireLocalMfa)
           const credential =
             await ctx.context.internalAdapter.findCredentialAccount(
               session.user.id,

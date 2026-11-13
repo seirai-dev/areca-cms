@@ -2197,6 +2197,7 @@
   "server_mcp_oauth_unnamed_app": "Unnamed AI app",
   "server_member_not_found": "Member not found",
   "server_mfa_required": "Two-factor authentication is required for agency admins. Set it up on your account page.",
+  "server_mfa_verification_required": "Enter a code from your authenticator app to finish signing in.",
   "server_must_be_on_or_after": "Must be on or after {path}",
   "server_name_max_60": "Name must be 60 characters or fewer",
   "server_not_found": "Not found",

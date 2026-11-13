@@ -2197,6 +2197,7 @@
   "server_mcp_oauth_unnamed_app": "Naamloze AI-app",
   "server_member_not_found": "Lid niet gevonden",
   "server_mfa_required": "Bureaubeheerders moeten tweestapsverificatie gebruiken. Stel dit in op je accountpagina.",
+  "server_mfa_verification_required": "Voer een code uit je authenticator-app in om het inloggen af te ronden.",
   "server_must_be_on_or_after": "Moet op of na {path} liggen",
   "server_name_max_60": "Naam mag maximaal 60 tekens zijn",
   "server_not_found": "Niet gevonden",

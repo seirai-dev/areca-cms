@@ -3,7 +3,7 @@ title: Two-factor authentication and step-up
 description: Set up the authenticator app, see how the agency admin requirement is enforced, and learn which actions ask for a fresh code and when the lockout applies.
 ---
 
-Areca uses time-based one-time codes (TOTP) from an authenticator app as its second factor. Agency admins must use one. Two other mechanisms build on it: sign-in asks for a code when two-factor is on, and **step-up** asks for a fresh code before a small set of sensitive actions.
+Areca uses time-based one-time codes (TOTP) from an authenticator app as its second factor. Agency admins must use one. Two other mechanisms build on it: every sign-in asks for a code when two-factor is on, and **step-up** asks for a fresh code before a small set of sensitive actions.
 
 ## Set up two-factor
 
@@ -42,7 +42,7 @@ When two-factor is on and you sign in with an email and password, Areca asks for
 
 ![The sign-in screen that asks for a code from an authenticator app, with a link to use a backup code](/screenshots/two-factor-authentication.png)
 
-Sign-in with GitHub, Google, Discord, or Microsoft does not ask for an authenticator code. See [social and single sign-on](#social-and-single-sign-on) below.
+Sign-in with GitHub, Google, Discord, or Microsoft asks for the code too, right after you come back from the provider. See [social and single sign-on](#social-and-single-sign-on) below.
 
 ## Agency admins must have two-factor
 
@@ -92,9 +92,12 @@ The lockout applies to the step-up check only. Requests to the sign-in and two-f
 
 ## Social and single sign-on
 
-Sign-in with GitHub, Google, Discord, or Microsoft Entra ID does not ask for the CMS authenticator code. For admin access while `ADMIN_MFA_REQUIRED` is on, however, the provider sign-in does not count as local factor proof; the admin must verify a TOTP or backup code in that session. The consequences are:
+A sign-in with GitHub, Google, Discord, or Microsoft Entra ID does not count as the CMS authenticator code. If two-factor is on for the account, the CMS opens **Two-factor authentication** on the Account page and asks for a code or a backup code before anything else. Until then the session can only enter the code, accept an invitation, or sign out. The consequences are:
 
-- A person who signs in with a provider is not asked for a code at sign-in, even if two-factor is on for that account.
+- Everyone with two-factor on enters a code once per session, whichever way they signed in. A password sign-in that already asked for the code does not ask again.
+- An AI app's consent screen asks for the code in a dialog before it allows the app.
+- Two-factor settings (turning it off, new backup codes) can't be changed until the code is entered.
+- People without two-factor are not asked for a code.
 - The agency admin requirement still applies. An agency admin's account must have two-factor on and a local factor verified in the current session before using admin functions.
 - Step-up freshness is based on that session's local factor proof (or a recent step-up code), not the provider sign-in time.
 

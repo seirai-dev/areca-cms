@@ -74,13 +74,17 @@ Set these variables:
 
 - `MICROSOFT_SSO_CLIENT_ID` and `MICROSOFT_SSO_CLIENT_SECRET`, from an app registration in Entra ID.
 - `MICROSOFT_SSO_TENANT_ID`, the directory (tenant) ID of the Entra ID tenant whose users should sign in. A concrete ID is required. The shared `common` endpoint is not supported.
-- `MICROSOFT_SSO_DOMAIN`, an email domain your tenant owns, such as `agency.example`. Entra ID does not say whether an email is verified, so Areca only trusts Microsoft addresses on this domain. Without it, Microsoft sign-in cannot link to an existing account (the sign-in page shows "Could not sign in" and the URL has `error=account not linked`), and invited people cannot accept their invitation with Microsoft. It also routes sign-ins for that domain to Microsoft.
+- `MICROSOFT_SSO_DOMAIN`, an email domain your tenant owns, such as `agency.example`. Entra ID does not say whether an email is verified, so Areca only trusts Microsoft addresses on this domain. Without it, Microsoft sign-in cannot link to an existing account (the sign-in page says the address already has an account and the URL has `error=account not linked`), and invited people cannot accept their invitation with Microsoft. It also routes sign-ins for that domain to Microsoft.
 
 In the app registration, add the callback URL from the table above as a web redirect URI.
 
 Entra ID only sends an email address when the account has a mail attribute. Directory accounts without one cannot sign in.
 
-Areca trusts the email address that Entra ID reports as verified, and links the sign-in to an existing account with the same address.
+Areca trusts the email address that Entra ID reports as verified, and links the sign-in to an existing account with the same address when that account's address is verified in Areca.
+
+## Linking a provider to an existing account
+
+The first sign-in with a provider links it to an existing account with the same email address only when that address is verified in Areca. Accepting an emailed invitation verifies it, unless someone used **Regenerate link** on that invitation; the first admin and people who joined through a shared link verify from the banner in the CMS. Until then the sign-in page says "This email address already has an account" and asks them to sign in the usual way and verify their email first. Providers that are already linked keep working.
 
 ## Invite-only registration
 
@@ -95,7 +99,7 @@ Invitations expire after seven days. To invite someone, see [people and invitati
 
 ## Two-factor codes and provider sign-in
 
-Areca's own two-factor authentication (TOTP) is a challenge after email and password sign-in. Sign-ins through GitHub, Google, Discord or Entra ID do not show that prompt. Areca relies on the identity provider to have done its own multi-factor check.
+Areca's own two-factor authentication (TOTP) is a challenge after email and password sign-in. Sign-ins through GitHub, Google, Discord or Entra ID skip that challenge, so the CMS asks for the code on the Account page instead, before the session can do anything else. Everyone with two-factor on enters a code once per session, whichever way they signed in.
 
 Agency admins still need two-factor authentication turned on in their Areca account, whichever method they use to sign in. This is controlled by `ADMIN_MFA_REQUIRED`, which defaults to `true`. Until an admin has enrolled and verified a local TOTP or backup code in the current session, admin functions are blocked. Sensitive actions also ask for a fresh authenticator code when that local proof is older than 10 minutes.
 

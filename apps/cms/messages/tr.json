@@ -2197,6 +2197,7 @@
   "server_mcp_oauth_unnamed_app": "Adsız AI uygulaması",
   "server_member_not_found": "Üye bulunamadı",
   "server_mfa_required": "Ajans yöneticileri için iki adımlı doğrulama gerekir. Hesap sayfanızdan ayarlayın.",
+  "server_mfa_verification_required": "Girişi tamamlamak için kimlik doğrulama uygulamanızdaki kodu girin.",
   "server_must_be_on_or_after": "{path} tarihinde veya sonrasında olmalıdır",
   "server_name_max_60": "Ad en fazla 60 karakter olmalıdır",
   "server_not_found": "Bulunamadı",

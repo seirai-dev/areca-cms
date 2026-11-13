@@ -8,7 +8,9 @@ function or an `src/routes/api/**` file without a matrix entry fails the
 inventory tests.
 
 Role precedence: agency admin > org owner > org editor. Agency admins must have
-two-factor (`MFA_REQUIRED` otherwise). Step-up actions additionally need a
+two-factor (`MFA_REQUIRED` otherwise). Anyone with two-factor on must have
+entered a code in the current session (`requireUser`; `MFA_REQUIRED` otherwise),
+which a social or SSO sign-in has not done yet. Step-up actions additionally need a
 session created or re-verified in the last ten minutes (`REAUTH_REQUIRED`).
 
 ## Actors

@@ -5,6 +5,7 @@ import { db } from '#/db'
 import { session, verification } from '#/db/schema'
 import { env } from '#/env'
 import { MfaRequiredError } from '#/lib/security-errors'
+import { m } from '#/paraglide/messages'
 
 type Principal = {
   session: { id: string }
@@ -44,6 +45,25 @@ export async function requireAdminLocalMfa(principal: Principal) {
   ) {
     throw new MfaRequiredError()
   }
+}
+
+/**
+ * Anyone else with two-factor on: this session must have passed a local TOTP
+ * or backup code. Password sign-in does that in Better Auth's challenge;
+ * social and SSO sign-ins skip it and meet it here. Agency admins are checked
+ * by `requireAdminLocalMfa` instead.
+ */
+export async function requireMemberLocalMfa(principal: Principal) {
+  if (principal.user.isAgencyAdmin || !principal.user.twoFactorEnabled) return
+  if (!(await localMfaVerifiedAt(principal))) {
+    throw new MfaRequiredError(m.server_mfa_verification_required())
+  }
+}
+
+/** Both rules: the admin one for agency admins, the member one for everyone else. */
+export async function requireLocalMfa(principal: Principal) {
+  await requireAdminLocalMfa(principal)
+  await requireMemberLocalMfa(principal)
 }
 
 /** Called only after Better Auth successfully verifies TOTP or a backup code. */
