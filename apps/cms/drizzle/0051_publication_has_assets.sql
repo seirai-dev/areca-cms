@@ -1,0 +1,1 @@
+ALTER TABLE "publication" ADD COLUMN "has_assets" boolean GENERATED ALWAYS AS (snapshot ? 'assets') STORED NOT NULL;
