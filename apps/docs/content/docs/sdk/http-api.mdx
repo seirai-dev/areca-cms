@@ -224,10 +224,13 @@ Each entry also has an `seo` object, which is omitted above for brevity. Snapsho
 
 `assets` lists every Library file the content references: image fields, SEO images, and images and file links in rich text. Each file is public at `GET /api/assets/file/{storageKey}`, and every content URL for it ends in that path. `areca pull` uses the list to copy the files into your site. `siteUrl` is the site's production URL from the CMS, used to build absolute SEO image URLs. Both are missing in responses from older CMS versions. The shape of each value type is in [Field types](/docs/sdk/field-types). The top-level fields are described in the [JavaScript API reference](/docs/sdk/client#types).
 
+A publication never changes after it is created, so the response carries an `ETag`. Send it back in `If-None-Match` and the CMS answers `304 Not Modified` with no body while the publication and the site's production URL are the same. Publications from older CMS versions have no stored asset list and get no `ETag`.
+
 **Errors**
 
 | Status | Body | Cause |
 | --- | --- | --- |
+| `304` | None | `If-None-Match` matches the current `ETag`. Use the copy you already have. |
 | `401` | `{ "error": "Unauthorized" }` | The token is missing or unknown. |
 | `404` | `{ "error": "No publication exists" }` | The site has never gone live. Publish in the CMS first. |
 | `429` | `{ "error": "Too many requests" }` | Rate limit reached. |
