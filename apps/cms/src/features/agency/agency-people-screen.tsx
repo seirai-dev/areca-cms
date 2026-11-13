@@ -102,8 +102,12 @@ export function AgencyPeopleScreen({
     [allAccounts],
   )
 
-  // Escape clears the selection; an open overlay handles its own Escape first.
-  useShortcut('escape', clear, { enabled: picked.length > 0 })
+  // Escape clears the selection, from the search box too; an open overlay
+  // handles its own Escape first.
+  useShortcut('escape', clear, {
+    enabled: picked.length > 0,
+    whileTyping: true,
+  })
 
   React.useEffect(() => {
     if (settledSearch !== filters.search) {
