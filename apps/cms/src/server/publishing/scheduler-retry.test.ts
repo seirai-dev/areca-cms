@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { nextSchedulerAttempt, scheduleFingerprint } from './scheduler'
+import { scheduleFingerprint } from './scheduler'
+import { nextSchedulerAttempt } from './scheduler-backoff'
 
 describe('scheduled release retry policy', () => {
   it('allows three retries at one, five and fifteen minutes, then pauses', () => {

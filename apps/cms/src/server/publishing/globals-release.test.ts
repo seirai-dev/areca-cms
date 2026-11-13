@@ -1,4 +1,4 @@
-// Assumed API: diffApprovedRelease(siteId).pendingCount and listPendingReleaseChanges(siteId)
+// Assumed API: diffApprovedRelease(siteId).pendingCount and listPendingRelease(siteId).changes
 // include site-content sections (kind 'ready' or 'scheduled'), with collectionKey = the
 // section's raw key and collectionLabel = the section label.
 import { and, eq } from 'drizzle-orm'
@@ -21,10 +21,7 @@ import {
 } from '#/server/content/test-utils'
 
 import { getSiteReleaseStatus, requestPublication } from './publications.ts'
-import {
-  diffApprovedRelease,
-  listPendingReleaseChanges,
-} from './release-diff.ts'
+import { diffApprovedRelease, listPendingRelease } from './release-diff.ts'
 
 const hasDb = Boolean(process.env.DATABASE_URL)
 
@@ -43,7 +40,7 @@ describe.skipIf(!hasDb)('release changes for site content', () => {
       )
       await publishEntry(section.entry.id, ctx.actor.id)
 
-      const changes = await listPendingReleaseChanges(ctx.site.id)
+      const changes = (await listPendingRelease(ctx.site.id)).changes
       expect(changes).toContainEqual(
         expect.objectContaining({
           id: section.entry.id,
@@ -78,7 +75,7 @@ describe.skipIf(!hasDb)('release changes for site content', () => {
         ctx.actor.id,
       )
 
-      const changes = await listPendingReleaseChanges(ctx.site.id)
+      const changes = (await listPendingRelease(ctx.site.id)).changes
       expect(changes).toContainEqual(
         expect.objectContaining({
           id: section.entry.id,
@@ -134,7 +131,7 @@ describe.skipIf(!hasDb)('release changes for site content', () => {
       expect(diff.scheduledUpcoming.map((item) => item.id)).not.toContain(
         scheduled.entry.id,
       )
-      const changes = await listPendingReleaseChanges(ctx.site.id)
+      const changes = (await listPendingRelease(ctx.site.id)).changes
       expect(changes.map((change) => change.id)).not.toContain(
         scheduled.entry.id,
       )
@@ -155,7 +152,7 @@ describe.skipIf(!hasDb)('release changes for site content', () => {
         section.entry.draftVersion,
       )
 
-      const changes = await listPendingReleaseChanges(ctx.site.id)
+      const changes = (await listPendingRelease(ctx.site.id)).changes
       expect(changes.map((change) => change.id)).not.toContain(section.entry.id)
     })
   })
@@ -201,7 +198,7 @@ describe.skipIf(!hasDb)('release changes for site content', () => {
       expect(status.blockers).toHaveLength(2)
       expect(status.pendingEntries).toBe(2)
 
-      const changes = await listPendingReleaseChanges(ctx.site.id)
+      const changes = (await listPendingRelease(ctx.site.id)).changes
       expect(changes).toContainEqual(
         expect.objectContaining({
           id: company.entry.id,

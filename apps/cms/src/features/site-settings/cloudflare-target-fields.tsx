@@ -5,7 +5,7 @@ import type {
   CloudflareDeployTarget,
   CloudflareDeployTargets,
 } from '#/adapters/deployment/cloudflare-targets'
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { FormField } from '#/components/ui/form-field'
 import { m } from '#/paraglide/messages'
 

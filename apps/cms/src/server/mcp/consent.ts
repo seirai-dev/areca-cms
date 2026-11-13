@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .select() are checked defensively */
 import { verifyOAuthQueryParams } from '@better-auth/oauth-provider'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { and, asc, eq, inArray } from 'drizzle-orm'
@@ -7,10 +6,15 @@ import { db } from '#/db'
 import { membership, oauthClient, site } from '#/db/schema'
 import { env } from '#/env'
 import { auth } from '#/lib/auth'
-import { getSession, requireAgencyAdmin } from '#/lib/session.server'
+import {
+  getSession,
+  requireAgencyAdmin,
+  requireSignedIn,
+} from '#/lib/session.server'
 import { ReauthRequiredError } from '#/lib/security-errors'
 import { m } from '#/paraglide/messages'
 import { ForbiddenError, ValidationError } from '#/server/content/errors'
+import { owesLocalMfa } from '#/server/security/local-mfa'
 import { assertFreshSession } from '#/server/security/step-up'
 import {
   isAgencyAdminWithMfa,
@@ -29,6 +33,7 @@ import type { McpRole } from './keys'
 import { mcpResourceTarget } from './oauth-resource'
 import type { McpResourceTarget } from './oauth-resource'
 import { requireMcpSiteAccess } from './site-access'
+import { siteCoreColumns } from '#/server/content/site-core'
 
 /**
  * The consent screen's view of a signed authorization request (the `oauth_query`
@@ -66,13 +71,18 @@ export async function readSignedConsentQuery(
 
 /** The registered app behind a client id, or null. */
 export async function findOAuthClient(clientId: string) {
-  const [client] = await db
-    .select()
-    .from(oauthClient)
-    .where(
-      and(eq(oauthClient.clientId, clientId), eq(oauthClient.disabled, false)),
-    )
-    .limit(1)
+  const client = (
+    await db
+      .select()
+      .from(oauthClient)
+      .where(
+        and(
+          eq(oauthClient.clientId, clientId),
+          eq(oauthClient.disabled, false),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   return client ?? null
 }
 
@@ -253,15 +263,20 @@ export async function describeConsentRequest(
   }
   const siteSlug = parsed.target.slug
 
-  const [target] = await db
-    .select()
-    .from(site)
-    .where(eq(site.slug, siteSlug))
-    .limit(1)
-  // A dev env is not offered to anyone but an agency admin (Decision 3).
+  const target = (
+    await db
+      .select(siteCoreColumns)
+      .from(site)
+      .where(eq(site.slug, siteSlug))
+      .limit(1)
+  ).at(0)
+  // A dev env is not offered to anyone but an agency admin (Decision 3). An
+  // admin who still owes a code sees it; approval asks for the code first.
   if (
     !target ||
-    (isDevSite(target) && !(await isAgencyAdminWithMfa(session)))
+    (isDevSite(target) &&
+      !(session.user.isAgencyAdmin && (await owesLocalMfa(session))) &&
+      !(await isAgencyAdminWithMfa(session)))
   ) {
     return {
       ok: false,
@@ -293,7 +308,9 @@ export async function describeConsentRequest(
     }),
     role,
     canAllowGoLive: role !== 'editor',
-    needsStepUp: role === 'agency' && (await needsReauth(session)),
+    needsStepUp:
+      (await owesLocalMfa(session)) ||
+      (role === 'agency' && (await needsReauth(session))),
   }
 }
 
@@ -305,8 +322,14 @@ async function describeAgencyConsent(
   session: NonNullable<Awaited<ReturnType<typeof getSession>>>,
   client: ConsentClient,
 ): Promise<ConsentInfo> {
+  // An admin who still owes this session a code is shown the screen; the
+  // code dialog runs before the approval (approveAgencyConsentRequest).
   const status = agencyAdminStatus(session.user)
-  if (status !== 'active' || !(await isAgencyAdminWithMfa(session))) {
+  const owesCode = await owesLocalMfa(session)
+  if (
+    status !== 'active' ||
+    (!owesCode && !(await isAgencyAdminWithMfa(session)))
+  ) {
     return {
       ok: false,
       reason: 'no_access',
@@ -324,7 +347,7 @@ async function describeAgencyConsent(
       title: m.server_mcp_oauth_agency_title({ app: client.name }),
       body: m.server_mcp_oauth_agency_body(),
     },
-    needsStepUp: await needsReauth(session),
+    needsStepUp: owesCode || (await needsReauth(session)),
   }
 }
 
@@ -339,6 +362,11 @@ export async function approveConsentRequest(input: {
   siteId: string
   allowGoLive: boolean
 }): Promise<{ redirectTo: string }> {
+  // After a provider sign-in, a two-factor user has not entered a code yet.
+  // The consent screen's code dialog answers REAUTH_REQUIRED and retries.
+  if (await owesLocalMfa(await requireSignedIn())) {
+    throw new ReauthRequiredError()
+  }
   const {
     session,
     site: found,
@@ -410,6 +438,9 @@ export async function approveConsentRequest(input: {
 export async function approveAgencyConsentRequest(input: {
   query: string
 }): Promise<{ redirectTo: string }> {
+  if (await owesLocalMfa(await requireSignedIn())) {
+    throw new ReauthRequiredError()
+  }
   const session = await requireAgencyAdmin()
   await assertFreshSession(session)
 

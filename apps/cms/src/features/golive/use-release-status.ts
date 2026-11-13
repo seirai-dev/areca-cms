@@ -67,9 +67,9 @@ export function useReleaseStatus(siteId: string | undefined): ReleaseStatus {
     ? undefined
     : hasBaseline
       ? {
-          liveEntryIds: data.liveEntryIds ?? [],
-          liveSlugsByEntryId: data.liveSlugsByEntryId ?? {},
-          pendingEntryIds: data.pendingEntryIds ?? [],
+          liveEntryIds: data.liveEntryIds,
+          liveSlugsByEntryId: data.liveSlugsByEntryId,
+          pendingEntryIds: data.pendingEntryIds,
         }
       : null
 

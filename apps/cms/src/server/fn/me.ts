@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { createServerFn } from '@tanstack/react-start'
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { z } from '#/lib/zod'
@@ -6,13 +5,13 @@ import { z } from '#/lib/zod'
 import { db } from '#/db'
 import { membership, organization, site, user } from '#/db/schema'
 import { hasAgencyWideAccess } from '#/lib/agency-access'
-import { localMfaVerifiedAt } from '#/server/security/local-mfa'
+import { owesLocalMfa } from '#/server/security/local-mfa'
 import { env } from '#/env'
 import type { MembershipRole, SiteLanguages } from '#/lib/types'
-import { getSession, requireUser } from '#/lib/session.server'
+import { getSession, requireSignedIn } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { getLocale } from '#/paraglide/runtime'
-import { acceptInvitation, getInvitation } from '#/server/admin/members'
+import { acceptInvitation, getInvitation } from '#/server/admin/invitations'
 import { NotFoundError } from '#/server/content/errors'
 import { mailLocale } from '#/server/mail/render/types'
 import type { MailLocale } from '#/server/mail/render/types'
@@ -114,14 +113,13 @@ export const getMeFn = createServerFn({ method: 'GET', ...meFn }).handler(
 
     // Agency-wide data (every site, the organization count) waits until an
     // admin has verified a local factor in this session. Until then an admin
-    // gets the same membership-scoped view as anyone else.
+    // gets the same membership-scoped view as anyone else. Everyone with
+    // two-factor on is asked for a code the same way (social and SSO sign-ins
+    // skip Better Auth's challenge).
     const adminMfaRequired = env.ADMIN_MFA_REQUIRED && currentUser.isAgencyAdmin
     const mfaEnrolmentRequired =
       adminMfaRequired && !currentUser.twoFactorEnabled
-    const mfaVerificationRequired =
-      adminMfaRequired &&
-      currentUser.twoFactorEnabled &&
-      !(await localMfaVerifiedAt(session))
+    const mfaVerificationRequired = await owesLocalMfa(session)
     const agencyWide = hasAgencyWideAccess({
       isAgencyAdmin: currentUser.isAgencyAdmin,
       adminMfaRequired: env.ADMIN_MFA_REQUIRED,
@@ -182,11 +180,13 @@ export const getInvitationFn = createServerFn({ method: 'GET', ...meFn })
       throw new NotFoundError(m.server_invitation_not_found())
     }
 
-    const [org] = await db
-      .select({ name: organization.name })
-      .from(organization)
-      .where(eq(organization.id, invite.organizationId))
-      .limit(1)
+    const org = (
+      await db
+        .select({ name: organization.name })
+        .from(organization)
+        .where(eq(organization.id, invite.organizationId))
+        .limit(1)
+    ).at(0)
 
     return {
       email: invite.email,
@@ -199,6 +199,8 @@ export const getInvitationFn = createServerFn({ method: 'GET', ...meFn })
 export const acceptInvitationFn = createServerFn({ method: 'POST', ...meFn })
   .validator(z.object({ token: z.string().min(1) }))
   .handler(async ({ data }) => {
-    const session = await requireUser()
+    // Before the two-factor code, as for agency admins: the invitation needs
+    // its own token and a matching email, and the code is asked next.
+    const session = await requireSignedIn()
     return acceptInvitation({ token: data.token, userId: session.user.id })
   })

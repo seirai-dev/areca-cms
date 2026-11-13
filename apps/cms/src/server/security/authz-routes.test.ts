@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
-
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -17,9 +15,12 @@ import { getSitesSnapshotCurrent } from '#/routes/api/sites/snapshot/current'
 import { signPreviewToken } from '#/server/content/preview-token'
 import { handleMetricsRequest } from '#/server/ops/metrics'
 
-import { ACTORS, seedWorld } from './authz-harness'
-import type { ActorName, World } from './authz-harness'
+import { seedWorld } from './authz-harness'
+import type { World } from './authz-harness'
+import { ACTORS } from './authz-policies'
+import type { ActorName } from './authz-policies'
 import { setCurrentSession } from './authz-state'
+import type { TestSession } from './authz-state'
 
 vi.hoisted(() => {
   process.env.ADMIN_MFA_REQUIRED = 'true'
@@ -124,6 +125,7 @@ describe.skipIf(!runnable)('API routes: session-authenticated uploads', () => {
     w = await seedWorld()
   }, 60_000)
   afterAll(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unset when beforeAll failed
     await w?.destroy()
   })
 
@@ -210,6 +212,21 @@ describe.skipIf(!runnable)('API routes: session-authenticated uploads', () => {
       if (actor === 'adminNoMfa') expect(await res.text()).toBe('MFA_REQUIRED')
     })
   }
+
+  it('refuses a branding upload from a blocked agency admin', async () => {
+    const admin = w.sessions.adminMfa!
+    setCurrentSession({
+      ...admin,
+      user: { ...admin.user, blockedAt: new Date() },
+    } as TestSession)
+    const res = await handlerOf(
+      brandingUploadRoute,
+      'POST',
+    )({
+      request: multipart({ file: text(), kind: 'nope' }),
+    })
+    expect(res.status).toBe(401)
+  })
 })
 
 describe.skipIf(!runnable)('API routes: site token authentication', () => {
@@ -218,6 +235,7 @@ describe.skipIf(!runnable)('API routes: site token authentication', () => {
     w = await seedWorld()
   }, 60_000)
   afterAll(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unset when beforeAll failed
     await w?.destroy()
   })
 
@@ -473,6 +491,7 @@ describe.skipIf(!runnable)('API routes: live preview authorization', () => {
     w = await seedWorld()
   }, 60_000)
   afterAll(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unset when beforeAll failed
     await w?.destroy()
   })
 
@@ -494,7 +513,7 @@ describe.skipIf(!runnable)('API routes: live preview authorization', () => {
         .select()
         .from(entry)
         .where(eq(entry.id, w.X.entry.id))
-        .then((rows) => rows[0])
+        .then((rows) => rows.at(0))
       const res = await postLivePreview(
         new Request('http://cms.test/api/editor/live-preview', {
           method: 'POST',
@@ -513,7 +532,7 @@ describe.skipIf(!runnable)('API routes: live preview authorization', () => {
         .select()
         .from(entry)
         .where(eq(entry.id, w.X.entry.id))
-        .then((rows) => rows[0])
+        .then((rows) => rows.at(0))
       expect(after?.draftVersion).toBe(before?.draftVersion)
       expect(after?.draftData).toEqual(before?.draftData)
     })

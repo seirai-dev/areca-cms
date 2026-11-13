@@ -2,6 +2,7 @@ import { and, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 
 import { db } from '#/db'
+import type { DbReader, Tx } from '#/db'
 import { collection, entry, entryRevision, site } from '#/db/schema'
 import { MAX_SITE_LANGUAGES } from '#/lib/content-limits'
 import { LOCALE_KEY, canonicalLocale, localeStatus } from '#/lib/content-locale'
@@ -13,8 +14,6 @@ import {
   lockSiteLinkIndex,
   rebuildEntryLinkIndex,
 } from '#/server/content/entry-link-index'
-
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /**
  * Validates and canonicalises the languages a site is set to. `main` must be
@@ -84,7 +83,7 @@ export async function countMainLanguageGaps(
   siteId: string,
   newMain: string,
   previousMain: string | null,
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ): Promise<number> {
   const rows = await connection
     .select({ draftData: entry.draftData, fields: collection.fields })

@@ -1,0 +1,1404 @@
+{
+  "hash": "519c611a077f77745c6d599d4ee6900a45eee04f7ca85696bee56f9d2a00cfb1",
+  "snapshot": {
+    "publicationId": "",
+    "hash": "519c611a077f77745c6d599d4ee6900a45eee04f7ca85696bee56f9d2a00cfb1",
+    "collections": {
+      "articles": [
+        {
+          "id": "snapfxa-single-two",
+          "slug": "two",
+          "publishedAt": "2026-01-03T09:30:00.000Z",
+          "data": {
+            "slug": "two",
+            "title": "Two",
+            "body": {
+              "json": {
+                "type": "doc",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "text": "To one start",
+                        "type": "text",
+                        "marks": [
+                          {
+                            "type": "link",
+                            "attrs": {
+                              "href": "/blog/one#start",
+                              "anchor": "start",
+                              "entryId": "snapfxa-single-one",
+                              "collection": "articles"
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "text": "To one gone",
+                        "type": "text",
+                        "marks": [
+                          {
+                            "type": "link",
+                            "attrs": {
+                              "href": "/blog/one",
+                              "anchor": "gone",
+                              "entryId": "snapfxa-single-one",
+                              "collection": "articles"
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "text": "To draft",
+                        "type": "text"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "markdown": "[To one start][areca-entry-1]\n\n[To one gone][areca-entry-2]\n\nTo draft\n\n[areca-entry-1]: /blog/one#start\n[areca-entry-2]: /blog/one",
+              "document": {
+                "type": "root",
+                "children": [
+                  {
+                    "type": "paragraph",
+                    "children": [
+                      {
+                        "type": "link",
+                        "href": "/blog/one#start",
+                        "entryId": "snapfxa-single-one",
+                        "children": [
+                          {
+                            "type": "text",
+                            "value": "To one start"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "children": [
+                      {
+                        "type": "link",
+                        "href": "/blog/one",
+                        "entryId": "snapfxa-single-one",
+                        "children": [
+                          {
+                            "type": "text",
+                            "value": "To one gone"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "To draft"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "html": "<p><a href=\"/blog/one#start\" data-areca-entry=\"snapfxa-single-one\">To one start</a></p>\n<p><a href=\"/blog/one\" data-areca-entry=\"snapfxa-single-one\">To one gone</a></p>\n<p>To draft</p>",
+              "entryLinks": [
+                {
+                  "label": "areca-entry-1"
+                },
+                {
+                  "label": "areca-entry-2"
+                }
+              ]
+            },
+            "heroImage": {
+              "url": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/hero.png",
+              "width": 640,
+              "height": 480,
+              "alt": "hero alt",
+              "mimeType": "image/png"
+            },
+            "category": "updates",
+            "related": {
+              "collection": "articles",
+              "slug": "one",
+              "id": "snapfxa-single-one"
+            }
+          },
+          "seo": {
+            "title": "Two",
+            "description": "To one start To one gone To draft",
+            "canonicalUrl": "https://fixture.example/blog/two",
+            "robots": {
+              "index": true,
+              "follow": true,
+              "content": "index, follow, max-image-preview:large"
+            },
+            "focusKeyphrase": null,
+            "openGraph": {
+              "type": "article",
+              "title": "Two",
+              "description": "To one start To one gone To draft",
+              "url": "https://fixture.example/blog/two",
+              "siteName": "Fixture Site",
+              "image": {
+                "url": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/hero.png",
+                "width": 640,
+                "height": 480,
+                "alt": "hero alt",
+                "mimeType": "image/png"
+              },
+              "publishedTime": "2026-01-03T09:30:00.000Z",
+              "modifiedTime": "2026-01-03T09:30:00.000Z"
+            },
+            "twitter": {
+              "card": "summary_large_image",
+              "title": "Two",
+              "description": "To one start To one gone To draft",
+              "image": {
+                "url": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/hero.png",
+                "width": 640,
+                "height": 480,
+                "alt": "hero alt",
+                "mimeType": "image/png"
+              }
+            },
+            "author": null,
+            "summary": null,
+            "keyTakeaways": [],
+            "faq": [],
+            "about": [],
+            "jsonLd": [
+              {
+                "@context": "https://schema.org",
+                "@type": "Article",
+                "headline": "Two",
+                "description": "To one start To one gone To draft",
+                "image": [
+                  "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/hero.png"
+                ],
+                "url": "https://fixture.example/blog/two",
+                "mainEntityOfPage": "https://fixture.example/blog/two",
+                "datePublished": "2026-01-03T09:30:00.000Z",
+                "dateModified": "2026-01-03T09:30:00.000Z",
+                "publisher": {
+                  "@type": "Organization",
+                  "name": "Fixture Site",
+                  "url": "https://fixture.example"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "snapfxa-single-one",
+          "slug": "one",
+          "publishedAt": "2026-01-02T09:30:00.000Z",
+          "data": {
+            "slug": "one",
+            "title": "One",
+            "excerpt": "One excerpt",
+            "body": {
+              "json": {
+                "type": "doc",
+                "content": [
+                  {
+                    "type": "heading",
+                    "attrs": {
+                      "id": "start",
+                      "level": 2
+                    },
+                    "content": [
+                      {
+                        "text": "Start",
+                        "type": "text"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "text": "One body",
+                        "type": "text"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "image",
+                    "attrs": {
+                      "src": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/inline.png"
+                    }
+                  }
+                ]
+              },
+              "markdown": "## Start\n\nOne body\n\n![](https://cms.fixture/api/assets/file/snapfx/snapfxa-single/inline.png)",
+              "document": {
+                "type": "root",
+                "children": [
+                  {
+                    "type": "heading",
+                    "depth": 2,
+                    "id": "start",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "Start"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "One body"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "children": [
+                      {
+                        "type": "image",
+                        "src": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/inline.png",
+                        "alt": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "html": "<h2 id=\"start\">Start</h2>\n<p>One body</p>\n<p><img src=\"https://cms.fixture/api/assets/file/snapfx/snapfxa-single/inline.png\" alt=\"\"></p>"
+            },
+            "heroImage": {
+              "url": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/hero.png",
+              "width": 640,
+              "height": 480,
+              "alt": "hero alt",
+              "mimeType": "image/png"
+            },
+            "publishedAt": "2025-12-24T08:00:00.000Z",
+            "category": "news",
+            "related": null
+          },
+          "seo": {
+            "title": "One SEO title",
+            "description": "One SEO description",
+            "canonicalUrl": "https://fixture.example/blog/one",
+            "robots": {
+              "index": true,
+              "follow": true,
+              "content": "index, follow, max-image-preview:large"
+            },
+            "focusKeyphrase": null,
+            "openGraph": {
+              "type": "article",
+              "title": "One SEO title",
+              "description": "One SEO description",
+              "url": "https://fixture.example/blog/one",
+              "siteName": "Fixture Site",
+              "image": {
+                "url": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/og.png",
+                "width": 642,
+                "height": 482,
+                "alt": "og alt",
+                "mimeType": "image/png"
+              },
+              "publishedTime": "2025-12-24T08:00:00.000Z",
+              "modifiedTime": "2026-01-02T09:30:00.000Z"
+            },
+            "twitter": {
+              "card": "summary_large_image",
+              "title": "One SEO title",
+              "description": "One SEO description",
+              "image": {
+                "url": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/og.png",
+                "width": 642,
+                "height": 482,
+                "alt": "og alt",
+                "mimeType": "image/png"
+              }
+            },
+            "author": {
+              "name": "Ada",
+              "url": "https://ada.example",
+              "bio": null
+            },
+            "summary": "One summary",
+            "keyTakeaways": [
+              "First",
+              "Second"
+            ],
+            "faq": [
+              {
+                "question": "Why?",
+                "answer": "Because."
+              }
+            ],
+            "about": [
+              {
+                "name": "Testing",
+                "sameAs": "https://testing.example"
+              }
+            ],
+            "jsonLd": [
+              {
+                "@context": "https://schema.org",
+                "@type": "BlogPosting",
+                "headline": "One SEO title",
+                "description": "One SEO description",
+                "image": [
+                  "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/og.png"
+                ],
+                "url": "https://fixture.example/blog/one",
+                "mainEntityOfPage": "https://fixture.example/blog/one",
+                "datePublished": "2025-12-24T08:00:00.000Z",
+                "dateModified": "2026-01-02T09:30:00.000Z",
+                "author": [
+                  {
+                    "@type": "Person",
+                    "name": "Ada",
+                    "url": "https://ada.example"
+                  }
+                ],
+                "publisher": {
+                  "@type": "Organization",
+                  "name": "Fixture Site",
+                  "url": "https://fixture.example"
+                },
+                "abstract": "One summary",
+                "about": [
+                  {
+                    "@type": "Thing",
+                    "name": "Testing",
+                    "sameAs": "https://testing.example"
+                  }
+                ]
+              },
+              {
+                "@context": "https://schema.org",
+                "@type": "FAQPage",
+                "mainEntity": [
+                  {
+                    "@type": "Question",
+                    "name": "Why?",
+                    "acceptedAnswer": {
+                      "@type": "Answer",
+                      "text": "Because."
+                    }
+                  }
+                ]
+              },
+              {
+                "@type": "Thing",
+                "name": "Extra"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "globals": {
+      "company": {
+        "id": "snapfxa-single-company",
+        "publishedAt": "2026-01-05T09:30:00.000Z",
+        "data": {
+          "name": "Fixture BV",
+          "logo": {
+            "url": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/logo.png",
+            "width": 643,
+            "height": 483,
+            "alt": "logo alt",
+            "mimeType": "image/png"
+          },
+          "about": {
+            "json": {
+              "type": "doc",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "text": "See draft",
+                      "type": "text"
+                    }
+                  ]
+                },
+                {
+                  "type": "image",
+                  "attrs": {
+                    "src": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/inline.png"
+                  }
+                }
+              ]
+            },
+            "markdown": "See draft\n\n![](https://cms.fixture/api/assets/file/snapfx/snapfxa-single/inline.png)",
+            "document": {
+              "type": "root",
+              "children": [
+                {
+                  "type": "paragraph",
+                  "children": [
+                    {
+                      "type": "text",
+                      "value": "See draft"
+                    }
+                  ]
+                },
+                {
+                  "type": "paragraph",
+                  "children": [
+                    {
+                      "type": "image",
+                      "src": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/inline.png",
+                      "alt": ""
+                    }
+                  ]
+                }
+              ]
+            },
+            "html": "<p>See draft</p>\n<p><img src=\"https://cms.fixture/api/assets/file/snapfx/snapfxa-single/inline.png\" alt=\"\"></p>"
+          }
+        },
+        "seo": {
+          "title": "Company",
+          "description": "About us",
+          "canonicalUrl": "https://fixture.example/about",
+          "robots": {
+            "index": true,
+            "follow": true,
+            "content": "index, follow, max-image-preview:large"
+          },
+          "focusKeyphrase": null,
+          "openGraph": {
+            "type": "article",
+            "title": "Company",
+            "description": "About us",
+            "url": "https://fixture.example/about",
+            "siteName": "Fixture Site",
+            "image": {
+              "url": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/og.png",
+              "width": 642,
+              "height": 482,
+              "alt": "og alt",
+              "mimeType": "image/png"
+            },
+            "publishedTime": "2026-01-05T09:30:00.000Z",
+            "modifiedTime": "2026-01-05T09:30:00.000Z"
+          },
+          "twitter": {
+            "card": "summary_large_image",
+            "title": "Company",
+            "description": "About us",
+            "image": {
+              "url": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/og.png",
+              "width": 642,
+              "height": 482,
+              "alt": "og alt",
+              "mimeType": "image/png"
+            }
+          },
+          "author": null,
+          "summary": null,
+          "keyTakeaways": [],
+          "faq": [],
+          "about": [],
+          "jsonLd": [
+            {
+              "@context": "https://schema.org",
+              "@type": "Article",
+              "headline": "Company",
+              "description": "About us",
+              "image": [
+                "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/og.png"
+              ],
+              "url": "https://fixture.example/about",
+              "mainEntityOfPage": "https://fixture.example/about",
+              "datePublished": "2026-01-05T09:30:00.000Z",
+              "dateModified": "2026-01-05T09:30:00.000Z",
+              "publisher": {
+                "@type": "Organization",
+                "name": "Fixture Site",
+                "url": "https://fixture.example"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "globalSchema": {
+      "company": {
+        "label": "Company",
+        "fields": [
+          {
+            "key": "name",
+            "type": "text",
+            "label": "Name",
+            "required": true
+          },
+          {
+            "key": "logo",
+            "type": "image",
+            "label": "Logo"
+          },
+          {
+            "key": "about",
+            "type": "richtext",
+            "label": "About"
+          }
+        ],
+        "seo": true,
+        "previewPath": "/about"
+      }
+    },
+    "schema": {
+      "articles": {
+        "route": "/blog/$slug",
+        "label": "Articles",
+        "fields": [
+          {
+            "key": "slug",
+            "label": "Slug",
+            "type": "slug",
+            "required": true
+          },
+          {
+            "key": "title",
+            "type": "text",
+            "label": "Title",
+            "required": true
+          },
+          {
+            "key": "excerpt",
+            "type": "textarea",
+            "label": "Excerpt"
+          },
+          {
+            "key": "body",
+            "type": "richtext",
+            "label": "Body",
+            "required": true
+          },
+          {
+            "key": "heroImage",
+            "type": "image",
+            "label": "Hero image"
+          },
+          {
+            "key": "publishedAt",
+            "type": "datetime",
+            "label": "Published at"
+          },
+          {
+            "key": "category",
+            "type": "select",
+            "label": "Category",
+            "options": [
+              "news",
+              "updates"
+            ]
+          },
+          {
+            "key": "related",
+            "type": "reference",
+            "label": "Related",
+            "collection": "articles"
+          }
+        ]
+      }
+    },
+    "assets": []
+  },
+  "entryVersions": [],
+  "linkWarnings": [
+    {
+      "sourceEntryId": "snapfxa-single-two",
+      "sourceTitle": "Two",
+      "sourceCollectionKey": "articles",
+      "sourceGlobal": false,
+      "locale": null,
+      "field": "body",
+      "targetEntryId": "snapfxa-single-draft",
+      "targetTitle": "Draft",
+      "anchor": null,
+      "reason": "not-live"
+    },
+    {
+      "sourceEntryId": "snapfxa-single-two",
+      "sourceTitle": "Two",
+      "sourceCollectionKey": "articles",
+      "sourceGlobal": false,
+      "locale": null,
+      "field": "body",
+      "targetEntryId": "snapfxa-single-one",
+      "targetTitle": "One",
+      "anchor": "gone",
+      "reason": "missing-section"
+    },
+    {
+      "sourceEntryId": "snapfxa-single-company",
+      "sourceTitle": "Company",
+      "sourceCollectionKey": "company",
+      "sourceGlobal": true,
+      "locale": null,
+      "field": "about",
+      "targetEntryId": "snapfxa-single-draft",
+      "targetTitle": "Draft",
+      "anchor": null,
+      "reason": "not-live"
+    }
+  ],
+  "previews": {
+    "one:default": {
+      "id": "snapfxa-single-one",
+      "slug": "one",
+      "publishedAt": "2026-01-02T09:30:00.000Z",
+      "data": {
+        "slug": "one",
+        "title": "One",
+        "excerpt": "One excerpt",
+        "body": {
+          "json": {
+            "type": "doc",
+            "content": [
+              {
+                "type": "heading",
+                "attrs": {
+                  "id": "start",
+                  "level": 2
+                },
+                "content": [
+                  {
+                    "text": "Start",
+                    "type": "text"
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "text": "One body",
+                    "type": "text"
+                  }
+                ]
+              },
+              {
+                "type": "image",
+                "attrs": {
+                  "src": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/inline.png"
+                }
+              }
+            ]
+          },
+          "markdown": "## Start\n\nOne body\n\n![](https://cms.fixture/api/assets/file/snapfx/snapfxa-single/inline.png)",
+          "document": {
+            "type": "root",
+            "children": [
+              {
+                "type": "heading",
+                "depth": 2,
+                "id": "start",
+                "children": [
+                  {
+                    "type": "text",
+                    "value": "Start"
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "children": [
+                  {
+                    "type": "text",
+                    "value": "One body"
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "children": [
+                  {
+                    "type": "image",
+                    "src": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/inline.png",
+                    "alt": ""
+                  }
+                ]
+              }
+            ]
+          },
+          "html": "<h2 id=\"start\">Start</h2>\n<p>One body</p>\n<p><img src=\"https://cms.fixture/api/assets/file/snapfx/snapfxa-single/inline.png\" alt=\"\"></p>"
+        },
+        "heroImage": {
+          "url": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/hero.png",
+          "width": 640,
+          "height": 480,
+          "alt": "hero alt",
+          "mimeType": "image/png"
+        },
+        "publishedAt": "2025-12-24T08:00:00.000Z",
+        "category": "news",
+        "related": null
+      },
+      "seo": {
+        "title": "One SEO title",
+        "description": "One SEO description",
+        "canonicalUrl": "https://fixture.example/blog/one",
+        "robots": {
+          "index": true,
+          "follow": true,
+          "content": "index, follow, max-image-preview:large"
+        },
+        "focusKeyphrase": null,
+        "openGraph": {
+          "type": "article",
+          "title": "One SEO title",
+          "description": "One SEO description",
+          "url": "https://fixture.example/blog/one",
+          "siteName": "Fixture Site",
+          "image": {
+            "url": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/og.png",
+            "width": 642,
+            "height": 482,
+            "alt": "og alt",
+            "mimeType": "image/png"
+          },
+          "publishedTime": "2025-12-24T08:00:00.000Z",
+          "modifiedTime": "2026-01-02T09:30:00.000Z"
+        },
+        "twitter": {
+          "card": "summary_large_image",
+          "title": "One SEO title",
+          "description": "One SEO description",
+          "image": {
+            "url": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/og.png",
+            "width": 642,
+            "height": 482,
+            "alt": "og alt",
+            "mimeType": "image/png"
+          }
+        },
+        "author": {
+          "name": "Ada",
+          "url": "https://ada.example",
+          "bio": null
+        },
+        "summary": "One summary",
+        "keyTakeaways": [
+          "First",
+          "Second"
+        ],
+        "faq": [
+          {
+            "question": "Why?",
+            "answer": "Because."
+          }
+        ],
+        "about": [
+          {
+            "name": "Testing",
+            "sameAs": "https://testing.example"
+          }
+        ],
+        "jsonLd": [
+          {
+            "@context": "https://schema.org",
+            "@type": "BlogPosting",
+            "headline": "One SEO title",
+            "description": "One SEO description",
+            "image": [
+              "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/og.png"
+            ],
+            "url": "https://fixture.example/blog/one",
+            "mainEntityOfPage": "https://fixture.example/blog/one",
+            "datePublished": "2025-12-24T08:00:00.000Z",
+            "dateModified": "2026-01-02T09:30:00.000Z",
+            "author": [
+              {
+                "@type": "Person",
+                "name": "Ada",
+                "url": "https://ada.example"
+              }
+            ],
+            "publisher": {
+              "@type": "Organization",
+              "name": "Fixture Site",
+              "url": "https://fixture.example"
+            },
+            "abstract": "One summary",
+            "about": [
+              {
+                "@type": "Thing",
+                "name": "Testing",
+                "sameAs": "https://testing.example"
+              }
+            ]
+          },
+          {
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Why?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Because."
+                }
+              }
+            ]
+          },
+          {
+            "@type": "Thing",
+            "name": "Extra"
+          }
+        ]
+      }
+    },
+    "two:default": {
+      "id": "snapfxa-single-two",
+      "slug": "two",
+      "publishedAt": "2026-01-03T09:30:00.000Z",
+      "data": {
+        "slug": "two",
+        "title": "Two",
+        "body": {
+          "json": {
+            "type": "doc",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "text": "To one start",
+                    "type": "text",
+                    "marks": [
+                      {
+                        "type": "link",
+                        "attrs": {
+                          "href": "/blog/one#start",
+                          "anchor": "start",
+                          "entryId": "snapfxa-single-one",
+                          "collection": "articles"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "text": "To one gone",
+                    "type": "text",
+                    "marks": [
+                      {
+                        "type": "link",
+                        "attrs": {
+                          "href": "/blog/one#gone",
+                          "anchor": "gone",
+                          "entryId": "snapfxa-single-one",
+                          "collection": "articles"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "text": "To draft",
+                    "type": "text",
+                    "marks": [
+                      {
+                        "type": "link",
+                        "attrs": {
+                          "href": "/blog/draft",
+                          "entryId": "snapfxa-single-draft",
+                          "collection": "articles"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "markdown": "[To one start][areca-entry-1]\n\n[To one gone][areca-entry-2]\n\n[To draft][areca-entry-3]\n\n[areca-entry-1]: /blog/one#start\n[areca-entry-2]: /blog/one#gone\n[areca-entry-3]: /blog/draft",
+          "document": {
+            "type": "root",
+            "children": [
+              {
+                "type": "paragraph",
+                "children": [
+                  {
+                    "type": "link",
+                    "href": "/blog/one#start",
+                    "entryId": "snapfxa-single-one",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "To one start"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "children": [
+                  {
+                    "type": "link",
+                    "href": "/blog/one#gone",
+                    "entryId": "snapfxa-single-one",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "To one gone"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "children": [
+                  {
+                    "type": "link",
+                    "href": "/blog/draft",
+                    "entryId": "snapfxa-single-draft",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "To draft"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "html": "<p><a href=\"/blog/one#start\" data-areca-entry=\"snapfxa-single-one\">To one start</a></p>\n<p><a href=\"/blog/one#gone\" data-areca-entry=\"snapfxa-single-one\">To one gone</a></p>\n<p><a href=\"/blog/draft\" data-areca-entry=\"snapfxa-single-draft\">To draft</a></p>",
+          "entryLinks": [
+            {
+              "label": "areca-entry-1"
+            },
+            {
+              "label": "areca-entry-2"
+            },
+            {
+              "label": "areca-entry-3"
+            }
+          ]
+        },
+        "heroImage": {
+          "url": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/hero.png",
+          "width": 640,
+          "height": 480,
+          "alt": "hero alt",
+          "mimeType": "image/png"
+        },
+        "category": "updates",
+        "related": {
+          "collection": "articles",
+          "slug": "one",
+          "id": "snapfxa-single-one"
+        }
+      },
+      "seo": {
+        "title": "Two",
+        "description": "To one start To one gone To draft",
+        "canonicalUrl": "https://fixture.example/blog/two",
+        "robots": {
+          "index": true,
+          "follow": true,
+          "content": "index, follow, max-image-preview:large"
+        },
+        "focusKeyphrase": null,
+        "openGraph": {
+          "type": "article",
+          "title": "Two",
+          "description": "To one start To one gone To draft",
+          "url": "https://fixture.example/blog/two",
+          "siteName": "Fixture Site",
+          "image": {
+            "url": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/hero.png",
+            "width": 640,
+            "height": 480,
+            "alt": "hero alt",
+            "mimeType": "image/png"
+          },
+          "publishedTime": "2026-01-03T09:30:00.000Z",
+          "modifiedTime": "2026-01-03T09:30:00.000Z"
+        },
+        "twitter": {
+          "card": "summary_large_image",
+          "title": "Two",
+          "description": "To one start To one gone To draft",
+          "image": {
+            "url": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/hero.png",
+            "width": 640,
+            "height": 480,
+            "alt": "hero alt",
+            "mimeType": "image/png"
+          }
+        },
+        "author": null,
+        "summary": null,
+        "keyTakeaways": [],
+        "faq": [],
+        "about": [],
+        "jsonLd": [
+          {
+            "@context": "https://schema.org",
+            "@type": "Article",
+            "headline": "Two",
+            "description": "To one start To one gone To draft",
+            "image": [
+              "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/hero.png"
+            ],
+            "url": "https://fixture.example/blog/two",
+            "mainEntityOfPage": "https://fixture.example/blog/two",
+            "datePublished": "2026-01-03T09:30:00.000Z",
+            "dateModified": "2026-01-03T09:30:00.000Z",
+            "publisher": {
+              "@type": "Organization",
+              "name": "Fixture Site",
+              "url": "https://fixture.example"
+            }
+          }
+        ]
+      }
+    },
+    "company:default": {
+      "id": "snapfxa-single-company",
+      "publishedAt": "2026-01-05T09:30:00.000Z",
+      "data": {
+        "name": "Fixture BV",
+        "logo": {
+          "url": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/logo.png",
+          "width": 643,
+          "height": 483,
+          "alt": "logo alt",
+          "mimeType": "image/png"
+        },
+        "about": {
+          "json": {
+            "type": "doc",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "text": "See draft",
+                    "type": "text",
+                    "marks": [
+                      {
+                        "type": "link",
+                        "attrs": {
+                          "href": "/blog/draft",
+                          "entryId": "snapfxa-single-draft",
+                          "collection": "articles"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "image",
+                "attrs": {
+                  "src": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/inline.png"
+                }
+              }
+            ]
+          },
+          "markdown": "[See draft][areca-entry-1]\n\n![](https://cms.fixture/api/assets/file/snapfx/snapfxa-single/inline.png)\n\n[areca-entry-1]: /blog/draft",
+          "document": {
+            "type": "root",
+            "children": [
+              {
+                "type": "paragraph",
+                "children": [
+                  {
+                    "type": "link",
+                    "href": "/blog/draft",
+                    "entryId": "snapfxa-single-draft",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "See draft"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "children": [
+                  {
+                    "type": "image",
+                    "src": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/inline.png",
+                    "alt": ""
+                  }
+                ]
+              }
+            ]
+          },
+          "html": "<p><a href=\"/blog/draft\" data-areca-entry=\"snapfxa-single-draft\">See draft</a></p>\n<p><img src=\"https://cms.fixture/api/assets/file/snapfx/snapfxa-single/inline.png\" alt=\"\"></p>",
+          "entryLinks": [
+            {
+              "label": "areca-entry-1"
+            }
+          ]
+        }
+      },
+      "seo": {
+        "title": "Company",
+        "description": "About us",
+        "canonicalUrl": "https://fixture.example/about",
+        "robots": {
+          "index": true,
+          "follow": true,
+          "content": "index, follow, max-image-preview:large"
+        },
+        "focusKeyphrase": null,
+        "openGraph": {
+          "type": "article",
+          "title": "Company",
+          "description": "About us",
+          "url": "https://fixture.example/about",
+          "siteName": "Fixture Site",
+          "image": {
+            "url": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/og.png",
+            "width": 642,
+            "height": 482,
+            "alt": "og alt",
+            "mimeType": "image/png"
+          },
+          "publishedTime": "2026-01-05T09:30:00.000Z",
+          "modifiedTime": "2026-01-05T09:30:00.000Z"
+        },
+        "twitter": {
+          "card": "summary_large_image",
+          "title": "Company",
+          "description": "About us",
+          "image": {
+            "url": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/og.png",
+            "width": 642,
+            "height": 482,
+            "alt": "og alt",
+            "mimeType": "image/png"
+          }
+        },
+        "author": null,
+        "summary": null,
+        "keyTakeaways": [],
+        "faq": [],
+        "about": [],
+        "jsonLd": [
+          {
+            "@context": "https://schema.org",
+            "@type": "Article",
+            "headline": "Company",
+            "description": "About us",
+            "image": [
+              "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/og.png"
+            ],
+            "url": "https://fixture.example/about",
+            "mainEntityOfPage": "https://fixture.example/about",
+            "datePublished": "2026-01-05T09:30:00.000Z",
+            "dateModified": "2026-01-05T09:30:00.000Z",
+            "publisher": {
+              "@type": "Organization",
+              "name": "Fixture Site",
+              "url": "https://fixture.example"
+            }
+          }
+        ]
+      }
+    },
+    "unsaved": {
+      "id": "snapfxa-single-new",
+      "slug": "new",
+      "publishedAt": null,
+      "data": {
+        "slug": "new",
+        "title": "New",
+        "body": {
+          "json": {
+            "type": "doc",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "To draft",
+                    "marks": [
+                      {
+                        "type": "link",
+                        "attrs": {
+                          "href": "/blog/draft",
+                          "entryId": "snapfxa-single-draft",
+                          "collection": "articles"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "To two",
+                    "marks": [
+                      {
+                        "type": "link",
+                        "attrs": {
+                          "href": "/blog/two",
+                          "entryId": "snapfxa-single-two",
+                          "collection": "articles"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "image",
+                "attrs": {
+                  "src": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/hero.png"
+                }
+              }
+            ]
+          },
+          "markdown": "[To draft][areca-entry-1]\n\n[To two][areca-entry-2]\n\n![](https://cms.fixture/api/assets/file/snapfx/snapfxa-single/hero.png)\n\n[areca-entry-1]: /blog/draft\n[areca-entry-2]: /blog/two",
+          "document": {
+            "type": "root",
+            "children": [
+              {
+                "type": "paragraph",
+                "children": [
+                  {
+                    "type": "link",
+                    "href": "/blog/draft",
+                    "entryId": "snapfxa-single-draft",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "To draft"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "children": [
+                  {
+                    "type": "link",
+                    "href": "/blog/two",
+                    "entryId": "snapfxa-single-two",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "To two"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "paragraph",
+                "children": [
+                  {
+                    "type": "image",
+                    "src": "https://cms.fixture/api/assets/file/snapfx/snapfxa-single/hero.png",
+                    "alt": ""
+                  }
+                ]
+              }
+            ]
+          },
+          "html": "<p><a href=\"/blog/draft\" data-areca-entry=\"snapfxa-single-draft\">To draft</a></p>\n<p><a href=\"/blog/two\" data-areca-entry=\"snapfxa-single-two\">To two</a></p>\n<p><img src=\"https://cms.fixture/api/assets/file/snapfx/snapfxa-single/hero.png\" alt=\"\"></p>",
+          "entryLinks": [
+            {
+              "label": "areca-entry-1"
+            },
+            {
+              "label": "areca-entry-2"
+            }
+          ]
+        },
+        "heroImage": null,
+        "related": null
+      },
+      "seo": {
+        "title": "New",
+        "description": "To draft To two",
+        "canonicalUrl": "https://fixture.example/blog/new",
+        "robots": {
+          "index": true,
+          "follow": true,
+          "content": "index, follow, max-image-preview:large"
+        },
+        "focusKeyphrase": null,
+        "openGraph": {
+          "type": "article",
+          "title": "New",
+          "description": "To draft To two",
+          "url": "https://fixture.example/blog/new",
+          "siteName": "Fixture Site",
+          "image": null,
+          "publishedTime": null,
+          "modifiedTime": null
+        },
+        "twitter": {
+          "card": "summary",
+          "title": "New",
+          "description": "To draft To two",
+          "image": null
+        },
+        "author": null,
+        "summary": null,
+        "keyTakeaways": [],
+        "faq": [],
+        "about": [],
+        "jsonLd": [
+          {
+            "@context": "https://schema.org",
+            "@type": "Article",
+            "headline": "New",
+            "description": "To draft To two",
+            "url": "https://fixture.example/blog/new",
+            "mainEntityOfPage": "https://fixture.example/blog/new",
+            "publisher": {
+              "@type": "Organization",
+              "name": "Fixture Site",
+              "url": "https://fixture.example"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

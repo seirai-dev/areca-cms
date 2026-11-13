@@ -32,6 +32,7 @@ import {
 import type { Icon as IconComponent } from '@phosphor-icons/react'
 
 import { useCspNonce } from '#/hooks/use-csp-nonce'
+import { useShortcutLabel } from '#/components/ui/kbd'
 import { assetFileUrl, emptyRichText } from '#/lib/content/utils'
 import { Button } from '#/components/ui/button'
 import {
@@ -65,6 +66,9 @@ import {
 import type { DeadLinkState } from './dead-link-extension'
 import { LinkPicker } from './link-picker'
 import type { LinkContext, LinkSession } from './link-picker'
+import { readLinkMarkAttrs } from './link-mark'
+import { useSlashMenu } from './use-slash-menu'
+import type { SlashState } from './use-slash-menu'
 import { useLinkChecks } from './use-link-targets'
 import type { LinkPair } from './use-link-targets'
 
@@ -77,45 +81,6 @@ const EDITOR_EXTENSIONS = [
   deadEntryLinks,
 ]
 
-function useMod() {
-  const [mod, setMod] = React.useState('Ctrl+')
-  React.useEffect(() => {
-    if (/Mac|iPhone|iPad/.test(navigator.platform)) setMod('⌘')
-  }, [])
-  return mod
-}
-
-/** Shortcut labels are written with Apple glyphs; spell them out elsewhere
- *  ("Ctrl+Alt+2", not "Ctrl+⌥2"). Only rendered in menus and tooltips. */
-function displayShortcut(shortcut: string) {
-  if (
-    typeof navigator !== 'undefined' &&
-    /Mac|iPhone|iPad/.test(navigator.platform)
-  ) {
-    return shortcut
-  }
-  return shortcut.replace(/⌥/g, 'Alt+').replace(/⇧/g, 'Shift+')
-}
-
-const EMPTY_STATE = {
-  isEmpty: true,
-  block: 'paragraph' as BlockType,
-  bold: false,
-  italic: false,
-  code: false,
-  link: false,
-  bulletList: false,
-  orderedList: false,
-  table: false,
-  canAddRow: false,
-  canAddColumn: false,
-  canDeleteRow: false,
-  canDeleteColumn: false,
-  canDeleteTable: false,
-  canUndo: false,
-  canRedo: false,
-}
-
 type BlockType = 'paragraph' | 'h2' | 'h3' | 'h4' | 'quote' | 'code'
 
 function currentBlock(e: Editor): BlockType {
@@ -127,6 +92,31 @@ function currentBlock(e: Editor): BlockType {
   return 'paragraph'
 }
 
+/** What the format bar shows; `null` (no editor yet) is the empty state. */
+function toolbarState(e: Editor | null) {
+  const is = (name: string) => e?.isActive(name) ?? false
+  const can = (check: (commands: ReturnType<Editor['can']>) => boolean) =>
+    e ? check(e.can()) : false
+  return {
+    isEmpty: e ? e.isEmpty && !is('table') && !is('image') : true,
+    block: e ? currentBlock(e) : ('paragraph' as BlockType),
+    bold: is('bold'),
+    italic: is('italic'),
+    code: is('code'),
+    link: is('link'),
+    bulletList: is('bulletList'),
+    orderedList: is('orderedList'),
+    table: is('table'),
+    canAddRow: can((c) => c.addRowAfter()),
+    canAddColumn: can((c) => c.addColumnAfter()),
+    canDeleteRow: can((c) => c.deleteRow()),
+    canDeleteColumn: can((c) => c.deleteColumn()),
+    canDeleteTable: can((c) => c.deleteTable()),
+    canUndo: can((c) => c.undo()),
+    canRedo: can((c) => c.redo()),
+  }
+}
+
 type Command = {
   id: string
   label: () => string
@@ -134,7 +124,8 @@ type Command = {
   aria?: () => string
   icon: IconComponent
   keywords: string
-  shortcut?: (mod: string) => string
+  /** Written with Apple glyphs; `shortcutLabel` spells it out elsewhere. */
+  shortcut?: string
   run: (editor: Editor) => void
 }
 
@@ -145,7 +136,7 @@ function blockCommands(): (Command & { id: BlockType })[] {
       label: () => m.editor_toolbar_paragraph(),
       icon: Paragraph,
       keywords: 'paragraph text body',
-      shortcut: (mod) => `${mod}⌥0`,
+      shortcut: '⌘⌥0',
       run: (e) => e.chain().focus().setParagraph().run(),
     },
     {
@@ -153,7 +144,7 @@ function blockCommands(): (Command & { id: BlockType })[] {
       label: () => m.editor_toolbar_heading_2(),
       icon: TextHTwo,
       keywords: 'heading h2 title large',
-      shortcut: (mod) => `${mod}⌥2`,
+      shortcut: '⌘⌥2',
       run: (e) => e.chain().focus().setHeading({ level: 2 }).run(),
     },
     {
@@ -161,7 +152,7 @@ function blockCommands(): (Command & { id: BlockType })[] {
       label: () => m.editor_toolbar_heading_3(),
       icon: TextHThree,
       keywords: 'heading h3 subtitle',
-      shortcut: (mod) => `${mod}⌥3`,
+      shortcut: '⌘⌥3',
       run: (e) => e.chain().focus().setHeading({ level: 3 }).run(),
     },
     {
@@ -169,7 +160,7 @@ function blockCommands(): (Command & { id: BlockType })[] {
       label: () => m.editor_toolbar_heading_4(),
       icon: TextHFour,
       keywords: 'heading h4 small',
-      shortcut: (mod) => `${mod}⌥4`,
+      shortcut: '⌘⌥4',
       run: (e) => e.chain().focus().setHeading({ level: 4 }).run(),
     },
     {
@@ -177,7 +168,7 @@ function blockCommands(): (Command & { id: BlockType })[] {
       label: () => m.editor_toolbar_quote(),
       icon: Quotes,
       keywords: 'quote blockquote citation',
-      shortcut: (mod) => `${mod}⇧B`,
+      shortcut: '⌘⇧B',
       run: (e) => {
         const chain = e.chain().focus()
         if (e.isActive('blockquote')) chain.run()
@@ -189,7 +180,7 @@ function blockCommands(): (Command & { id: BlockType })[] {
       label: () => m.editor_toolbar_code_block(),
       icon: Code,
       keywords: 'code block pre',
-      shortcut: (mod) => `${mod}⌥C`,
+      shortcut: '⌘⌥C',
       run: (e) => e.chain().focus().setCodeBlock().run(),
     },
   ]
@@ -203,7 +194,7 @@ function blockCommands(): (Command & { id: BlockType })[] {
  * opens the same insert actions. Every earlier capability, shortcut and test
  * id is kept.
  */
-export function RichTextEditor({
+export const RichTextEditor = React.memo(function RichTextEditorField({
   id,
   label,
   value,
@@ -229,7 +220,7 @@ export function RichTextEditor({
   /** Drops the Write-mode minimum height (Visual mode's editor column). */
   compact?: boolean
 }) {
-  const mod = useMod()
+  const shortcut = useShortcutLabel()
   const wrapperRef = React.useRef<HTMLDivElement>(null)
   const [focused, setFocused] = React.useState(false)
   const [openMenus, setOpenMenus] = React.useState(0)
@@ -251,13 +242,7 @@ export function RichTextEditor({
     pairs: linkPairs,
   })
   const refetchLinkChecks = linkChecks.refetch
-  const [slash, setSlash] = React.useState<SlashState | null>(null)
-  const [slashIndex, setSlashIndex] = React.useState(0)
-  const slashQueryRef = React.useRef<string | null>(null)
-  // What the transaction listener last applied. Every transaction runs it,
-  // so a no-op must not reach setState: a nested update from a commit is what
-  // trips React's "Maximum update depth exceeded".
-  const slashAppliedRef = React.useRef<SlashState | null>(null)
+  // The slash menu's key handler, set by useSlashMenu once the editor exists.
   const slashKeyRef = React.useRef<(event: KeyboardEvent) => boolean>(
     () => false,
   )
@@ -268,12 +253,14 @@ export function RichTextEditor({
 
   // TipTap writes its base ProseMirror stylesheet into <head>; it needs the nonce.
   const cspNonce = useCspNonce()
-  const editor = useEditor({
-    extensions: EDITOR_EXTENSIONS,
-    content: (value as object | null) ?? emptyRichText(),
-    immediatelyRender: false,
-    injectNonce: cspNonce,
-    editorProps: {
+  // `useEditor` compares its options on every render and updates the
+  // ProseMirror view when one differs, so they must keep their identity. The
+  // content is only read at creation; the effect below applies later changes.
+  const [initialContent] = React.useState(
+    () => (value as object | null) ?? emptyRichText(),
+  )
+  const editorProps = React.useMemo(
+    () => ({
       attributes: {
         class: cn(
           'prose max-w-none pb-8 text-body-lg text-text-primary focus:outline-none',
@@ -287,41 +274,35 @@ export function RichTextEditor({
         'aria-multiline': 'true',
         role: 'textbox',
       },
-      handleKeyDown: (_view, event) => slashKeyRef.current(event),
-    },
+      handleKeyDown: (_view: unknown, event: KeyboardEvent) =>
+        slashKeyRef.current(event),
+    }),
+    [compact, id, label],
+  )
+  /** The document this editor last reported, to tell its own changes from outside ones. */
+  const emittedRef = React.useRef<unknown>(undefined)
+  const editor = useEditor({
+    extensions: EDITOR_EXTENSIONS,
+    content: initialContent,
+    immediatelyRender: false,
+    injectNonce: cspNonce,
+    editorProps,
     onUpdate: ({ editor: next }) => {
-      onChange(next.getJSON())
+      const json = next.getJSON()
+      emittedRef.current = json
+      onChange(json)
     },
   })
 
   const liveState = useEditorState({
     editor,
-    selector: ({ editor: e }) =>
-      e
-        ? {
-            isEmpty: e.isEmpty && !e.isActive('table') && !e.isActive('image'),
-            block: currentBlock(e),
-            bold: e.isActive('bold'),
-            italic: e.isActive('italic'),
-            code: e.isActive('code'),
-            link: e.isActive('link'),
-            bulletList: e.isActive('bulletList'),
-            orderedList: e.isActive('orderedList'),
-            table: e.isActive('table'),
-            canAddRow: e.can().addRowAfter(),
-            canAddColumn: e.can().addColumnAfter(),
-            canDeleteRow: e.can().deleteRow(),
-            canDeleteColumn: e.can().deleteColumn(),
-            canDeleteTable: e.can().deleteTable(),
-            canUndo: e.can().undo(),
-            canRedo: e.can().redo(),
-          }
-        : null,
+    selector: ({ editor: e }) => toolbarState(e),
   })
 
-  // Keep the document in step with outside changes (restore, hydration).
+  // Keep the document in step with outside changes (restore, hydration). The
+  // value this editor just reported needs no comparison.
   React.useEffect(() => {
-    if (!editor) return
+    if (!editor || value === emittedRef.current) return
     const incoming = (value as object | null) ?? emptyRichText()
     if (JSON.stringify(editor.getJSON()) === JSON.stringify(incoming)) return
     editor.commands.setContent(incoming, { emitUpdate: false })
@@ -338,70 +319,6 @@ export function RichTextEditor({
     }
     editor.view.dispatch(setDeadLinks(editor.state.tr, dead))
   }, [editor, linkChecks.data])
-
-  // Slash menu: `/query` typed at the start of an empty paragraph.
-  React.useEffect(() => {
-    if (!editor) return
-    const apply = (next: SlashState | null) => {
-      const current = slashAppliedRef.current
-      if (next === null && current === null) return
-      if (
-        next &&
-        current &&
-        current.query === next.query &&
-        current.from === next.from &&
-        current.to === next.to &&
-        current.left === next.left &&
-        current.top === next.top
-      ) {
-        return
-      }
-      slashAppliedRef.current = next
-      setSlash(next)
-    }
-    const update = () => {
-      const { $from, empty } = editor.state.selection
-      if (
-        !empty ||
-        !editor.isFocused ||
-        $from.parent.type.name !== 'paragraph'
-      ) {
-        slashQueryRef.current = null
-        apply(null)
-        return
-      }
-      const text = $from.parent.textBetween(
-        0,
-        $from.parentOffset,
-        undefined,
-        '￼',
-      )
-      const match = /^\/([\p{L}\d ]{0,24})$/u.exec(text)
-      if (!match) {
-        slashQueryRef.current = null
-        apply(null)
-        return
-      }
-      const coords = editor.view.coordsAtPos($from.pos)
-      if (slashQueryRef.current !== match[1]) setSlashIndex(0)
-      slashQueryRef.current = match[1]
-      // Option updates also fire transactions: `apply` skips an unchanged menu.
-      apply({
-        query: match[1],
-        from: $from.start(),
-        to: $from.pos,
-        left: coords.left,
-        top: coords.bottom,
-      })
-    }
-    const hide = () => apply(null)
-    editor.on('transaction', update)
-    editor.on('blur', hide)
-    return () => {
-      editor.off('transaction', update)
-      editor.off('blur', hide)
-    }
-  }, [editor])
 
   const insertImage = React.useCallback(
     (asset: MediaAsset) => {
@@ -420,21 +337,7 @@ export function RichTextEditor({
   const openLinkEditor = React.useCallback(() => {
     if (!editor) return
     const { from, to } = editor.state.selection
-    const attrs = editor.getAttributes('link') as Record<string, unknown>
-    const href = typeof attrs.href === 'string' ? attrs.href : ''
-    const current = href
-      ? {
-          href,
-          entryId: typeof attrs.entryId === 'string' ? attrs.entryId : null,
-          anchor:
-            typeof attrs.anchor === 'string' && attrs.anchor !== ''
-              ? attrs.anchor
-              : null,
-          collection:
-            typeof attrs.collection === 'string' ? attrs.collection : null,
-        }
-      : null
-    setLinkSession({ from, to, current })
+    setLinkSession({ from, to, current: readLinkMarkAttrs(editor) })
     setLinkOpen(true)
     // The chip shows what the server says now (a target may have been archived).
     if (linkPairs.length > 0) void refetchLinkChecks()
@@ -496,55 +399,7 @@ export function RichTextEditor({
     [insertCommands],
   )
 
-  const slashMatches = React.useMemo(() => {
-    if (!slash) return []
-    const needle = slash.query.trim().toLowerCase()
-    if (!needle) return slashCommands
-    return slashCommands.filter(
-      (command) =>
-        command.label().toLowerCase().includes(needle) ||
-        command.keywords.includes(needle),
-    )
-  }, [slash, slashCommands])
-
-  const runSlash = React.useCallback(
-    (command: Command) => {
-      if (!editor || !slash) return
-      editor
-        .chain()
-        .focus()
-        .deleteRange({ from: slash.from, to: slash.to })
-        .run()
-      slashAppliedRef.current = null
-      setSlash(null)
-      command.run(editor)
-    },
-    [editor, slash],
-  )
-
-  slashKeyRef.current = (event) => {
-    if (!slash || slashMatches.length === 0) return false
-    if (event.key === 'ArrowDown') {
-      setSlashIndex((index) => (index + 1) % slashMatches.length)
-      return true
-    }
-    if (event.key === 'ArrowUp') {
-      setSlashIndex(
-        (index) => (index - 1 + slashMatches.length) % slashMatches.length,
-      )
-      return true
-    }
-    if (event.key === 'Enter' || event.key === 'Tab') {
-      runSlash(slashMatches[Math.min(slashIndex, slashMatches.length - 1)])
-      return true
-    }
-    if (event.key === 'Escape') {
-      slashAppliedRef.current = null
-      setSlash(null)
-      return true
-    }
-    return false
-  }
+  const slash = useSlashMenu(editor, slashCommands, slashKeyRef)
 
   if (!editor) {
     return (
@@ -555,7 +410,7 @@ export function RichTextEditor({
     )
   }
 
-  const state = liveState ?? EMPTY_STATE
+  const state = liveState ?? toolbarState(null)
   const chain = () => editor.chain().focus()
   const barVisible =
     !previewing && (focused || openMenus > 0 || linkOpen || pickerOpen)
@@ -629,7 +484,7 @@ export function RichTextEditor({
                   {block.label()}
                   {block.shortcut ? (
                     <DropdownMenuShortcut>
-                      {displayShortcut(block.shortcut(mod))}
+                      {shortcut(block.shortcut)}
                     </DropdownMenuShortcut>
                   ) : null}
                 </DropdownMenuItem>
@@ -639,7 +494,7 @@ export function RichTextEditor({
           <BarDivider />
           <BarButton
             label={m.editor_toolbar_bold()}
-            shortcut={`${mod}B`}
+            shortcut={shortcut('⌘B')}
             active={state.bold}
             disabled={state.code}
             onClick={() => chain().toggleBold().run()}
@@ -648,7 +503,7 @@ export function RichTextEditor({
           </BarButton>
           <BarButton
             label={m.editor_toolbar_italic()}
-            shortcut={`${mod}I`}
+            shortcut={shortcut('⌘I')}
             active={state.italic}
             disabled={state.code}
             onClick={() => chain().toggleItalic().run()}
@@ -657,7 +512,7 @@ export function RichTextEditor({
           </BarButton>
           <BarButton
             label={m.editor_toolbar_inline_code()}
-            shortcut={`${mod}E`}
+            shortcut={shortcut('⌘E')}
             active={state.code}
             onClick={() => chain().toggleCode().run()}
             data-testid="rich-text-inline-code"
@@ -719,7 +574,7 @@ export function RichTextEditor({
           <BarDivider />
           <BarButton
             label={m.editor_toolbar_bullet_list()}
-            shortcut={`${mod}⇧8`}
+            shortcut={shortcut('⌘⇧8')}
             active={state.bulletList}
             onClick={() => chain().toggleBulletList().run()}
           >
@@ -727,7 +582,7 @@ export function RichTextEditor({
           </BarButton>
           <BarButton
             label={m.editor_toolbar_numbered_list()}
-            shortcut={`${mod}⇧7`}
+            shortcut={shortcut('⌘⇧7')}
             active={state.orderedList}
             onClick={() => chain().toggleOrderedList().run()}
           >
@@ -834,7 +689,7 @@ export function RichTextEditor({
           <span className="min-w-2 flex-1" />
           <BarButton
             label={m.editor_toolbar_undo()}
-            shortcut={`${mod}Z`}
+            shortcut={shortcut('⌘Z')}
             disabled={!state.canUndo}
             onClick={() => chain().undo().run()}
           >
@@ -842,7 +697,7 @@ export function RichTextEditor({
           </BarButton>
           <BarButton
             label={m.editor_toolbar_redo()}
-            shortcut={`${mod}⇧Z`}
+            shortcut={shortcut('⌘⇧Z')}
             disabled={!state.canRedo}
             onClick={() => chain().redo().run()}
           >
@@ -893,7 +748,7 @@ export function RichTextEditor({
         </BarButton>
         <BarButton
           label={m.editor_toolbar_inline_code()}
-          shortcut={`${mod}E`}
+          shortcut={shortcut('⌘E')}
           active={state.code}
           onClick={() => chain().toggleCode().run()}
         >
@@ -925,14 +780,14 @@ export function RichTextEditor({
         </BarButton>
       </BubbleMenu>
 
-      {slash && slashMatches.length > 0 && typeof document !== 'undefined'
+      {slash.slash && typeof document !== 'undefined'
         ? createPortal(
             <SlashMenu
-              state={slash}
-              items={slashMatches}
-              active={Math.min(slashIndex, slashMatches.length - 1)}
-              onHover={setSlashIndex}
-              onPick={runSlash}
+              state={slash.slash}
+              items={slash.matches}
+              active={slash.active}
+              onHover={slash.setActive}
+              onPick={slash.run}
             />,
             document.body,
           )
@@ -947,15 +802,7 @@ export function RichTextEditor({
       />
     </div>
   )
-}
-
-type SlashState = {
-  query: string
-  from: number
-  to: number
-  left: number
-  top: number
-}
+})
 
 function SlashMenu({
   state,
@@ -1058,7 +905,7 @@ function BarButton({
       <TooltipContent side="bottom">
         {label}
         {shortcut ? (
-          <span className="ml-1.5 opacity-60">{displayShortcut(shortcut)}</span>
+          <span className="ml-1.5 opacity-60">{shortcut}</span>
         ) : null}
       </TooltipContent>
     </Tooltip>

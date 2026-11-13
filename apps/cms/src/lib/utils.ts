@@ -1,33 +1,8 @@
-import { createCn } from 'cn/config'
+import { createCn } from 'cn/engine'
+import tables from './cn-tables.gen'
 
-/**
- * The type-scale utilities (`text-display`, `text-caption`, …) set a font
- * size, not a colour. Without this the merger reads them as text colours and
- * drops them whenever a class list also sets `text-text-primary`.
- */
-const TYPE_SCALE = [
-  'display',
-  'title-1',
-  'title-2',
-  'headline',
-  'body',
-  'body-lg',
-  'callout',
-  'caption',
-  'overline',
-  'mono',
-  'editor-title',
-]
-
-export const cn = createCn({
-  extend: {
-    classGroups: {
-      'font-size': [{ text: TYPE_SCALE }],
-      shadow: [{ shadow: ['card', 'float', 'raise'] }],
-      rounded: [{ rounded: ['control', 'card', 'panel', 'thumb'] }],
-    },
-  },
-})
+// Merge tables compiled from cn.config.ts; run `pnpm cn:tables` after changing it.
+export const cn = createCn(tables)
 
 /** Initials for avatars and tiles: "Kaan Kaya" → "KK". */
 export function initials(name: string | null | undefined, fallback = '?') {

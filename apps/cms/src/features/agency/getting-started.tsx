@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
-import { motion, useReducedMotion } from 'motion/react'
+import { useReducedMotion } from 'motion/react'
+import * as motion from 'motion/react-m'
 import { ArrowRight, Check } from '@phosphor-icons/react'
 
 import { Button } from '#/components/ui/button'

@@ -8,6 +8,7 @@ import { previewBaseUrl } from '#/lib/preview-url'
 import {
   buildGlobalPreviewUrl,
   buildPreviewUrl,
+  previewLinkFor,
   signPreviewToken,
   verifyPreviewToken,
 } from './preview-token.ts'
@@ -167,5 +168,57 @@ describe('preview locale', () => {
     expect(
       buildGlobalPreviewUrl('http://localhost:3001', '/about', 'tok', 'nl-BE'),
     ).toBe('http://localhost:3001/about?arecaPreview=tok&locale=nl-BE')
+  })
+})
+
+describe('previewLinkFor', () => {
+  const site = {
+    id: 'site_1',
+    previewSecret: secret,
+    previewUrl: null,
+    productionUrl: 'https://example.com/',
+  }
+
+  it('builds the entry link on the preview origin with a matching token', () => {
+    const link = previewLinkFor(
+      { ...site, previewUrl: 'https://staging.example.com' },
+      { kind: 'collection', key: 'articles', slug: 'hello' },
+      'nl',
+    )
+    const token = link?.token ?? ''
+    expect(link?.url).toBe(
+      `https://staging.example.com/__preview/articles/hello?token=${encodeURIComponent(token)}&locale=nl`,
+    )
+    expect(verifyPreviewToken(token, secret)).toMatchObject({
+      siteId: 'site_1',
+      collection: 'articles',
+      slug: 'hello',
+      locale: 'nl',
+    })
+  })
+
+  it('builds the section link on its preview path', () => {
+    const link = previewLinkFor(site, {
+      kind: 'global',
+      key: 'companyInfo',
+      previewPath: '/about',
+    })
+    const token = link?.token ?? ''
+    expect(link?.url).toBe(
+      `https://example.com/about?arecaPreview=${encodeURIComponent(token)}`,
+    )
+    expect(verifyPreviewToken(token, secret)).toMatchObject({
+      global: 'companyInfo',
+    })
+  })
+
+  it('returns null for a section without a preview path', () => {
+    expect(
+      previewLinkFor(site, {
+        kind: 'global',
+        key: 'companyInfo',
+        previewPath: null,
+      }),
+    ).toBeNull()
   })
 })

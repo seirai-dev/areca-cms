@@ -10,10 +10,9 @@ import {
   publication,
   site,
 } from '#/db/schema'
-import { createMockDeploymentAdapter } from '#/adapters/deployment/mock'
 import { saveDokployCredentials } from '#/server/admin/dokploy-credentials'
 import { requestPublication } from '#/server/publishing/publications'
-import { processJob } from '#/server/publishing/worker'
+import { processJob } from '#/server/publishing/job-run'
 import { isEditedSinceReady } from '#/lib/content/edited-since-ready'
 import { I18N_KEY } from '#/lib/content-locale'
 
@@ -39,6 +38,7 @@ import {
   createTestSite,
 } from './test-utils.ts'
 import type { SectionChange } from '#/server/richtext/section-diff'
+import { createMockDeploymentAdapter } from '#/server/publishing/test-helpers'
 
 const hasDb = Boolean(process.env.DATABASE_URL)
 const EDITOR = { isOwner: false, isAgencyAdmin: false }

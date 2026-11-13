@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm'
 
 import { CLOUDFLARE_API_BASE_URL } from '#/adapters/deployment/cloudflare-api'
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import {
   buildJob,
   cloudflareCredential,
@@ -14,7 +15,8 @@ import {
   site,
   user,
 } from '#/db/schema'
-import type { BuildJobStatus, DeploymentTarget } from '#/lib/types'
+import type { DeploymentTarget } from '#/lib/types'
+import { RUNNING_JOB_STATUSES } from '#/lib/job-status'
 import {
   deploymentTargetResourceId,
   hasCompleteDeploymentTarget,
@@ -33,7 +35,12 @@ import {
   ValidationError,
 } from '#/server/content/errors'
 import { diffApprovedRelease } from '#/server/publishing/release-diff'
+import type { ApprovedReleaseDiff } from '#/server/publishing/release-diff'
 import { isDevSite } from '#/server/security/site-visibility'
+import { getSiteOrThrow, siteCoreColumns } from '#/server/content/site-core'
+import type { SiteCore } from '#/server/content/site-core'
+
+import { schedulerGate } from './scheduler-backoff.ts'
 
 export function dbActorId(actorId: string | null | undefined) {
   if (!actorId || actorId === 'system') return null
@@ -45,32 +52,21 @@ export function dbActorId(actorId: string | null | undefined) {
  * The publish transaction refuses without one; release status reports the same
  * message as a blocker, so the tray, panel and overview disable Go live up front.
  */
-export function deploymentBlockers(row: typeof site.$inferSelect): string[] {
+export function deploymentBlockers(row: SiteCore): string[] {
   if (row.publishingMode === 'demo') return []
   return hasCompleteDeploymentTarget(row.deploymentTarget)
     ? []
     : [m.server_publication_deployment_required()]
 }
 
-export async function getSiteOrThrow(siteId: string) {
-  const row = (
-    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
-  ).at(0)
-  if (!row) {
-    throw new NotFoundError(m.server_site_not_found())
-  }
-  return row
-}
-
 function uniqueActorIds(ids: Array<string | null | undefined>) {
   return [...new Set(ids.filter((id): id is string => Boolean(id)))]
 }
 
-type RequestTx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type RequestIdentity = { siteId: string; actorId: string; requestKey?: string }
 
 async function replayRequest(
-  tx: RequestTx,
+  tx: Tx,
   input: RequestIdentity,
   operation: 'publish' | 'rollback',
   payload: string,
@@ -110,7 +106,7 @@ async function replayRequest(
 }
 
 async function rememberRequest(
-  tx: RequestTx,
+  tx: Tx,
   input: RequestIdentity,
   operation: 'publish' | 'rollback',
   payload: string,
@@ -129,7 +125,7 @@ async function rememberRequest(
   })
 }
 
-async function assertDispatchResolved(tx: RequestTx, siteId: string) {
+async function assertDispatchResolved(tx: Tx, siteId: string) {
   const uncertainJobs = await tx
     .select({ id: buildJob.id })
     .from(buildJob)
@@ -142,11 +138,122 @@ async function assertDispatchResolved(tx: RequestTx, siteId: string) {
 }
 
 /** Dev envs have no releases and no builds (docs/design/dev-environments.md, Decision 7). */
-function assertNotDevSite(row: typeof site.$inferSelect) {
+function assertNotDevSite(row: SiteCore) {
   if (isDevSite(row)) {
     throw new ConflictError(m.server_dev_env_no_releases())
   }
 }
+
+type Replay = NonNullable<Awaited<ReturnType<typeof replayRequest>>>
+
+/**
+ * The frame of a release request: the organization lock, the idempotent
+ * replay, then the site row locked for the rest of `run`.
+ */
+async function inReleaseRequest<T>(
+  input: RequestIdentity,
+  operation: 'publish' | 'rollback',
+  payload: string,
+  replayed: (replay: Replay) => T,
+  run: (tx: Tx, lockedSite: SiteCore) => Promise<T>,
+): Promise<T> {
+  const preliminarySite = await getSiteOrThrow(input.siteId)
+  assertNotDevSite(preliminarySite)
+  return db.transaction(async (tx) => {
+    await lockOrganizationForMutation(tx, preliminarySite.organizationId)
+    const replay = await replayRequest(tx, input, operation, payload)
+    if (replay) return replayed(replay)
+    const lockedSite = (
+      await tx
+        .select(siteCoreColumns)
+        .from(site)
+        .where(eq(site.id, input.siteId))
+        .for('update')
+    ).at(0)
+    if (!lockedSite) throw new NotFoundError(m.server_site_not_found())
+    return run(tx, lockedSite)
+  })
+}
+
+/**
+ * Inserts the publication and queues its build. Builds still queued for the
+ * site are cancelled and their publications superseded: only the newest
+ * request goes live.
+ */
+async function enqueueBuild(
+  tx: Tx,
+  lockedSite: SiteCore,
+  values: Omit<
+    typeof publication.$inferInsert,
+    'siteId' | 'publishingMode' | 'status'
+  >,
+  job: { priority: number; schedulerFingerprint?: string },
+) {
+  const pub = (
+    await tx
+      .insert(publication)
+      .values({
+        ...values,
+        siteId: lockedSite.id,
+        publishingMode: lockedSite.publishingMode,
+        status: 'pending',
+      })
+      .returning()
+  ).at(0)
+  if (!pub) throw new Error(m.server_failed_to_create_publication())
+
+  const queued = await tx
+    .select()
+    .from(buildJob)
+    .where(
+      and(eq(buildJob.siteId, lockedSite.id), eq(buildJob.status, 'queued')),
+    )
+  if (queued.length > 0) {
+    await tx
+      .update(buildJob)
+      .set({ status: 'cancelled', finishedAt: new Date() })
+      .where(
+        inArray(
+          buildJob.id,
+          queued.map((row) => row.id),
+        ),
+      )
+    await tx
+      .update(publication)
+      .set({ status: 'superseded' })
+      .where(
+        inArray(
+          publication.id,
+          queued.map((row) => row.publicationId),
+        ),
+      )
+  }
+
+  const created = (
+    await tx
+      .insert(buildJob)
+      .values({
+        siteId: lockedSite.id,
+        publicationId: pub.id,
+        priority: job.priority,
+        ...(await deploymentIdentity(tx, lockedSite)),
+        schedulerFingerprint: job.schedulerFingerprint ?? null,
+        status: 'queued',
+      })
+      .returning()
+  ).at(0)
+  if (!created) throw new Error(m.server_failed_to_create_build_job())
+  return { pub, job: created }
+}
+
+type PublishResult =
+  | {
+      ok: true
+      publication: typeof publication.$inferSelect
+      /** Null only when a replayed key's job has been pruned. */
+      job: typeof buildJob.$inferSelect | null
+    }
+  | { ok: false; errors: string[] }
 
 export async function requestPublication(input: {
   siteId: string
@@ -156,15 +263,7 @@ export async function requestPublication(input: {
   note?: string
   scheduledBy?: string[]
   schedulerFingerprint?: string
-}): Promise<
-  | {
-      ok: true
-      publication: typeof publication.$inferSelect
-      /** Null only when a replayed key's job has been pruned. */
-      job: typeof buildJob.$inferSelect | null
-    }
-  | { ok: false; errors: string[] }
-> {
+}): Promise<PublishResult> {
   const payload = JSON.stringify({
     priority: input.priority ?? 0,
     note: input.note ?? null,
@@ -174,207 +273,95 @@ export async function requestPublication(input: {
   const actorId = dbActorId(input.actorId)
   const priority = input.priority ?? 0
 
-  const preliminarySite = await getSiteOrThrow(input.siteId)
-  assertNotDevSite(preliminarySite)
-  return db.transaction(async (tx) => {
-    await lockOrganizationForMutation(tx, preliminarySite.organizationId)
-    const replay = await replayRequest(tx, input, 'publish', payload)
-    if (replay) return { ok: true as const, ...replay }
-    const lockedSite = (
-      await tx
-        .select()
-        .from(site)
-        .where(eq(site.id, input.siteId))
-        .for('update')
-    ).at(0)
-    if (!lockedSite) throw new NotFoundError(m.server_site_not_found())
-    const deployment = deploymentBlockers(lockedSite)
-    if (deployment.length > 0) {
-      return { ok: false as const, errors: deployment }
-    }
-    if (input.schedulerFingerprint) {
-      const pending = (
-        await tx
-          .select()
-          .from(buildJob)
+  return inReleaseRequest<PublishResult>(
+    input,
+    'publish',
+    payload,
+    (replay) => ({ ok: true as const, ...replay }),
+    async (tx, lockedSite) => {
+      const deployment = deploymentBlockers(lockedSite)
+      if (deployment.length > 0) {
+        return { ok: false as const, errors: deployment }
+      }
+      if (input.schedulerFingerprint) {
+        const gate = await schedulerGate(
+          tx,
+          input.siteId,
+          input.schedulerFingerprint,
+        )
+        if (gate === 'waiting')
+          return {
+            ok: false as const,
+            errors: [m.server_scheduled_release_waiting_retry()],
+          }
+        if (gate) return { ok: true as const, ...gate }
+      }
+      await assertDispatchResolved(tx, input.siteId)
+      await assetAttachLock(tx, lockedSite.organizationId)
+      const built = await buildSnapshot(input.siteId, tx)
+      if (!built.ok) return { ok: false as const, errors: built.errors }
+      const isScheduler =
+        input.actorId === 'system' || input.schedulerFingerprint !== undefined
+      let scheduledBy = uniqueActorIds(input.scheduledBy ?? [])
+      if (isScheduler && scheduledBy.length === 0) {
+        const owners = await tx
+          .select({ scheduledBy: entry.scheduledBy })
+          .from(entry)
           .where(
             and(
-              eq(buildJob.siteId, input.siteId),
-              inArray(buildJob.status, [
-                'queued',
-                'building',
-                'validating',
-                'deploying',
-              ]),
+              eq(entry.siteId, input.siteId),
+              eq(entry.status, 'scheduled'),
+              lte(entry.scheduledAt, new Date()),
             ),
           )
-          .limit(1)
-      ).at(0)
-      if (pending) {
-        const [pendingPublication] = await tx
-          .select()
-          .from(publication)
-          .where(eq(publication.id, pending.publicationId))
-        return {
-          ok: true as const,
-          publication: pendingPublication,
-          job: pending,
-        }
+        scheduledBy = uniqueActorIds(owners.map((row) => row.scheduledBy))
       }
-      const retry = (
-        await tx
-          .select()
-          .from(schedulerBackoff)
-          .where(eq(schedulerBackoff.siteId, input.siteId))
-      ).at(0)
-      if (
-        retry?.approvalFingerprint === input.schedulerFingerprint &&
-        (retry.failureCount >= 4 ||
-          (retry.nextAttemptAt && retry.nextAttemptAt > new Date()))
-      )
-        return {
-          ok: false as const,
-          errors: [m.server_scheduled_release_waiting_retry()],
-        }
-      if (retry?.approvalFingerprint !== input.schedulerFingerprint) {
-        await tx
-          .insert(schedulerBackoff)
-          .values({
-            siteId: input.siteId,
-            approvalFingerprint: input.schedulerFingerprint,
-            failureCount: 0,
-            lastAttemptAt: new Date(),
-          })
-          .onConflictDoUpdate({
-            target: schedulerBackoff.siteId,
-            set: {
-              approvalFingerprint: input.schedulerFingerprint,
-              failureCount: 0,
-              nextAttemptAt: null,
-              lastAttemptAt: new Date(),
-              lastError: null,
-            },
-          })
-      }
-    }
-    await assertDispatchResolved(tx, input.siteId)
-    await assetAttachLock(tx, lockedSite.organizationId)
-    const built = await buildSnapshot(input.siteId, tx)
-    if (!built.ok) return { ok: false as const, errors: built.errors }
-    const snapshot = { ...built.snapshot, publicationId }
-    const isScheduler = input.note === 'scheduled' || input.actorId === 'system'
-    let scheduledBy = uniqueActorIds(input.scheduledBy ?? [])
-    if (isScheduler && scheduledBy.length === 0) {
-      const owners = await tx
-        .select({ scheduledBy: entry.scheduledBy })
-        .from(entry)
-        .where(
-          and(
-            eq(entry.siteId, input.siteId),
-            eq(entry.status, 'scheduled'),
-            lte(entry.scheduledAt, new Date()),
-          ),
-        )
-      scheduledBy = uniqueActorIds(owners.map((row) => row.scheduledBy))
-    }
-    const pub = (
-      await tx
-        .insert(publication)
-        .values({
+      const { pub, job } = await enqueueBuild(
+        tx,
+        lockedSite,
+        {
           id: publicationId,
-          siteId: input.siteId,
-          snapshot,
+          snapshot: { ...built.snapshot, publicationId },
           snapshotHash: built.hash,
           entryVersions: built.entryVersions,
-          publishingMode: lockedSite.publishingMode,
           requestedBy: actorId,
           origin: isScheduler ? 'scheduled' : 'manual',
           scheduledBy: isScheduler ? scheduledBy : [],
-          status: 'pending',
-        })
-        .returning()
-    ).at(0)
-
-    if (!pub) {
-      throw new Error(m.server_failed_to_create_publication())
-    }
-
-    const queued = await tx
-      .select()
-      .from(buildJob)
-      .where(
-        and(eq(buildJob.siteId, input.siteId), eq(buildJob.status, 'queued')),
+        },
+        { priority, schedulerFingerprint: input.schedulerFingerprint },
       )
 
-    if (queued.length > 0) {
-      await tx
-        .update(buildJob)
-        .set({ status: 'cancelled', finishedAt: new Date() })
-        .where(
-          inArray(
-            buildJob.id,
-            queued.map((job) => job.id),
-          ),
-        )
-      await tx
-        .update(publication)
-        .set({ status: 'superseded' })
-        .where(
-          inArray(
-            publication.id,
-            queued.map((job) => job.publicationId),
-          ),
-        )
-    }
-
-    const job = (
-      await tx
-        .insert(buildJob)
-        .values({
+      const auditActor =
+        isScheduler && scheduledBy.length === 1 ? scheduledBy[0] : actorId
+      await audit(
+        {
+          organizationId: lockedSite.organizationId,
           siteId: input.siteId,
-          publicationId: pub.id,
-          priority,
-          ...(await deploymentIdentity(tx, lockedSite)),
-          schedulerFingerprint: input.schedulerFingerprint ?? null,
-          status: 'queued',
-        })
-        .returning()
-    ).at(0)
-
-    if (!job) {
-      throw new Error(m.server_failed_to_create_build_job())
-    }
-
-    const auditActor =
-      isScheduler && scheduledBy.length === 1 ? scheduledBy[0] : actorId
-    await audit(
-      {
-        organizationId: lockedSite.organizationId,
-        siteId: input.siteId,
-        actorId: auditActor,
-        action: 'publication.requested',
-        targetType: 'publication',
-        targetId: pub.id,
-        meta: {
-          jobId: job.id,
-          priority,
-          note: input.note ?? null,
-          ...(scheduledBy.length > 0 ? { scheduledBy } : {}),
-          ...(isScheduler && scheduledBy.length > 1
-            ? { approvers: scheduledBy }
-            : {}),
+          actorId: auditActor,
+          action: 'publication.requested',
+          targetType: 'publication',
+          targetId: pub.id,
+          meta: {
+            jobId: job.id,
+            priority,
+            note: input.note ?? null,
+            ...(scheduledBy.length > 0 ? { scheduledBy } : {}),
+            ...(isScheduler && scheduledBy.length > 1
+              ? { approvers: scheduledBy }
+              : {}),
+          },
         },
-      },
-      tx,
-    )
+        tx,
+      )
 
-    if (input.actorId !== 'system')
-      await tx
-        .delete(schedulerBackoff)
-        .where(eq(schedulerBackoff.siteId, input.siteId))
-    await rememberRequest(tx, input, 'publish', payload, pub.id, job.id)
-    return { ok: true as const, publication: pub, job }
-  })
+      if (input.actorId !== 'system')
+        await tx
+          .delete(schedulerBackoff)
+          .where(eq(schedulerBackoff.siteId, input.siteId))
+      await rememberRequest(tx, input, 'publish', payload, pub.id, job.id)
+      return { ok: true as const, publication: pub, job }
+    },
+  )
 }
 
 export async function requestRollback(input: {
@@ -385,127 +372,93 @@ export async function requestRollback(input: {
 }) {
   const payload = JSON.stringify({ publicationId: input.publicationId })
   const actorId = dbActorId(input.actorId)
-  const preliminarySite = await getSiteOrThrow(input.siteId)
-  assertNotDevSite(preliminarySite)
-  return db.transaction(async (tx) => {
-    await lockOrganizationForMutation(tx, preliminarySite.organizationId)
-    const replay = await replayRequest(tx, input, 'rollback', payload)
-    if (replay) return replay
-    const pub = (
-      await tx
-        .select()
-        .from(publication)
-        .where(eq(publication.id, input.publicationId))
-        .limit(1)
-    ).at(0)
-
-    if (!pub || pub.siteId !== input.siteId) {
-      throw new NotFoundError(m.server_publication_not_found())
-    }
-    if (!pub.wasLive) {
-      throw new ValidationError([
+  return inReleaseRequest(
+    input,
+    'rollback',
+    payload,
+    (replay) => replay,
+    async (tx, lockedSite) => {
+      const target = (
+        await tx
+          .select()
+          .from(publication)
+          .where(eq(publication.id, input.publicationId))
+          .limit(1)
+      ).at(0)
+      if (!target || target.siteId !== input.siteId) {
+        throw new NotFoundError(m.server_publication_not_found())
+      }
+      if (!target.wasLive) {
+        throw new ValidationError([
+          {
+            path: 'publicationId',
+            message: m.server_publication_not_live(),
+          },
+        ])
+      }
+      const [blocker] = deploymentBlockers(lockedSite)
+      if (blocker) throw new ConflictError(blocker)
+      await assertDispatchResolved(tx, input.siteId)
+      const rollbackId = crypto.randomUUID()
+      const { pub, job } = await enqueueBuild(
+        tx,
+        lockedSite,
         {
-          path: 'publicationId',
-          message: m.server_publication_not_live(),
-        },
-      ])
-    }
-
-    const lockedSite = (
-      await tx
-        .select()
-        .from(site)
-        .where(eq(site.id, input.siteId))
-        .for('update')
-    ).at(0)
-    if (!lockedSite) throw new NotFoundError(m.server_site_not_found())
-    if (
-      lockedSite.publishingMode !== 'demo' &&
-      !hasCompleteDeploymentTarget(lockedSite.deploymentTarget)
-    )
-      throw new ConflictError(
-        'Production publishing requires a deployment target and publication-aware health URL',
-      )
-    await assertDispatchResolved(tx, input.siteId)
-    const rollbackId = crypto.randomUUID()
-    const updated = (
-      await tx
-        .insert(publication)
-        .values({
-          siteId: input.siteId,
           id: rollbackId,
-          snapshot: { ...pub.snapshot, publicationId: rollbackId },
-          snapshotHash: pub.snapshotHash,
+          snapshot: { ...target.snapshot, publicationId: rollbackId },
+          snapshotHash: target.snapshotHash,
           requestedBy: actorId,
           origin: 'rollback',
-          publishingMode: lockedSite.publishingMode,
           entryVersions: [],
-          status: 'pending',
-        })
-        .returning()
-    ).at(0)
-    if (!updated) throw new NotFoundError(m.server_publication_not_found())
-
-    const queued = await tx
-      .select()
-      .from(buildJob)
-      .where(
-        and(eq(buildJob.siteId, input.siteId), eq(buildJob.status, 'queued')),
+        },
+        { priority: 100 },
       )
 
-    if (queued.length > 0) {
-      await tx
-        .update(buildJob)
-        .set({ status: 'cancelled', finishedAt: new Date() })
-        .where(
-          inArray(
-            buildJob.id,
-            queued.map((job) => job.id),
-          ),
-        )
-      await tx
-        .update(publication)
-        .set({ status: 'superseded' })
-        .where(
-          inArray(
-            publication.id,
-            queued.map((job) => job.publicationId),
-          ),
-        )
-    }
-
-    const job = (
-      await tx
-        .insert(buildJob)
-        .values({
+      await audit(
+        {
+          organizationId: lockedSite.organizationId,
           siteId: input.siteId,
-          publicationId: updated.id,
-          priority: 100,
-          ...(await deploymentIdentity(tx, lockedSite)),
-          status: 'queued',
-        })
-        .returning()
-    ).at(0)
+          actorId,
+          action: 'publication.rollback_requested',
+          targetType: 'publication',
+          targetId: pub.id,
+          meta: { jobId: job.id },
+        },
+        tx,
+      )
+      await rememberRequest(tx, input, 'rollback', payload, pub.id, job.id)
+      return { publication: pub, job }
+    },
+  )
+}
 
-    if (!job) {
-      throw new Error(m.server_failed_to_create_build_job())
-    }
+/** Publication columns the release lists show; never the snapshot. */
+const publicationSummary = {
+  id: publication.id,
+  siteId: publication.siteId,
+  snapshotHash: publication.snapshotHash,
+  requestedBy: publication.requestedBy,
+  status: publication.status,
+  publishingMode: publication.publishingMode,
+  wasLive: publication.wasLive,
+  origin: publication.origin,
+  createdAt: publication.createdAt,
+  deployedAt: publication.deployedAt,
+}
 
-    await audit(
-      {
-        organizationId: lockedSite.organizationId,
-        siteId: input.siteId,
-        actorId,
-        action: 'publication.rollback_requested',
-        targetType: 'publication',
-        targetId: updated.id,
-        meta: { jobId: job.id },
-      },
-      tx,
-    )
-    await rememberRequest(tx, input, 'rollback', payload, updated.id, job.id)
-    return { publication: updated, job }
-  })
+/** Build job columns the job lists show; logs load per job with getBuildJob. */
+const buildJobSummary = {
+  id: buildJob.id,
+  siteId: buildJob.siteId,
+  publicationId: buildJob.publicationId,
+  priority: buildJob.priority,
+  status: buildJob.status,
+  attempts: buildJob.attempts,
+  dispatchUncertain: buildJob.dispatchUncertain,
+  startedAt: buildJob.startedAt,
+  finishedAt: buildJob.finishedAt,
+  error: buildJob.error,
+  createdAt: buildJob.createdAt,
 }
 
 export async function listPublications(
@@ -516,7 +469,7 @@ export async function listPublications(
   const offset = options.offset ?? 0
   const items = await db
     .select({
-      publication,
+      publication: publicationSummary,
       requestedByName: user.name,
     })
     .from(publication)
@@ -528,7 +481,7 @@ export async function listPublications(
 
   const jobs = items.length
     ? await db
-        .select()
+        .selectDistinctOn([buildJob.publicationId], buildJobSummary)
         .from(buildJob)
         .where(
           inArray(
@@ -536,15 +489,10 @@ export async function listPublications(
             items.map((item) => item.publication.id),
           ),
         )
-        .orderBy(desc(buildJob.createdAt))
+        .orderBy(buildJob.publicationId, desc(buildJob.createdAt))
     : []
 
-  const latestJob = new Map<string, typeof buildJob.$inferSelect>()
-  for (const job of jobs) {
-    if (!latestJob.has(job.publicationId)) {
-      latestJob.set(job.publicationId, job)
-    }
-  }
+  const latestJob = new Map(jobs.map((job) => [job.publicationId, job]))
 
   return items.map(({ publication: item, requestedByName }) => ({
     ...item,
@@ -566,7 +514,7 @@ export async function listBuildJobs(
 ) {
   const limit = options.limit ?? 50
   return db
-    .select()
+    .select(buildJobSummary)
     .from(buildJob)
     .where(eq(buildJob.siteId, siteId))
     .orderBy(desc(buildJob.createdAt))
@@ -658,24 +606,39 @@ export async function getDemoPublication(siteId: string) {
   return row ?? null
 }
 
-const ACTIVE_JOB_STATUSES: BuildJobStatus[] = [
-  'building',
-  'validating',
-  'deploying',
-]
+async function latestPublicationSummary(
+  siteId: string,
+  status: 'live' | 'demo',
+) {
+  const row = (
+    await db
+      .select(publicationSummary)
+      .from(publication)
+      .where(
+        and(eq(publication.siteId, siteId), eq(publication.status, status)),
+      )
+      .orderBy(desc(publication.createdAt))
+      .limit(1)
+  ).at(0)
+  return row ?? null
+}
 
-export async function getSiteReleaseStatus(siteId: string) {
+/** Pass the release diff when the caller already has it. */
+export async function getSiteReleaseStatus(
+  siteId: string,
+  known?: ApprovedReleaseDiff,
+) {
   const existingSite = await getSiteOrThrow(siteId)
-  const live = await getLivePublication(siteId)
-  const demo = await getDemoPublication(siteId)
+  const live = await latestPublicationSummary(siteId, 'live')
+  const demo = await latestPublicationSummary(siteId, 'demo')
   const activeJob = (
     await db
-      .select()
+      .select(buildJobSummary)
       .from(buildJob)
       .where(
         and(
           eq(buildJob.siteId, siteId),
-          inArray(buildJob.status, ACTIVE_JOB_STATUSES),
+          inArray(buildJob.status, RUNNING_JOB_STATUSES),
         ),
       )
       .orderBy(desc(buildJob.startedAt), desc(buildJob.createdAt))
@@ -686,7 +649,7 @@ export async function getSiteReleaseStatus(siteId: string) {
     activeJob
       ? [null]
       : await db
-          .select()
+          .select(buildJobSummary)
           .from(buildJob)
           .where(
             and(eq(buildJob.siteId, siteId), eq(buildJob.status, 'queued')),
@@ -695,7 +658,7 @@ export async function getSiteReleaseStatus(siteId: string) {
           .limit(1)
   ).at(0)
 
-  const diff = await diffApprovedRelease(siteId)
+  const diff = known ?? (await diffApprovedRelease(siteId))
   const blockers = [
     ...deploymentBlockers(existingSite),
     ...(await sectionBlockers(siteId)),
@@ -740,7 +703,7 @@ export function deploymentResourceKey(
 
 /** Connection URL for the site's provider, or null when none is configured. */
 async function dispatchConnectionUrl(
-  tx: RequestTx,
+  tx: Tx,
   organizationId: string,
   target: DeploymentTarget | null,
 ) {
@@ -768,10 +731,7 @@ async function dispatchConnectionUrl(
 }
 
 /** Freeze the hosting destination when a release is requested. */
-export async function deploymentIdentity(
-  tx: RequestTx,
-  existingSite: typeof site.$inferSelect,
-) {
+export async function deploymentIdentity(tx: Tx, existingSite: SiteCore) {
   if (existingSite.publishingMode === 'demo') return {}
   const connectionUrl = await dispatchConnectionUrl(
     tx,

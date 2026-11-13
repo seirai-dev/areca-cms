@@ -19,10 +19,10 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ---------------------------------------------------------------------------
-   Areca design tokens (brief §4, docs/DESIGN.md). Semantic tokens
-   (`--color-text-*`, `--color-background-*`, accent, status, …) are declared
-   light-first in `@theme` so Tailwind generates the utilities, then
-   overridden for dark in `html.dark`.
+   Areca design tokens (brief §4, docs/DESIGN.md). Semantic colour tokens
+   (`--color-text-*`, `--color-background-*`, accent, status, …) are plain
+   custom properties: light in `:root, .light`, dark in `html.dark, .dark`.
+   `@theme inline reference` maps their names to utilities.
 
    Colour rules:
      - ink (`action-primary`) is the one primary button colour
@@ -31,86 +31,77 @@
      - never hard-code a colour in a component; branding reaches tokens only
 --------------------------------------------------------------------------- */
 
+/* Semantic colours. The values live once per theme, in plain custom
+   properties (`:root, .light` and `html.dark, .dark` below). This block only
+   registers the names, so Tailwind generates utilities that read them at
+   runtime (`bg-accent` is `var(--color-accent)`) and branding can override
+   `--color-accent*` on the page. */
+@theme inline reference {
+  --color-background-default: var(--color-background-default);
+  --color-background-surface: var(--color-background-surface);
+  --color-background-elevated: var(--color-background-elevated);
+  --color-background-subtle: var(--color-background-subtle);
+  --color-background-inverse: var(--color-background-inverse);
+  --color-sidebar: var(--color-sidebar);
+  --color-scrim: var(--color-scrim);
+  --color-text-primary: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-muted: var(--color-text-muted);
+  --color-text-disabled: var(--color-text-disabled);
+  --color-text-inverse: var(--color-text-inverse);
+  --color-text-accent: var(--color-text-accent);
+  --color-text-success: var(--color-text-success);
+  --color-text-warning: var(--color-text-warning);
+  --color-text-error: var(--color-text-error);
+  --color-border-default: var(--color-border-default);
+  --color-border-strong: var(--color-border-strong);
+  --color-border-subtle: var(--color-border-subtle);
+  --color-border-focus: var(--color-border-focus);
+  --color-border-error: var(--color-border-error);
+  --color-icon-default: var(--color-icon-default);
+  --color-icon-accent: var(--color-icon-accent);
+  --color-icon-muted: var(--color-icon-muted);
+  --color-icon-success: var(--color-icon-success);
+  --color-icon-warning: var(--color-icon-warning);
+  --color-icon-error: var(--color-icon-error);
+  --color-action-primary: var(--color-action-primary);
+  --color-action-primary-hover: var(--color-action-primary-hover);
+  --color-action-primary-text: var(--color-action-primary-text);
+  --color-action-secondary: var(--color-action-secondary);
+  --color-action-secondary-hover: var(--color-action-secondary-hover);
+  --color-action-destructive: var(--color-action-destructive);
+  --color-action-destructive-hover: var(--color-action-destructive-hover);
+  --color-accent: var(--color-accent);
+  --color-accent-hover: var(--color-accent-hover);
+  --color-accent-soft: var(--color-accent-soft);
+  --color-accent-text: var(--color-accent-text);
+  --color-accent-contrast: var(--color-accent-contrast);
+  --color-status-success: var(--color-status-success);
+  --color-status-success-bg: var(--color-status-success-bg);
+  --color-status-warning: var(--color-status-warning);
+  --color-status-warning-bg: var(--color-status-warning-bg);
+  --color-status-error: var(--color-status-error);
+  --color-status-error-bg: var(--color-status-error-bg);
+  --color-status-info: var(--color-status-info);
+  --color-status-info-bg: var(--color-status-info-bg);
+  --color-status-neutral: var(--color-status-neutral);
+  --color-status-neutral-bg: var(--color-status-neutral-bg);
+  --color-surface-state-hover: var(--color-surface-state-hover);
+  --color-surface-state-pressed: var(--color-surface-state-pressed);
+  --color-segment-track: var(--color-segment-track);
+  --color-segment-thumb: var(--color-segment-thumb);
+  --color-segment-edge: var(--color-segment-edge);
+  --color-code-bg: var(--color-code-bg);
+  --color-code-border: var(--color-code-border);
+  --color-code-keyword: var(--color-code-keyword);
+  --color-code-string: var(--color-code-string);
+  --color-code-literal: var(--color-code-literal);
+  --color-code-comment: var(--color-code-comment);
+  --color-code-function: var(--color-code-function);
+  --color-code-punctuation: var(--color-code-punctuation);
+}
+
 @theme {
-  /* Neutrals */
-  --color-background-default: #f6f6f4;
-  --color-background-surface: #ffffff;
-  --color-background-elevated: #ffffff;
-  --color-background-subtle: #efefec;
-  --color-background-inverse: #1d1d1f;
-  --color-sidebar: #fbfbfa;
-  --color-scrim: rgb(20 20 22 / 0.28);
-
-  --color-text-primary: #1d1d1f;
-  --color-text-secondary: #5e5e63;
-  --color-text-muted: #67676c;
-  --color-text-disabled: #b8b8bc;
-  --color-text-inverse: #ffffff;
-  --color-text-accent: #4b49c4;
-  --color-text-success: #177a42;
-  --color-text-warning: #955900;
-  --color-text-error: #c0271d;
-
-  --color-border-default: rgb(0 0 0 / 0.08);
-  --color-border-strong: rgb(0 0 0 / 0.14);
-  --color-border-subtle: rgb(0 0 0 / 0.05);
-  --color-border-focus: #5856d6;
-  --color-border-error: #d93025;
-
-  --color-icon-default: #5e5e63;
-  --color-icon-accent: #5856d6;
-  --color-icon-muted: #8a8a8e;
-  --color-icon-success: #1f9d55;
-  --color-icon-warning: #c77700;
-  --color-icon-error: #d93025;
-
-  /* Ink: the primary button */
-  --color-action-primary: #1d1d1f;
-  --color-action-primary-hover: #3a3a3d;
-  --color-action-primary-text: #ffffff;
-  --color-action-secondary: #efefec;
-  --color-action-secondary-hover: #e6e6e2;
-  --color-action-destructive: #d93025;
-  --color-action-destructive-hover: #c0271d;
-
-  /* Accent: iris (Apple systemIndigo). Instance branding re-tints these. */
-  --color-accent: #5856d6;
-  --color-accent-hover: #4b49c9;
-  --color-accent-soft: rgb(88 86 214 / 0.12);
-  --color-accent-text: #4b49c4;
-  --color-accent-contrast: #ffffff;
-
-  /* Status */
-  --color-status-success: #1f9d55;
-  --color-status-success-bg: rgb(31 157 85 / 0.12);
-  --color-status-warning: #c77700;
-  --color-status-warning-bg: rgb(199 119 0 / 0.12);
-  --color-status-error: #d93025;
-  --color-status-error-bg: rgb(217 48 37 / 0.1);
-  --color-status-info: #5856d6;
-  --color-status-info-bg: rgb(88 86 214 / 0.12);
-  --color-status-neutral: #8a8a8e;
-  --color-status-neutral-bg: rgb(0 0 0 / 0.05);
-
-  --color-surface-state-hover: rgb(0 0 0 / 0.04);
-  --color-surface-state-pressed: rgb(0 0 0 / 0.07);
-
-  /* Segmented controls (Apple's systemFill) */
-  --color-segment-track: rgb(118 118 128 / 0.12);
-  --color-segment-thumb: #ffffff;
-  --color-segment-edge: rgb(0 0 0 / 0.05);
-
-  /* Code blocks. Recessed surface; token colours are read by `.prose pre`
-     rules below, so the editor and the preview use the same palette. */
-  --color-code-bg: #efefec;
-  --color-code-border: rgb(0 0 0 / 0.08);
-  --color-code-keyword: #4b49c4;
-  --color-code-string: #1d6b52;
-  --color-code-literal: #8a5300;
-  --color-code-comment: #67676c;
-  --color-code-function: #1d1d1f;
-  --color-code-punctuation: #5e5e63;
-
   /* Type */
   --font-sans:
     'Inter Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
@@ -384,10 +375,11 @@ html.dark,
   color-scheme: dark;
 }
 
-/* Light tokens as a real rule too, so a `.light` subtree inside the dark app
-   (the branding preview) can opt back into the light palette. */
+/* Light tokens. `.light` lets a subtree inside the dark app (the branding
+   preview) opt back into the light palette. */
 :root,
 .light {
+  /* Neutrals */
   --color-background-default: #f6f6f4;
   --color-background-surface: #ffffff;
   --color-background-elevated: #ffffff;
@@ -419,6 +411,7 @@ html.dark,
   --color-icon-warning: #c77700;
   --color-icon-error: #d93025;
 
+  /* Ink: the primary button */
   --color-action-primary: #1d1d1f;
   --color-action-primary-hover: #3a3a3d;
   --color-action-primary-text: #ffffff;
@@ -427,12 +420,14 @@ html.dark,
   --color-action-destructive: #d93025;
   --color-action-destructive-hover: #c0271d;
 
+  /* Accent: iris (Apple systemIndigo). Instance branding re-tints these. */
   --color-accent: #5856d6;
   --color-accent-hover: #4b49c9;
   --color-accent-soft: rgb(88 86 214 / 0.12);
   --color-accent-text: #4b49c4;
   --color-accent-contrast: #ffffff;
 
+  /* Status */
   --color-status-success: #1f9d55;
   --color-status-success-bg: rgb(31 157 85 / 0.12);
   --color-status-warning: #c77700;
@@ -446,6 +441,8 @@ html.dark,
 
   --color-surface-state-hover: rgb(0 0 0 / 0.04);
   --color-surface-state-pressed: rgb(0 0 0 / 0.07);
+
+  /* Segmented controls (Apple's systemFill) */
   --color-segment-track: rgb(118 118 128 / 0.12);
   --color-segment-thumb: #ffffff;
   --color-segment-edge: rgb(0 0 0 / 0.05);

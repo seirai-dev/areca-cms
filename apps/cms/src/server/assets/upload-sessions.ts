@@ -7,6 +7,8 @@ import {
   asset,
   assetUploadSession,
   assetUploadSessionFile,
+  mcpConnection,
+  mcpKey,
   site,
   user,
 } from '#/db/schema'
@@ -85,6 +87,8 @@ export async function createUploadSession(
     organizationId: string
     siteId: string
     userId: string
+    /** The MCP credential opening the session; uploads stop when it is revoked. */
+    credential?: { kind: 'key' | 'oauth'; id: string } | null
     purpose?: string | null
   },
   now: Date = new Date(),
@@ -107,6 +111,9 @@ export async function createUploadSession(
         organizationId: input.organizationId,
         siteId: input.siteId,
         userId: input.userId,
+        mcpKeyId: input.credential?.kind === 'key' ? input.credential.id : null,
+        mcpConnectionId:
+          input.credential?.kind === 'oauth' ? input.credential.id : null,
         purpose: purpose || null,
         maxFiles: UPLOAD_SESSION_MAX_FILES,
         expiresAt: new Date(now.getTime() + UPLOAD_SESSION_TTL_MS),
@@ -233,10 +240,47 @@ async function releaseSlot(sessionId: string): Promise<void> {
 }
 
 /**
- * The person who opened the session must still have access to the site's
- * client: a removed or blocked member's link stops working at once.
+ * Whether the MCP key or OAuth connection that opened the session is still
+ * active. A deleted one has already deleted the session (foreign key cascade).
  */
-async function assertOwnerStillHasAccess(session: UploadSession) {
+async function credentialStillActive(
+  session: UploadSession,
+  now: Date,
+): Promise<boolean> {
+  if (session.mcpKeyId) {
+    const key = (
+      await db
+        .select({ revokedAt: mcpKey.revokedAt, expiresAt: mcpKey.expiresAt })
+        .from(mcpKey)
+        .where(eq(mcpKey.id, session.mcpKeyId))
+        .limit(1)
+    ).at(0)
+    return (
+      !!key &&
+      !key.revokedAt &&
+      (!key.expiresAt || key.expiresAt.getTime() > now.getTime())
+    )
+  }
+  if (session.mcpConnectionId) {
+    const connection = (
+      await db
+        .select({ revokedAt: mcpConnection.revokedAt })
+        .from(mcpConnection)
+        .where(eq(mcpConnection.id, session.mcpConnectionId))
+        .limit(1)
+    ).at(0)
+    return !!connection && !connection.revokedAt
+  }
+  return true
+}
+
+/**
+ * The person who opened the session must still have access to the site's
+ * client, and the credential they opened it with must still be active: a
+ * removed or blocked member's link, or one from a revoked key or connection,
+ * stops working at once.
+ */
+async function assertOwnerStillHasAccess(session: UploadSession, now: Date) {
   const owner = (
     await db
       .select({
@@ -259,6 +303,9 @@ async function assertOwnerStillHasAccess(session: UploadSession) {
   if (!owner || !siteRow) throw new UploadSessionError('not_found')
   const access = await liveRoleFor(owner, session.organizationId)
   if (!access.ok) throw new UploadSessionError('not_found')
+  if (!(await credentialStillActive(session, now))) {
+    throw new UploadSessionError('not_found')
+  }
 }
 
 export type SessionUploadResult = {
@@ -286,7 +333,7 @@ export async function uploadToSession(
   if (!session) throw new UploadSessionError('not_found')
   const state = sessionState(session, now)
   if (state !== 'open') throw new UploadSessionError(state)
-  await assertOwnerStillHasAccess(session)
+  await assertOwnerStillHasAccess(session, now)
 
   await reserveSlot(session, now)
   let saved: Asset | null = null
@@ -360,7 +407,7 @@ export async function publicSessionInfo(
   maxFileBytes: number
 } | null> {
   const session = await findSessionByToken(token)
-  if (!session) return null
+  if (!session || !(await credentialStillActive(session, now))) return null
   const siteRow = (
     await db
       .select({ name: site.name })
@@ -397,5 +444,6 @@ export async function finishSessionByToken(
   if (sessionState(session, now) === 'expired') {
     throw new UploadSessionError('expired')
   }
+  await assertOwnerStillHasAccess(session, now)
   return finishSession(session.id, now)
 }

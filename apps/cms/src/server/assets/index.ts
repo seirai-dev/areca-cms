@@ -1,9 +1,10 @@
 import { and, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm'
-import type { AnyColumn, InferSelectModel, SQL } from 'drizzle-orm'
+import type { InferSelectModel } from 'drizzle-orm'
 
 import { getStorage } from '#/adapters'
 import { isValidLogicalKey } from '#/adapters/storage/s3-namespace.mjs'
 import { db } from '#/db'
+import type { DbReader, Tx } from '#/db'
 import {
   asset,
   deletedContentArchive,
@@ -17,8 +18,15 @@ import { env } from '#/env'
 import { m } from '#/paraglide/messages'
 import { NotFoundError } from '#/server/content/errors'
 import { AppError } from '#/server/http/app-error'
+import { audit } from '#/server/audit'
 
-import { assetAttachLock, assetExclusiveLock, referencesAsset } from './usage'
+import {
+  assetAttachLock,
+  assetExclusiveLock,
+  mayReferenceAssets,
+  referencesAsset,
+} from './usage'
+import { derivedStorageKeys } from './derived'
 import { AssetValidationError } from './errors'
 import { validateImageBytes } from './image-validation'
 import { missingAltFilter } from './missing-alt'
@@ -28,12 +36,34 @@ import {
   compensateObjectUpload,
   drainStorageObjectDeletions,
 } from './storage-cleanup'
-import type { AssetTransaction } from './usage'
 
 export { AssetValidationError } from './errors'
 export { drainStorageObjectDeletions } from './storage-cleanup'
 
 export type Asset = InferSelectModel<typeof asset>
+
+/** Who changed an asset, for its audit row. `siteId` is the site it was changed from, if any. */
+export type AssetActor = { actorId: string; siteId?: string | null }
+
+function auditAsset(
+  tx: Tx,
+  action: 'asset.update' | 'asset.delete',
+  row: Asset,
+  by: AssetActor,
+) {
+  return audit(
+    {
+      organizationId: row.organizationId,
+      siteId: by.siteId ?? null,
+      actorId: by.actorId,
+      action,
+      targetType: 'asset',
+      targetId: row.id,
+      meta: { filename: row.originalFilename },
+    },
+    tx,
+  )
+}
 
 export type ResolvedAssetValue = {
   url: string
@@ -198,7 +228,7 @@ export async function listAssets(
 export async function getAsset(
   id: string,
   organizationId: string,
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ): Promise<Asset | undefined> {
   const [row] = await connection
     .select()
@@ -221,65 +251,36 @@ export async function updateAsset(
     mainLocale?: string | null
   },
   organizationId: string,
+  by?: AssetActor,
 ): Promise<Asset> {
   const translation =
     patch.locale && patch.locale !== patch.mainLocale ? patch.locale : null
-  const row = (
-    await db
-      .update(asset)
-      .set(
-        translation
-          ? {
-              altI18n:
-                patch.altText.trim() === ''
-                  ? sql`${asset.altI18n} - ${translation}::text`
-                  : sql`jsonb_set(${asset.altI18n}, ARRAY[${translation}::text], to_jsonb(${patch.altText}::text), true)`,
-            }
-          : { altText: patch.altText },
-      )
-      .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
-      .returning()
-  ).at(0)
-  if (!row) {
-    throw new NotFoundError(m.server_asset_not_found())
-  }
-  return row
+  return db.transaction(async (tx) => {
+    const row = (
+      await tx
+        .update(asset)
+        .set(
+          translation
+            ? {
+                altI18n:
+                  patch.altText.trim() === ''
+                    ? sql`${asset.altI18n} - ${translation}::text`
+                    : sql`jsonb_set(${asset.altI18n}, ARRAY[${translation}::text], to_jsonb(${patch.altText}::text), true)`,
+              }
+            : { altText: patch.altText },
+        )
+        .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
+        .returning()
+    ).at(0)
+    if (!row) {
+      throw new NotFoundError(m.server_asset_not_found())
+    }
+    if (by) await auditAsset(tx, 'asset.update', row, by)
+    return row
+  })
 }
 
-/**
- * SQL pre-filter for `referencesAsset`: keeps every row that could reference the
- * asset so only those rows are transferred and walked in memory. It is a strict
- * superset of the exact check:
- *  - exact ids, storage keys and `/api/assets/file/<key>` URLs all contain the
- *    asset id or the final path segment of the storage key;
- *  - values that only match after URL parsing or percent-decoding contain a
- *    `%` (decodeURIComponent) or, for stripped tab/newline, a JSON backslash.
- * If the key tail has unexpected characters the filter degrades to "all rows".
- */
-function mayReferenceAsset(
-  existing: Pick<Asset, 'id' | 'storageKey'>,
-  columns: AnyColumn[],
-): SQL {
-  const tail = existing.storageKey.slice(
-    existing.storageKey.lastIndexOf('/') + 1,
-  )
-  if (
-    !/^[A-Za-z0-9._-]+$/.test(tail) ||
-    !/^[A-Za-z0-9._-]+$/.test(existing.id)
-  ) {
-    return sql`true`
-  }
-  // One regex per column: the jsonb -> text conversion is the expensive part.
-  const escape = (value: string) => value.replace(/[.]/g, '\\.')
-  const pattern = `${escape(existing.id)}|${escape(tail)}|%|\\\\`
-  const conditions = columns.map((column) => sql`${column}::text ~ ${pattern}`)
-  return or(...conditions) as SQL
-}
-
-async function retainedAssetUsage(
-  tx: AssetTransaction,
-  existing: Asset,
-): Promise<number> {
+async function retainedAssetUsage(tx: Tx, existing: Asset): Promise<number> {
   const organizationId = existing.organizationId
   const entries = await tx
     .select({
@@ -292,11 +293,10 @@ async function retainedAssetUsage(
     .where(
       and(
         eq(site.organizationId, organizationId),
-        mayReferenceAsset(existing, [
-          entry.draftData,
-          entry.publishedData,
-          entry.scheduledData,
-        ]),
+        mayReferenceAssets(
+          [existing],
+          [entry.draftData, entry.publishedData, entry.scheduledData],
+        ),
       ),
     )
   const revisions = await tx
@@ -307,7 +307,7 @@ async function retainedAssetUsage(
     .where(
       and(
         eq(site.organizationId, organizationId),
-        mayReferenceAsset(existing, [entryRevision.data]),
+        mayReferenceAssets([existing], [entryRevision.data]),
       ),
     )
   const publications = await tx
@@ -317,7 +317,7 @@ async function retainedAssetUsage(
     .where(
       and(
         eq(site.organizationId, organizationId),
-        mayReferenceAsset(existing, [publication.snapshot]),
+        mayReferenceAssets([existing], [publication.snapshot]),
       ),
     )
   const archives = await tx
@@ -326,7 +326,7 @@ async function retainedAssetUsage(
     .where(
       and(
         eq(deletedContentArchive.organizationId, organizationId),
-        mayReferenceAsset(existing, [deletedContentArchive.data]),
+        mayReferenceAssets([existing], [deletedContentArchive.data]),
       ),
     )
   return [...entries, ...revisions, ...publications, ...archives].filter(
@@ -338,22 +338,29 @@ export async function assetUsage(
   id: string,
   organizationId: string,
 ): Promise<number> {
-  return db.transaction(async (tx) => {
-    await assetExclusiveLock(tx, organizationId)
-    const existing = (
-      await tx
-        .select()
-        .from(asset)
-        .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
-    ).at(0)
-    return existing ? retainedAssetUsage(tx, existing) : 0
-  })
+  // A count to show, not a delete check: no asset lock, so it never waits for
+  // or blocks saves. One snapshot keeps the four reads consistent.
+  return db.transaction(
+    async (tx) => {
+      const existing = (
+        await tx
+          .select()
+          .from(asset)
+          .where(
+            and(eq(asset.id, id), eq(asset.organizationId, organizationId)),
+          )
+      ).at(0)
+      return existing ? retainedAssetUsage(tx, existing) : 0
+    },
+    { isolationLevel: 'repeatable read', accessMode: 'read only' },
+  )
 }
 
 /** Rows are removed first; the durable cleanup record keeps failed object deletes retryable. */
 export async function deleteAsset(
   id: string,
   organizationId: string,
+  by?: AssetActor,
 ): Promise<void> {
   await db.transaction(async (tx) => {
     await assetExclusiveLock(tx, organizationId)
@@ -368,9 +375,14 @@ export async function deleteAsset(
     if (usage > 0) throw new AssetInUseError(usage)
     await tx
       .insert(storageObjectDeletion)
-      .values({ storageKey: existing.storageKey })
+      .values(
+        [existing.storageKey, ...derivedStorageKeys(existing.storageKey)].map(
+          (storageKey) => ({ storageKey }),
+        ),
+      )
       .onConflictDoNothing()
     await tx.delete(asset).where(eq(asset.id, id))
+    if (by) await auditAsset(tx, 'asset.delete', existing, by)
   })
   await drainStorageObjectDeletions()
 }
@@ -404,7 +416,7 @@ function toResolvedAssetValue(
 export async function resolveAssetValue(
   assetId: string,
   organizationId: string,
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
   locale?: string | null,
 ): Promise<ResolvedAssetValue | null> {
   const row = await getAsset(assetId, organizationId, connection)
@@ -426,7 +438,7 @@ const LOOKUP_CHUNK = 5000
 export async function loadAssetLookup(
   organizationId: string,
   refs: { ids: Iterable<string>; storageKeys: Iterable<string> },
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ): Promise<AssetLookup> {
   const lookup: AssetLookup = { byId: new Map(), byStorageKey: new Map() }
   const fetch = async (

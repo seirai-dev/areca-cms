@@ -60,6 +60,25 @@ describe('worker loops', () => {
     expect(cleanup).toHaveBeenCalledTimes(3)
   })
 
+  it('stops every loop', async () => {
+    const deps = {
+      processJobs: vi.fn(async () => {}),
+      recover: vi.fn(async () => {}),
+      schedule: vi.fn(async () => {}),
+      cleanup: vi.fn(async () => {}),
+      mail: vi.fn(async () => {}),
+      notificationEvents: vi.fn(async () => {}),
+      mailCleanup: vi.fn(async () => {}),
+    }
+    const state = startWorkerLoops(deps, { intervalMs: 1000 })
+    await vi.advanceTimersByTimeAsync(5000)
+    for (const fn of Object.values(deps)) expect(fn).toHaveBeenCalled()
+    stopWorkerLoops(state)
+    for (const fn of Object.values(deps)) fn.mockClear()
+    await vi.advanceTimersByTimeAsync(2 * 60 * 60 * 1000)
+    for (const fn of Object.values(deps)) expect(fn).not.toHaveBeenCalled()
+  })
+
   it('does not overlap slow scheduler ticks', async () => {
     let running = 0
     let maxRunning = 0

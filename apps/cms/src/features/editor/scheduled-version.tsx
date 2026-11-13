@@ -2,12 +2,12 @@ import { useQuery } from '@tanstack/react-query'
 
 import { useAsset } from '#/features/collection/entry-cover'
 import { assetFileUrl } from '#/lib/content/utils'
-import { queryKeys } from '#/lib/content/query-keys'
+import { queryKeys } from '#/lib/query-keys'
 import type { EntryData, Field } from '#/lib/types'
 import { getEntryFn } from '#/server/fn/content'
 import { m } from '#/paraglide/messages'
 
-import { RichTextPreview } from './rich-text/rich-text-preview'
+import { LazyRichTextPreview } from './lazy-parts'
 
 /** Inspect the frozen approval without opening editable controls or changing the draft. */
 export function ScheduledVersion({
@@ -80,7 +80,7 @@ function ScheduledField({
         {m.editor_scheduled_version_no_value()}
       </span>
     )
-  if (field.type === 'richtext') return <RichTextPreview value={value} />
+  if (field.type === 'richtext') return <LazyRichTextPreview value={value} />
   if (field.type === 'image' && typeof value === 'string')
     return <ScheduledImage id={value} organizationId={organizationId} />
   if (field.type === 'reference' && typeof value === 'string')

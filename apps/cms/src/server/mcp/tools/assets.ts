@@ -7,7 +7,7 @@ import {
 } from '#/lib/content-limits'
 import type { Asset } from '#/server/assets'
 import { assetUrl, assetUsage, deleteAsset, updateAsset } from '#/server/assets'
-import { siteAssets } from '#/server/assets/site-scope'
+import { siteAssets, siteAssetsAmong } from '#/server/assets/site-scope'
 import { uploadAssetFromUrl } from '#/server/assets/remote'
 import { assetPreview } from '#/server/assets/preview'
 import {
@@ -46,9 +46,12 @@ function describeAsset(row: Asset) {
 }
 
 async function requireAsset(actor: McpActor, id: string): Promise<Asset> {
-  const row = (await siteAssets(actor.organizationId, actor.siteId)).find(
-    (item) => item.id === id,
-  )
+  const row = (
+    await siteAssetsAmong(actor.organizationId, actor.siteId, {
+      ids: [id],
+      storageKeys: [],
+    })
+  ).at(0)
   if (!row) {
     throw new McpNotFoundError(
       `No asset with id "${id}" available to this site. Call list_assets to find valid ids.`,
@@ -241,6 +244,7 @@ export function registerAssetTools(registry: ToolCollector): void {
         organizationId: actor.organizationId,
         siteId: actor.siteId,
         userId: actor.userId,
+        credential: { kind: actor.credential, id: actor.keyId },
         purpose: input.purpose,
       })
       const { pageUrl, uploadUrl } = uploadSessionUrls(token)
@@ -341,16 +345,8 @@ export function registerAssetTools(registry: ToolCollector): void {
           mainLocale: languages?.main ?? null,
         },
         actor.organizationId,
+        { actorId: actor.userId, siteId: actor.siteId },
       )
-      await audit({
-        organizationId: actor.organizationId,
-        siteId: actor.siteId,
-        actorId: actor.userId,
-        action: 'asset.update',
-        targetType: 'asset',
-        targetId: row.id,
-        meta: { filename: row.originalFilename },
-      })
       return {
         ...describeAsset(row),
         ...(target && !target.isMain
@@ -377,16 +373,10 @@ export function registerAssetTools(registry: ToolCollector): void {
       idempotentHint: true,
     },
     run: async (input, actor) => {
-      const row = await requireAsset(actor, input.id)
-      await deleteAsset(input.id, actor.organizationId)
-      await audit({
-        organizationId: actor.organizationId,
-        siteId: actor.siteId,
+      await requireAsset(actor, input.id)
+      await deleteAsset(input.id, actor.organizationId, {
         actorId: actor.userId,
-        action: 'asset.delete',
-        targetType: 'asset',
-        targetId: row.id,
-        meta: { filename: row.originalFilename },
+        siteId: actor.siteId,
       })
       return { deleted: true, assetId: input.id }
     },

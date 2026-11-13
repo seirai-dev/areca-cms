@@ -2,10 +2,15 @@ import { useQueries } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { CheckCircle, XCircle } from '@phosphor-icons/react'
 
+import { queryKeys } from '#/lib/query-keys'
 import { SystemAvatar, UserAvatar } from '#/components/ui/avatar'
 import { Tag } from '#/components/ui/tag'
-import { RelativeTime, TimelineItem } from '#/components/ui/timeline'
-import { GLOBAL_ROUTE } from '#/features/globals/site-content'
+import {
+  RelativeTime,
+  TimelineItem,
+  absoluteTimeLabel,
+} from '#/components/ui/timeline'
+import { contentRoute } from '#/lib/content-route'
 import { ACTIVITY_ENTRIES_MAX_IDS } from '#/lib/content-limits'
 import { m } from '#/paraglide/messages'
 import { getActivityEntriesFn } from '#/server/fn/activity-entries'
@@ -34,7 +39,7 @@ export function useActivityEntries(rows: ReadonlyArray<ActivityLike>) {
   }
   const results = useQueries({
     queries: chunks.map((chunk) => ({
-      queryKey: ['activity-entries', chunk] as const,
+      queryKey: queryKeys.activityEntries(chunk),
       queryFn: () => getActivityEntriesFn({ data: { ids: chunk } }),
       staleTime: 60_000,
       retry: false,
@@ -62,12 +67,15 @@ export function useActivityEntries(rows: ReadonlyArray<ActivityLike>) {
 export function ActivityTimelineItem({
   row,
   count = 1,
+  span = null,
   entry,
   scope,
   testId = 'activity-item',
 }: {
   row: ActivityLike
   count?: number
+  /** First and newest save of a group of saves (see `collapseRepeats`). */
+  span?: { from: number; to: number } | null
   entry?: EntryRef
   scope?: string | null
   testId?: string
@@ -80,22 +88,7 @@ export function ActivityTimelineItem({
   const target = parts.target ? (
     parts.named && entry ? (
       <Link
-        {...(entry.global
-          ? {
-              to: GLOBAL_ROUTE,
-              params: {
-                siteId: entry.siteId,
-                globalKey: entry.collectionKey,
-              },
-            }
-          : {
-              to: '/sites/$siteId/c/$collectionKey/$entryId' as const,
-              params: {
-                siteId: entry.siteId,
-                collectionKey: entry.collectionKey,
-                entryId: row.targetId,
-              },
-            })}
+        {...contentRoute({ ...entry, entryId: row.targetId })}
         className="text-text-primary hover:underline"
       >
         {parts.target}
@@ -155,7 +148,16 @@ export function ActivityTimelineItem({
           </span>
         </span>
       }
-      time={<RelativeTime value={row.createdAt} />}
+      time={
+        <RelativeTime
+          value={row.createdAt}
+          title={
+            span
+              ? `${absoluteTimeLabel(new Date(span.from))} – ${absoluteTimeLabel(new Date(span.to))}`
+              : undefined
+          }
+        />
+      }
       meta={
         metaLine || viaKey ? (
           <span className="flex flex-wrap items-center gap-2 text-caption font-normal text-text-muted">

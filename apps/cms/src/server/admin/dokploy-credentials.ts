@@ -44,6 +44,14 @@ function normalizeUrl(url: string) {
   ).href.replace(/\/+$/, '')
 }
 
+function isSameUrl(stored: string, normalized: string) {
+  try {
+    return normalizeUrl(stored) === normalized
+  } catch {
+    return false
+  }
+}
+
 async function requireOrganization(organizationId: string) {
   const rows = await db
     .select({ id: organization.id })
@@ -94,6 +102,12 @@ export async function saveDokployCredentials(input: {
   if (!existing && !enteredApiKey) {
     throw new ValidationError([
       { path: 'apiKey', message: 'A Dokploy API key is required' },
+    ])
+  }
+  // The stored key is only ever sent to the URL it was saved for.
+  if (existing && !enteredApiKey && !isSameUrl(existing.url, url)) {
+    throw new ValidationError([
+      { path: 'apiKey', message: m.server_dokploy_api_key_required_for_url() },
     ])
   }
   const apiKey = enteredApiKey || (existing ? decryptApiKey(existing) : '')

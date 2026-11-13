@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import { eq } from 'drizzle-orm'
 
 import { db } from '#/db'
@@ -9,12 +8,8 @@ import { decryptSecret } from '#/server/security/secret-encryption'
 import { secretsEncryptionKey } from '#/server/security/secrets-key'
 
 import { MailRenderError } from '../types.ts'
-import type {
-  Executor,
-  MailLocale,
-  RenderContext,
-  RenderedMail,
-} from '../types.ts'
+import type { DbExecutor } from '#/db'
+import type { MailLocale, RenderContext, RenderedMail } from '../types.ts'
 import { renderLayout } from '../layout.ts'
 
 import { PARAMS_SECRET_CONTEXT } from './password-reset.ts'
@@ -71,20 +66,22 @@ export async function render(
  */
 export async function loadInvitationMail(
   params: Record<string, unknown>,
-  connection?: Executor,
+  connection?: DbExecutor,
 ): Promise<InvitationMailData> {
   const executor = connection ?? db
   const invitationId = String(params.invitationId ?? '')
-  const [row] = await executor
-    .select({
-      organizationId: invitation.organizationId,
-      role: invitation.role,
-      expiresAt: invitation.expiresAt,
-      acceptedAt: invitation.acceptedAt,
-    })
-    .from(invitation)
-    .where(eq(invitation.id, invitationId))
-    .limit(1)
+  const row = (
+    await executor
+      .select({
+        organizationId: invitation.organizationId,
+        role: invitation.role,
+        expiresAt: invitation.expiresAt,
+        acceptedAt: invitation.acceptedAt,
+      })
+      .from(invitation)
+      .where(eq(invitation.id, invitationId))
+      .limit(1)
+  ).at(0)
   if (!row) throw new MailRenderError('the invitation no longer exists')
   if (row.acceptedAt) {
     throw new MailRenderError('the invitation was already accepted')
@@ -92,11 +89,13 @@ export async function loadInvitationMail(
   if (row.expiresAt.getTime() <= Date.now()) {
     throw new MailRenderError('the invitation has expired')
   }
-  const [org] = await executor
-    .select({ name: organization.name })
-    .from(organization)
-    .where(eq(organization.id, row.organizationId))
-    .limit(1)
+  const org = (
+    await executor
+      .select({ name: organization.name })
+      .from(organization)
+      .where(eq(organization.id, row.organizationId))
+      .limit(1)
+  ).at(0)
   if (!org) throw new MailRenderError('the organization no longer exists')
   return {
     orgName: org.name,

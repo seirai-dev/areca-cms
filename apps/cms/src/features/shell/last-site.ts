@@ -1,6 +1,13 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getCookie } from '@tanstack/react-start/server'
 
+import {
+  readStored,
+  useStoredState,
+  writeStored,
+} from '#/hooks/use-stored-state'
+import type { StoredCodec } from '#/hooks/use-stored-state'
+
 /**
  * Remembering the workspace between visits (brief §2 "/" resolver).
  *
@@ -42,9 +49,8 @@ export async function readLastSiteId(): Promise<string | null> {
   }
 }
 
-export function readRecentSites(): string[] {
+function parseRecentSites(raw: string | null): string[] {
   try {
-    const raw = localStorage.getItem(RECENT_KEY)
     const parsed: unknown = raw ? JSON.parse(raw) : []
     return Array.isArray(parsed)
       ? parsed.filter((id): id is string => typeof id === 'string')
@@ -54,6 +60,16 @@ export function readRecentSites(): string[] {
   }
 }
 
+const RECENT_SITES: StoredCodec<string[]> = {
+  parse: parseRecentSites,
+  serialize: (ids) => JSON.stringify(ids),
+}
+
+/** The workspace switcher's Recent list, most recent first. */
+export function useRecentSites() {
+  return useStoredState(RECENT_KEY, RECENT_SITES, { serverValue: [] })[0]
+}
+
 /** Called when a site workspace is visited. */
 export function rememberSite(siteId: string) {
   try {
@@ -61,13 +77,9 @@ export function rememberSite(siteId: string) {
   } catch {
     /* cookies unavailable */
   }
-  try {
-    const next = [
-      siteId,
-      ...readRecentSites().filter((id) => id !== siteId),
-    ].slice(0, RECENT_MAX)
-    localStorage.setItem(RECENT_KEY, JSON.stringify(next))
-  } catch {
-    /* localStorage unavailable */
-  }
+  const next = [
+    siteId,
+    ...parseRecentSites(readStored(RECENT_KEY)).filter((id) => id !== siteId),
+  ].slice(0, RECENT_MAX)
+  writeStored(RECENT_KEY, RECENT_SITES.serialize(next))
 }

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
+import { queryKeys } from '#/lib/query-keys'
 import {
   dismissPausedJobFn,
   listPausedJobsFn,
@@ -9,11 +10,9 @@ import {
 import type { PausedKind } from '#/server/ops/paused-jobs'
 import { m } from '#/paraglide/messages'
 
-export const pausedJobsQueryKey = ['agency', 'paused-jobs'] as const
-
 export function usePausedJobs() {
   return useQuery({
-    queryKey: pausedJobsQueryKey,
+    queryKey: queryKeys.pausedJobs(),
     queryFn: () => listPausedJobsFn(),
   })
 }
@@ -32,7 +31,7 @@ export function usePausedJobAction(action: PausedJobAction) {
         ? retryPausedJobFn({ data: input })
         : dismissPausedJobFn({ data: input }),
     onSuccess: (result) => {
-      void queryClient.invalidateQueries({ queryKey: pausedJobsQueryKey })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.pausedJobs() })
       if (!result.ok) {
         toast.error(m.agency_paused_gone())
         return

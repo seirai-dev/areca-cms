@@ -212,16 +212,19 @@ function VerifyStep({
         >
           <QRCodeSVG value={uri} size={156} marginSize={0} />
         </div>
-        <div className="grid min-w-0 flex-1 gap-1.5">
+        <div className="grid min-w-0 flex-1 basis-56 gap-1.5">
           <span className="text-callout text-text-secondary">
             {m.account_two_factor_secret()}
           </span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-start gap-1">
+            {/* Groups of four wrap to fit; the text stays the raw secret. */}
             <code
               data-testid="two-factor-secret"
-              className="min-w-0 truncate rounded-[6px] bg-background-subtle px-2 py-1 font-mono text-[13px] text-text-primary"
+              className="flex min-w-0 flex-wrap gap-x-1.5 rounded-[6px] bg-background-subtle px-2 py-1 font-mono text-[13px] leading-relaxed text-text-primary"
             >
-              {secret}
+              {secret.match(/.{1,4}/g)?.map((group, index) => (
+                <span key={index}>{group}</span>
+              ))}
             </code>
             <CopyButton value={secret} aria-label={m.ui_copy()} />
           </div>

@@ -20,7 +20,7 @@ import {
   acceptInvitation,
   inviteMember,
   revokeInvitation,
-} from '#/server/admin/members'
+} from '#/server/admin/invitations'
 import { completeSetup } from '#/server/admin/setup'
 import { deleteOrganization } from '#/server/admin/organizations'
 import { createTestSite } from '#/server/content/test-utils'
@@ -414,6 +414,12 @@ describe.skipIf(!isolated)(
         expiresAt: new Date(Date.now() + 60_000),
       })
       await expect(requireAdminLocalMfa(principal)).resolves.toBeUndefined()
+      await expect(
+        requireAdminLocalMfa({
+          ...principal,
+          user: { ...actor, twoFactorEnabled: false },
+        }),
+      ).rejects.toThrow('MFA_REQUIRED')
       expect(
         await localMfaVerifiedAt({
           ...principal,

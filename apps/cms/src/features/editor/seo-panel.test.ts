@@ -1,46 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { compactSeo, plainTextOf, previewAddress } from './seo-panel'
-
-describe('plainTextOf', () => {
-  it('joins text across blocks and collapses whitespace', () => {
-    const doc = {
-      type: 'doc',
-      content: [
-        {
-          type: 'heading',
-          attrs: { level: 2 },
-          content: [{ type: 'text', text: 'Spring   launch' }],
-        },
-        {
-          type: 'paragraph',
-          content: [
-            { type: 'text', text: 'Our ' },
-            { type: 'text', text: 'new\n\ncollection' },
-          ],
-        },
-        { type: 'paragraph', content: [{ type: 'text', text: 'is here.' }] },
-      ],
-    }
-    expect(plainTextOf(doc)).toBe('Spring launch Our new collection is here.')
-  })
-
-  it('ignores non-text nodes such as images and returns empty for no content', () => {
-    expect(
-      plainTextOf({
-        type: 'doc',
-        content: [
-          { type: 'image', attrs: { src: 'x.png' } },
-          { type: 'paragraph', content: [{ type: 'text', text: 'Caption' }] },
-        ],
-      }),
-    ).toBe('Caption')
-    expect(plainTextOf(null)).toBe('')
-    expect(plainTextOf(undefined)).toBe('')
-    expect(plainTextOf('just a string')).toBe('')
-    expect(plainTextOf({ type: 'doc', content: [] })).toBe('')
-  })
-})
+import { compactSeo, previewAddress } from './seo-panel'
 
 describe('compactSeo', () => {
   it('returns undefined when every value is empty', () => {

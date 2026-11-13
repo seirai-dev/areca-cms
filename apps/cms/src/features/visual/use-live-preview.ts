@@ -3,12 +3,12 @@ import * as React from 'react'
 import type { EntryData } from '#/lib/types'
 
 import {
-  DEBOUNCE_MS,
   HANDSHAKE_TIMEOUT_MS,
   PING_INTERVAL_MS,
   RETRY_MS,
   channelReducer,
   initialChannel,
+  sendDelay,
 } from './live-channel'
 import type { ChannelEvent, ChannelState, Tier } from './live-channel'
 import { isSiteMessage, pingMessage, updateMessage } from './protocol'
@@ -220,12 +220,24 @@ export function useLivePreviewChannel(
     return () => window.removeEventListener('message', onMessage)
   }, [enabled, origin, dispatch, flush, iframeRef, stopHandshake])
 
-  // A changed value is sent after a short pause, so typing sends once at the end.
+  // A changed value is sent after a pause in typing, and at least once a second
+  // while typing goes on (see `sendDelay`).
   const { data, locale } = options
+  const firstChangeAt = React.useRef<number | null>(null)
   React.useEffect(() => {
-    if (!enabled) return
+    if (!enabled) {
+      firstChangeAt.current = null
+      return
+    }
     dispatch({ type: 'value-changed' })
-    const timer = window.setTimeout(flush, DEBOUNCE_MS)
+    firstChangeAt.current ??= Date.now()
+    const timer = window.setTimeout(
+      () => {
+        firstChangeAt.current = null
+        flush()
+      },
+      sendDelay(Date.now(), firstChangeAt.current),
+    )
     return () => window.clearTimeout(timer)
   }, [enabled, data, locale, dispatch, flush])
 

@@ -2,15 +2,15 @@ import { and, eq, gte, isNull, lt, lte, or } from 'drizzle-orm'
 
 import { getStorage } from '#/adapters'
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import { asset, branding, storageObjectDeletion } from '#/db/schema'
 import { createLogger, redactString } from '#/server/log'
 
 const log = createLogger('storage')
 
-type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 export const STORAGE_RETRY_DELAYS_MS = [60_000, 300_000, 900_000]
 
-export async function queueObjectDeletion(tx: Transaction, storageKey: string) {
+export async function queueObjectDeletion(tx: Tx, storageKey: string) {
   await tx
     .insert(storageObjectDeletion)
     .values({ storageKey })
@@ -24,10 +24,7 @@ export async function beginObjectUpload(storageKey: string) {
     .values({ storageKey, nextAttemptAt: new Date(Date.now() + 15 * 60_000) })
 }
 
-export async function completeObjectUpload(
-  tx: Transaction,
-  storageKey: string,
-) {
+export async function completeObjectUpload(tx: Tx, storageKey: string) {
   const intent = (
     await tx
       .select()

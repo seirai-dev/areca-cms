@@ -1,6 +1,7 @@
 import { and, asc, eq, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbExecutor, DbReader, Tx } from '#/db'
 import { collection, entry, entryRevision, site } from '#/db/schema'
 import { GLOBAL_ENTRY_SLUG } from '#/lib/globals'
 import { I18N_KEY } from '#/lib/content-locale'
@@ -24,6 +25,7 @@ import {
   languageBlockers,
   normalizeRequiredLanguages,
 } from './locale-validation.ts'
+import { getSiteOrThrow } from './site-core.ts'
 
 /**
  * Site content sections ("globals"). A section is a `collection` row with
@@ -102,7 +104,7 @@ export function assertSectionSeo(
 export async function getGlobal(
   siteId: string,
   key: string,
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ) {
   const row = (
     await connection
@@ -127,7 +129,7 @@ export async function getGlobal(
 export async function isHiddenSectionEntry(
   collectionId: string,
   viewerIsAgency: boolean,
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ) {
   if (viewerIsAgency) return false
   const row = (
@@ -145,7 +147,7 @@ export async function isHiddenSectionEntry(
 export async function listGlobals(
   siteId: string,
   options: { enabledOnly?: boolean } = {},
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ) {
   const filters = [eq(collection.siteId, siteId), eq(collection.kind, 'global')]
   if (options.enabledOnly) {
@@ -183,7 +185,7 @@ export async function getGlobalEntry(siteId: string, key: string) {
  * transaction that writes the section row, so the two never diverge.
  */
 export async function ensureGlobalEntry(
-  tx: Pick<typeof db, 'select' | 'insert'>,
+  tx: DbExecutor,
   siteId: string,
   globalId: string,
 ) {
@@ -207,8 +209,6 @@ export async function ensureGlobalEntry(
     status: 'draft',
   })
 }
-
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 export type PreparedGlobalUpsert = {
   label: string
@@ -350,12 +350,7 @@ export async function upsertGlobal(
   actorId?: string,
 ) {
   const prepared = prepareGlobalUpsert(input)
-  const existingSite = (
-    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
-  ).at(0)
-  if (!existingSite) {
-    throw new NotFoundError(m.server_site_not_found())
-  }
+  const existingSite = await getSiteOrThrow(siteId)
 
   const now = new Date()
 
@@ -615,7 +610,7 @@ export async function discardGlobalDraft(
  */
 export async function sectionBlockers(
   siteId: string,
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ): Promise<string[]> {
   const rows = await connection
     .select({

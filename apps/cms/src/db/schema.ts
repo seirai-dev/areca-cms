@@ -228,7 +228,11 @@ export const membership = pgTable(
     role: text('role').$type<MembershipRole>().notNull(),
     createdAt: createdAt(),
   },
-  (t) => [unique('membership_user_org_unique').on(t.userId, t.organizationId)],
+  (t) => [
+    unique('membership_user_org_unique').on(t.userId, t.organizationId),
+    // Members lists and owner lookups read one organization.
+    index('membership_organization_id_idx').on(t.organizationId),
+  ],
 )
 
 export const invitation = pgTable('invitation', {
@@ -252,6 +256,11 @@ export const invitation = pgTable('invitation', {
     .default('sent'),
   lastDeliveryError: text('last_delivery_error'),
   lastSentAt: timestamptz('last_sent_at'),
+  /**
+   * Set when the raw link was shown to the inviter ("Regenerate link"). Such an
+   * invitation no longer proves the invitee owns the mailbox.
+   */
+  linkRevealedAt: timestamptz('link_revealed_at'),
   createdAt: createdAt(),
 })
 
@@ -421,6 +430,12 @@ export const entry = pgTable(
       'gin',
       sql`(${t.draftData}::text) gin_trgm_ops`,
     ),
+    // Translated-slug uniqueness (`validateLocaleSlugs`) asks
+    // `draft_data -> '$i18n' @> {"<locale>": {"$slug": …}}`.
+    index('entry_i18n_idx').using(
+      'gin',
+      sql`(${t.draftData} -> '$i18n') jsonb_path_ops`,
+    ),
   ],
 )
 
@@ -452,6 +467,8 @@ export const entryRevision = pgTable(
     index('entry_revision_entry_created_idx').on(t.entryId, t.createdAt, t.id),
     // Retention scans autosave rows by age.
     index('entry_revision_kind_created_idx').on(t.kind, t.createdAt),
+    // Deleting a person nulls their revisions' author.
+    index('entry_revision_created_by_idx').on(t.createdBy),
   ],
 )
 
@@ -490,7 +507,6 @@ export const entryLink = pgTable(
     ),
     // Inbound lookups (delete warning, linked from) read by target.
     index('entry_link_target_idx').on(t.targetEntryId),
-    index('entry_link_source_idx').on(t.sourceEntryId),
   ],
 )
 
@@ -572,6 +588,8 @@ export const asset = pgTable(
     uniqueIndex('asset_org_source_url_unique')
       .on(t.organizationId, t.sourceUrl)
       .where(sql`${t.sourceUrl} is not null`),
+    // File requests and save checks look an asset up by its key.
+    index('asset_storage_key_idx').on(t.storageKey),
     // The media library lists one organization's assets newest first.
     index('asset_organization_created_idx').on(
       t.organizationId,
@@ -601,6 +619,18 @@ export const assetUploadSession = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
+    /**
+     * The credential that opened the session: an MCP key or an OAuth
+     * connection. Uploads stop once it is revoked or expires; deleting it
+     * deletes the session. Both null for a session opened without one.
+     */
+    mcpKeyId: text('mcp_key_id').references(() => mcpKey.id, {
+      onDelete: 'cascade',
+    }),
+    mcpConnectionId: text('mcp_connection_id').references(
+      () => mcpConnection.id,
+      { onDelete: 'cascade' },
+    ),
     /** What the AI asked for, shown on the upload page. */
     purpose: text('purpose'),
     maxFiles: integer('max_files').notNull(),
@@ -615,6 +645,10 @@ export const assetUploadSession = pgTable(
     check(
       'asset_upload_session_reserved_check',
       sql`${t.reservedCount} >= 0 and ${t.reservedCount} <= ${t.maxFiles}`,
+    ),
+    check(
+      'asset_upload_session_credential_check',
+      sql`${t.mcpKeyId} is null or ${t.mcpConnectionId} is null`,
     ),
   ],
 )
@@ -645,6 +679,10 @@ export const publication = pgTable(
       .references(() => site.id, { onDelete: 'cascade' }),
     snapshot: jsonb('snapshot').$type<Snapshot>().notNull(),
     snapshotHash: text('snapshot_hash').notNull(),
+    /** Whether the snapshot stores its asset list, readable without the snapshot. */
+    hasAssets: boolean('has_assets')
+      .notNull()
+      .generatedAlwaysAs(sql`snapshot ? 'assets'`),
     entryVersions: jsonb('entry_versions')
       .$type<{ entryId: string; scheduledVersion: string }[]>()
       .notNull()
@@ -669,9 +707,17 @@ export const publication = pgTable(
     deployedAt: timestamptz('deployed_at'),
   },
   (t) => [
-    index('publication_site_id_idx').on(t.siteId),
     // "Latest live release for this site" lookups.
-    index('publication_site_status_idx').on(t.siteId, t.status),
+    index('publication_site_status_created_idx').on(
+      t.siteId,
+      t.status,
+      sql`${t.createdAt} desc`,
+    ),
+    // The release history lists one site's publications newest first.
+    index('publication_site_created_idx').on(
+      t.siteId,
+      sql`${t.createdAt} desc`,
+    ),
   ],
 )
 
@@ -704,6 +750,9 @@ export const buildJob = pgTable(
   },
   (t) => [
     index('build_job_status_idx').on(t.status),
+    index('build_job_publication_id_idx').on(t.publicationId),
+    // The build list reads one site's jobs newest first.
+    index('build_job_site_created_idx').on(t.siteId, sql`${t.createdAt} desc`),
     uniqueIndex('build_job_one_queued_per_site')
       .on(t.siteId)
       .where(sql`${t.status} = 'queued'`),
@@ -738,26 +787,51 @@ export const publicationRequest = pgTable('publication_request', {
   createdAt: createdAt(),
 })
 
-export const auditLog = pgTable('audit_log', {
-  id: id(),
-  /** Null for instance-level events (setup, branding, agency admin changes). */
-  organizationId: text('organization_id').references(() => organization.id, {
-    onDelete: 'cascade',
-  }),
-  siteId: text('site_id').references(() => site.id, { onDelete: 'set null' }),
-  actorId: text('actor_id').references(() => user.id, { onDelete: 'set null' }),
-  action: text('action').notNull(),
-  targetType: text('target_type').notNull(),
-  targetId: text('target_id').notNull(),
-  meta: jsonb('meta').$type<AuditMeta>(),
-  /**
-   * Agency-only rows: anything for a development environment, and `dev_env.*`
-   * actions. Set by `audit()`. Client-facing activity filters on this flag, so
-   * rows stay hidden after the dev env (and its site_id) is deleted.
-   */
-  agencyOnly: boolean('agency_only').notNull().default(false),
-  createdAt: createdAt(),
-})
+export const auditLog = pgTable(
+  'audit_log',
+  {
+    id: id(),
+    /** Null for instance-level events (setup, branding, agency admin changes). */
+    organizationId: text('organization_id').references(() => organization.id, {
+      onDelete: 'cascade',
+    }),
+    siteId: text('site_id').references(() => site.id, { onDelete: 'set null' }),
+    actorId: text('actor_id').references(() => user.id, {
+      onDelete: 'set null',
+    }),
+    action: text('action').notNull(),
+    targetType: text('target_type').notNull(),
+    targetId: text('target_id').notNull(),
+    meta: jsonb('meta').$type<AuditMeta>(),
+    /**
+     * Agency-only rows: anything for a development environment, and `dev_env.*`
+     * actions. Set by `audit()`. Client-facing activity filters on this flag, so
+     * rows stay hidden after the dev env (and its site_id) is deleted.
+     */
+    agencyOnly: boolean('agency_only').notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    // Activity feeds read newest first: everything, one organization or one site.
+    index('audit_log_created_idx').on(sql`${t.createdAt} desc`),
+    index('audit_log_organization_created_idx').on(
+      t.organizationId,
+      sql`${t.createdAt} desc`,
+    ),
+    index('audit_log_site_created_idx').on(t.siteId, sql`${t.createdAt} desc`),
+    // The newest row for a target: autosave coalescing, invitation lookups.
+    index('audit_log_target_created_idx').on(
+      t.targetId,
+      sql`${t.createdAt} desc`,
+    ),
+    // "Last active" reads each person's newest sign-in.
+    index('audit_log_sign_in_idx')
+      .on(t.actorId, sql`${t.createdAt} desc`)
+      .where(sql`${t.action} = 'user.sign_in'`),
+    // Deleting a person nulls their rows' actor.
+    index('audit_log_actor_id_idx').on(t.actorId),
+  ],
+)
 
 /**
  * Instance-wide whitelabel settings. A single row with id `default`; every
@@ -1194,7 +1268,6 @@ export const oauthClientResource = pgTable(
     createdAt: timestamptz('createdAt'),
   },
   (t) => [
-    index('oauth_client_resource_client_idx').on(t.clientId),
     index('oauth_client_resource_resource_idx').on(t.resourceId),
     unique('oauth_client_resource_pair_unique').on(t.clientId, t.resourceId),
   ],

@@ -11,7 +11,7 @@ import {
   Translate,
 } from '@phosphor-icons/react'
 
-import { adminQueryKeys } from '#/lib/admin/helpers'
+import { queryKeys } from '#/lib/query-keys'
 import { BrandLogo } from '#/components/brand-mark'
 import { useShell } from '#/components/shell/shell-context'
 import { SiteTile } from '#/components/shell/site-tile'
@@ -39,7 +39,7 @@ import { Sheet, SheetContent, SheetTitle } from '#/components/ui/sheet'
 import { Tag } from '#/components/ui/tag'
 import { LiveDot } from '#/components/ui/status-pill'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
-import { readRecentSites } from '#/features/shell/last-site'
+import { useRecentSites } from '#/features/shell/last-site'
 import { useIsMobile } from '#/hooks/use-mobile'
 import { useBranding } from '#/lib/use-branding'
 import {
@@ -56,7 +56,7 @@ import { getSitesOverviewFn } from '#/server/fn/overview'
 
 export function sitesOverviewQueryOptions() {
   return {
-    queryKey: ['sites-overview'] as const,
+    queryKey: queryKeys.sitesOverview(),
     queryFn: () => getSitesOverviewFn(),
     staleTime: 60_000,
   }
@@ -193,12 +193,11 @@ function SwitcherList({ onDone }: { onDone: () => void }) {
   const branding = useBranding()
   const liveMap = useSitesLive()
   const clients = useQuery({
-    queryKey: adminQueryKeys.organizations,
+    queryKey: queryKeys.organizations(),
     queryFn: () => listOrganizationsFn(),
     enabled: me.user.isAgencyAdmin,
   })
-  const [recent, setRecent] = React.useState<string[]>([])
-  React.useEffect(() => setRecent(readRecentSites()), [])
+  const recent = useRecentSites()
 
   const recentSites = recent
     .map((id) => me.sites.find((site) => site.id === id))

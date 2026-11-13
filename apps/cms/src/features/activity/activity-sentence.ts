@@ -397,16 +397,49 @@ export const REPEAT_WINDOW_MS = 15 * 60_000
 export type ActivityGroup<T extends ActivityLike> = {
   row: T
   count: number
+  /** First and newest save of a group of saves, when they span more than a minute. */
+  span: { from: number; to: number } | null
+}
+
+/** When a shared autosave row (see `auditAutosave`) took its last save. */
+export function lastSavedAt(row: ActivityLike) {
+  const value = metaOf(row)?.lastSavedAt
+  if (typeof value !== 'string') return null
+  return Number.isNaN(new Date(value).getTime()) ? null : value
+}
+
+/**
+ * Autosaves share one row (see `auditAutosave`): `meta.saves` counts them,
+ * `createdAt` is the first one and `meta.lastSavedAt` the newest. Rows written
+ * before that moved `createdAt` to the newest save and kept the first in
+ * `meta.firstSavedAt`. Other rows are one event at `createdAt`.
+ */
+function repeatsOf(row: ActivityLike) {
+  const meta = metaOf(row)
+  const created = new Date(row.createdAt).getTime()
+  const saves = meta?.saves
+  if (typeof saves !== 'number' || saves < 1)
+    return { count: 1, at: created, firstAt: created }
+  const last = lastSavedAt(row)
+  const first =
+    typeof meta?.firstSavedAt === 'string'
+      ? new Date(meta.firstSavedAt).getTime()
+      : NaN
+  return {
+    count: saves,
+    at: last ? new Date(last).getTime() : created,
+    firstAt: Number.isNaN(first) ? created : Math.min(first, created),
+  }
 }
 
 /** Collapses consecutive repeats in a newest-first list. */
 export function collapseRepeats<T extends ActivityLike>(
   rows: ReadonlyArray<T>,
 ) {
-  const out: Array<ActivityGroup<T>> = []
+  const out: Array<{ row: T; count: number; from: number; to: number }> = []
   let lastAt = 0
   for (const row of rows) {
-    const at = new Date(row.createdAt).getTime()
+    const { count, at, firstAt } = repeatsOf(row)
     const prev = out.at(-1)
     if (
       prev &&
@@ -415,13 +448,18 @@ export function collapseRepeats<T extends ActivityLike>(
       prev.row.actorId === row.actorId &&
       Math.abs(lastAt - at) <= REPEAT_WINDOW_MS
     ) {
-      prev.count += 1
+      prev.count += count
+      prev.from = Math.min(prev.from, firstAt)
+      prev.to = Math.max(prev.to, at)
     } else {
-      out.push({ row, count: 1 })
+      out.push({ row, count, from: firstAt, to: at })
     }
-    lastAt = at
+    lastAt = firstAt
   }
-  return out
+  return out.map(({ row, count, from, to }): ActivityGroup<T> => {
+    const sameMinute = Math.floor(from / 60_000) === Math.floor(to / 60_000)
+    return { row, count, span: count > 1 && !sameMinute ? { from, to } : null }
+  })
 }
 
 /** Entry ids whose titles make the sentences readable. */

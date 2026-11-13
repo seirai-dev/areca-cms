@@ -100,7 +100,9 @@ the old acceptance link stops working even if SMTP still fails. Use **Send
 again** after fixing the mail settings; submitting another invitation while one
 is pending deliberately reports a conflict. A copied link is a bearer capability:
 share it only with its recipient. Acceptance requires the signed-in account's
-email to match the invitation. Accepted or revoked invitations cannot be resent.
+email to match the invitation. Accepting an emailed invitation marks the
+address verified, unless its link was ever shown with **Regenerate link**
+(`invitation.link_revealed_at`); that person verifies their address by email. Accepted or revoked invitations cannot be resent.
 
 Delivery status `sent` means the SMTP server accepted the message, not that the
 recipient read it or that it escaped spam filtering. Delivery is at least once:

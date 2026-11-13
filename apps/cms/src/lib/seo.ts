@@ -4,13 +4,9 @@ import { m } from '#/paraglide/messages'
 import { ID_MAX_LENGTH, URL_MAX_LENGTH } from '#/lib/content-limits'
 import type { ImageValue, SeoMeta } from '#/lib/types'
 
-/**
- * Per-entry SEO/GEO block. It is stored inside entry data under this reserved
- * key so drafts, revisions, scheduling and publishing carry it for free. The
- * `$` prefix fails `isSafeIdentifier`, so no content-model field can collide.
- * Snapshots move it out of `data` into a resolved top-level `entry.seo`.
- */
-export const SEO_KEY = '$seo'
+import { SEO_KEY } from './seo-key'
+
+export { SEO_KEY }
 
 export const SEO_SCHEMA_TYPES = [
   'Article',

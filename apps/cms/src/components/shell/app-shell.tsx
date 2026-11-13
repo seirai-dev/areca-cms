@@ -33,32 +33,24 @@ import { isDevSite } from '#/lib/site-environment'
 import { canManageSite, findSite } from '#/lib/site-nav'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
+import { useStoredState } from '#/hooks/use-stored-state'
+import type { StoredCodec } from '#/hooks/use-stored-state'
 import type { Me } from '#/server/fn/me'
 
 const SIDEBAR_KEY = 'areca.sidebar'
 
+const RAIL_COLLAPSED: StoredCodec<boolean> = {
+  parse: (raw) => raw !== 'expanded',
+  serialize: (collapsed) => (collapsed ? 'collapsed' : 'expanded'),
+}
+
 /** Rail state for 768–1023px, remembered per browser. */
 function useRailPreference() {
-  const [collapsed, setCollapsed] = React.useState(true)
-  React.useEffect(() => {
-    try {
-      const stored = localStorage.getItem(SIDEBAR_KEY)
-      if (stored === 'expanded') setCollapsed(false)
-    } catch {
-      /* localStorage unavailable */
-    }
-  }, [])
-  const toggle = React.useCallback(() => {
-    setCollapsed((value) => {
-      const next = !value
-      try {
-        localStorage.setItem(SIDEBAR_KEY, next ? 'collapsed' : 'expanded')
-      } catch {
-        /* localStorage unavailable */
-      }
-      return next
-    })
-  }, [])
+  const [collapsed, setCollapsed] = useStoredState(SIDEBAR_KEY, RAIL_COLLAPSED)
+  const toggle = React.useCallback(
+    () => setCollapsed(!collapsed),
+    [collapsed, setCollapsed],
+  )
   return [collapsed, toggle] as const
 }
 

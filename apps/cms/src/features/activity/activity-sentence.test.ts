@@ -5,6 +5,7 @@ import {
   activityText,
   collapseRepeats,
   entryTargetIds,
+  lastSavedAt,
   viaMcpKey,
 } from './activity-sentence'
 import type { ActivityLike } from './activity-sentence'
@@ -254,6 +255,48 @@ describe('collapseRepeats', () => {
       row({ targetId: 'e2', createdAt: '2026-09-30T08:59:00Z' }),
     ]
     expect(collapseRepeats(rows).map((group) => group.count)).toEqual([3, 1, 1])
+  })
+
+  it('counts the autosaves a shared row holds, and groups from its first save', () => {
+    const rows = [
+      row({
+        createdAt: '2026-09-30T11:00:00Z',
+        meta: { saves: 12, firstSavedAt: '2026-09-30T10:05:00Z' },
+      }),
+      row({ createdAt: '2026-09-30T10:00:00Z' }),
+      row({ createdAt: '2026-09-30T09:00:00Z', meta: { saves: 1 } }),
+    ]
+    expect(collapseRepeats(rows).map((group) => group.count)).toEqual([13, 1])
+  })
+
+  it('groups a shared row that stays at its first save by its newest save', () => {
+    const rows = [
+      row({ createdAt: '2026-09-30T10:30:00Z', meta: { saves: 1 } }),
+      row({
+        createdAt: '2026-09-30T10:00:00Z',
+        meta: {
+          saves: 4,
+          firstSavedAt: '2026-09-30T10:00:00Z',
+          lastSavedAt: '2026-09-30T10:20:00Z',
+        },
+      }),
+      row({ createdAt: '2026-09-30T09:30:00Z', meta: { saves: 2 } }),
+    ]
+    // 10:30 is 10 min after the shared row's last save (one group); 09:30 is
+    // 30 min before its first save (its own group).
+    expect(collapseRepeats(rows).map((group) => group.count)).toEqual([5, 2])
+  })
+})
+
+describe('lastSavedAt', () => {
+  it('reads the newest save of a shared autosave row', () => {
+    expect(
+      lastSavedAt(
+        row({ meta: { saves: 3, lastSavedAt: '2026-09-30T10:20:00Z' } }),
+      ),
+    ).toBe('2026-09-30T10:20:00Z')
+    expect(lastSavedAt(row({ meta: { saves: 1 } }))).toBeNull()
+    expect(lastSavedAt(row({ meta: { lastSavedAt: 'nope' } }))).toBeNull()
   })
 })
 
@@ -535,5 +578,46 @@ describe('activityText for development environments', () => {
         'Spring menu',
       ),
     ).toBe('Sanne de Vries copied “Spring menu” to production as a draft')
+  })
+})
+
+describe('collapseRepeats save span', () => {
+  const save = (createdAt: string, meta: Record<string, unknown>) =>
+    ({
+      id: createdAt,
+      action: 'entry.update',
+      targetId: 'e1',
+      targetType: 'entry',
+      actorId: 'u1',
+      createdAt,
+      meta,
+    }) as unknown as Parameters<typeof collapseRepeats>[0][number]
+
+  it('spans every stored row of a group, oldest first save to newest save', () => {
+    const [group] = collapseRepeats([
+      save('2026-09-30T10:16:00Z', {
+        saves: 2,
+        lastSavedAt: '2026-09-30T10:20:00Z',
+      }),
+      save('2026-09-30T10:01:00Z', {
+        saves: 3,
+        lastSavedAt: '2026-09-30T10:12:00Z',
+      }),
+    ])
+    expect(group.count).toBe(5)
+    expect(group.span).toEqual({
+      from: Date.parse('2026-09-30T10:01:00Z'),
+      to: Date.parse('2026-09-30T10:20:00Z'),
+    })
+  })
+
+  it('has no span when the saves fall in one minute', () => {
+    const [group] = collapseRepeats([
+      save('2026-09-30T10:01:05Z', {
+        saves: 4,
+        lastSavedAt: '2026-09-30T10:01:40Z',
+      }),
+    ])
+    expect(group.span).toBeNull()
   })
 })

@@ -1,6 +1,6 @@
 import { inArray, and, eq } from 'drizzle-orm'
 
-import type { db } from '#/db'
+import type { DbReader } from '#/db'
 import { collection, entry, site } from '#/db/schema'
 import {
   I18N_KEY,
@@ -15,11 +15,12 @@ import type { EntryData, EntryStatus, Field, SiteLanguages } from '#/lib/types'
 import { isAllowedLinkHref } from '#/server/richtext/allowlist'
 import {
   entryLinkTargets,
-  resolveEntryLinks,
+  relinkEntryLinks,
 } from '#/server/richtext/entry-links'
 
 import { ValidationError } from './errors.ts'
 import { localeCtxFor } from './locale-validation.ts'
+import { isPlainObject } from '#/lib/is-plain-object'
 
 /**
  * Entry links in content: loading the entries they point at, the save check
@@ -27,8 +28,6 @@ import { localeCtxFor } from './locale-validation.ts'
  * entry (the base and each `$i18n` language slot). See
  * docs/design/rich-text-links.md, decisions 6 and 7.
  */
-
-type Connection = Pick<typeof db, 'select'>
 
 /** What a link needs to know about its target. */
 export type LinkTargetRow = {
@@ -58,7 +57,7 @@ export type LinkTargetRow = {
  * is why a push passes it through (docs/design/dev-environments.md).
  */
 export async function linkTargetSiteIds(
-  connection: Connection,
+  connection: DbReader,
   siteId: string,
 ): Promise<string[]> {
   const row = (
@@ -93,7 +92,7 @@ export async function linkTargetSiteIds(
  * Missing ids are absent from the map.
  */
 export async function loadLinkTargets(
-  connection: Connection,
+  connection: DbReader,
   siteIds: string | string[],
   ids: Iterable<string>,
 ): Promise<Map<string, LinkTargetRow>> {
@@ -200,10 +199,6 @@ export function placeLinkTarget(
   }
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
 export type RichTextSlot = {
   /** The language the value is written in. Null for the base slot. */
   locale: string | null
@@ -211,14 +206,14 @@ export type RichTextSlot = {
 }
 
 /**
- * Every rich text value of an entry, with the slot it sits in. `visit` may
- * return a replacement. The result is a copy; `data` is not mutated.
+ * Every rich text value of an entry, with the slot it sits in. `visit` returns
+ * the replacement. The result is a copy; `data` is not mutated.
  */
-export async function mapRichTextValues(
+export function mapRichTextValues(
   data: EntryData,
   fields: Field[],
-  visit: (json: unknown, slot: RichTextSlot) => Promise<unknown> | unknown,
-): Promise<EntryData> {
+  visit: (json: unknown, slot: RichTextSlot) => unknown,
+): EntryData {
   const keys = fields
     .filter((field) => field.type === 'richtext')
     .map((field) => field.key)
@@ -226,7 +221,7 @@ export async function mapRichTextValues(
   const next: EntryData = { ...data }
   for (const key of keys) {
     if (isPlainObject(data[key])) {
-      next[key] = await visit(data[key], { locale: null, field: key })
+      next[key] = visit(data[key], { locale: null, field: key })
     }
   }
   const translations = data[I18N_KEY]
@@ -237,7 +232,7 @@ export async function mapRichTextValues(
       const copy: Record<string, unknown> = { ...slot }
       for (const key of keys) {
         if (isPlainObject(slot[key])) {
-          copy[key] = await visit(slot[key], { locale, field: key })
+          copy[key] = visit(slot[key], { locale, field: key })
         }
       }
       nextTranslations[locale] = copy
@@ -247,6 +242,54 @@ export async function mapRichTextValues(
   return next
 }
 
+/** Calls `visit` with every rich text value of an entry (see `mapRichTextValues`). */
+export function forEachRichTextValue(
+  data: EntryData,
+  fields: Field[],
+  visit: (json: unknown, slot: RichTextSlot) => void,
+) {
+  mapRichTextValues(data, fields, (json, slot) => {
+    visit(json, slot)
+    return json
+  })
+}
+
+/** The ids the entry links of the given versions of an entry point at. */
+export function entryLinkIdsOf(
+  datas: (EntryData | null | undefined)[],
+  fields: Field[],
+): Set<string> {
+  const ids = new Set<string>()
+  for (const data of datas) {
+    if (!data) continue
+    forEachRichTextValue(data, fields, (json) => {
+      for (const target of entryLinkTargets(json)) ids.add(target.entryId)
+    })
+  }
+  return ids
+}
+
+/**
+ * The stored `href` (main-language path plus section) and collection of a link
+ * to `row`. Undefined when the target has no page (a site content section, or
+ * a collection without a route).
+ */
+export function linkTargetHref(
+  row: Pick<
+    LinkTargetRow,
+    'collectionKind' | 'routePattern' | 'slug' | 'collectionKey'
+  >,
+  anchor: string | null,
+): { href: string; collection: string } | undefined {
+  if (row.collectionKind === 'global' || row.routePattern === '') {
+    return undefined
+  }
+  return {
+    href: entryLinkPath(row.routePattern, row.slug, anchor),
+    collection: row.collectionKey,
+  }
+}
+
 /**
  * The save check. Every entry link must point at an entry of this site in a
  * collection with a page. Its stored collection and `href` are recomputed from
@@ -254,16 +297,12 @@ export async function mapRichTextValues(
  * Throws a validation error that names each bad link.
  */
 export async function prepareEntryLinks(
-  connection: Connection,
+  connection: DbReader,
   siteId: string,
   fields: Field[],
   data: EntryData,
 ): Promise<EntryData> {
-  const ids = new Set<string>()
-  await mapRichTextValues(data, fields, (json) => {
-    for (const target of entryLinkTargets(json)) ids.add(target.entryId)
-    return json
-  })
+  const ids = entryLinkIdsOf([data], fields)
   if (ids.size === 0) return data
 
   const siteIds = await linkTargetSiteIds(connection, siteId)
@@ -276,10 +315,7 @@ export async function prepareEntryLinks(
         path: '',
         message: `A link points at entry ${id}, which is not in this site.`,
       })
-    } else if (
-      target.collectionKind === 'global' ||
-      target.routePattern === ''
-    ) {
+    } else if (!linkTargetHref(target, null)) {
       errors.push({
         path: '',
         message: `A link points at "${target.slug}", which has no page. Only entries of collections with a page can be linked.`,
@@ -288,11 +324,11 @@ export async function prepareEntryLinks(
   }
   if (errors.length > 0) throw new ValidationError(errors)
 
-  return mapRichTextValues(data, fields, async (json, slot) => {
-    const resolved = await resolveEntryLinks(json, async (target) => {
+  return mapRichTextValues(data, fields, (json, slot) =>
+    relinkEntryLinks(json, (target) => {
       const row = targets.get(target.entryId)!
-      const href = entryLinkPath(row.routePattern, row.slug, target.anchor)
-      if (!isAllowedLinkHref(href)) {
+      const next = linkTargetHref(row, target.anchor)!
+      if (!isAllowedLinkHref(next.href)) {
         throw new ValidationError([
           {
             path: slot.field,
@@ -300,12 +336,7 @@ export async function prepareEntryLinks(
           },
         ])
       }
-      return {
-        href,
-        targetTitle: row.slug,
-        collection: row.collectionKey,
-      }
-    })
-    return resolved.json
-  })
+      return next
+    }),
+  )
 }

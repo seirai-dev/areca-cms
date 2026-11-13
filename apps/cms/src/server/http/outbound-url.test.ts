@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import {
   assertSafeHealthCheckUrl,
   assertSecureServiceUrl,
-  isPrivateOrReservedAddress,
   UnsafeOutboundUrlError,
 } from './outbound-url'
 
@@ -27,12 +26,54 @@ describe('outbound URL validation', () => {
     '169.254.169.254',
     '172.16.0.1',
     '192.168.1.1',
+    '192.0.2.1',
+    '198.51.100.1',
+    '203.0.113.1',
     '::1',
     'fe80::1',
     'fd00::1',
-  ])('recognizes %s as private or reserved', (address) => {
-    expect(isPrivateOrReservedAddress(address)).toBe(true)
+    'fec0::1',
+    '100::1',
+    '::7f00:1',
+    '::ffff:7f00:1',
+    '64:ff9b::7f00:1',
+    '64:ff9b::a9fe:a9fe',
+    '2002:7f00:1::',
+    '2002:a9fe:a9fe::1',
+  ])('refuses a health check that resolves to %s', async (address) => {
+    await expect(
+      assertSafeHealthCheckUrl('https://example.test/health', {
+        resolve: async () => [address],
+      }),
+    ).rejects.toBeInstanceOf(UnsafeOutboundUrlError)
   })
+
+  it.each([
+    'https://[::7f00:1]/health',
+    'https://[::127.0.0.1]/health',
+    'https://[64:ff9b::127.0.0.1]/health',
+    'https://[2002:7f00:1::]/health',
+    'https://[fec0::1]/health',
+  ])('refuses the literal %s without a DNS lookup', async (url) => {
+    await expect(
+      assertSafeHealthCheckUrl(url, {
+        resolve: async () => {
+          throw new Error('unexpected lookup')
+        },
+      }),
+    ).rejects.toBeInstanceOf(UnsafeOutboundUrlError)
+  })
+
+  it.each(['192.0.1.1', '192.0.3.1', '198.51.99.1', '203.0.114.1'])(
+    'accepts the public address %s next to a documentation range',
+    async (address) => {
+      await expect(
+        assertSafeHealthCheckUrl('https://example.test/health', {
+          resolve: async () => [address],
+        }),
+      ).resolves.toHaveProperty('hostname', 'example.test')
+    },
+  )
 
   it('rejects a hostname if any DNS answer is private', async () => {
     await expect(

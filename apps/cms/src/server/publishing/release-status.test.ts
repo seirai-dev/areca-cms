@@ -26,11 +26,7 @@ import {
 } from '#/server/content/test-utils'
 
 import { getSiteReleaseStatus } from './publications.ts'
-import {
-  diffApprovedRelease,
-  listPendingRelease,
-  listPendingReleaseChanges,
-} from './release-diff.ts'
+import { diffApprovedRelease, listPendingRelease } from './release-diff.ts'
 
 const hasDb = Boolean(process.env.DATABASE_URL)
 
@@ -181,7 +177,9 @@ describe.skipIf(!hasDb)('release status from approved snapshot diff', () => {
       const status = await getSiteReleaseStatus(ctx.site.id)
       expect(status.pendingEntries).toBe(1)
       expect(
-        (await listPendingReleaseChanges(ctx.site.id)).map((item) => item.kind),
+        (await listPendingRelease(ctx.site.id)).changes.map(
+          (item) => item.kind,
+        ),
       ).toEqual(['removal'])
     })
   })
@@ -216,7 +214,7 @@ describe.skipIf(!hasDb)('release status from approved snapshot diff', () => {
 
       const status = await getSiteReleaseStatus(ctx.site.id)
       expect(status.pendingEntries).toBe(1)
-      const changes = await listPendingReleaseChanges(ctx.site.id)
+      const changes = (await listPendingRelease(ctx.site.id)).changes
       expect(changes).toHaveLength(1)
       expect(changes[0]?.kind).toBe('removal')
       expect(changes[0]?.exists).toBe(false)
@@ -239,7 +237,9 @@ describe.skipIf(!hasDb)('release status from approved snapshot diff', () => {
       expect(status.pendingEntries).toBe(1)
       expect(diff.removals).toHaveLength(1)
       expect(
-        (await listPendingReleaseChanges(ctx.site.id)).map((item) => item.kind),
+        (await listPendingRelease(ctx.site.id)).changes.map(
+          (item) => item.kind,
+        ),
       ).toEqual(['removal'])
     })
   })
@@ -303,7 +303,7 @@ describe.skipIf(!hasDb)('release status from approved snapshot diff', () => {
       expect(diff.scheduledUpcoming.map((item) => item.id)).toEqual([
         published.id,
       ])
-      const changes = await listPendingReleaseChanges(ctx.site.id)
+      const changes = (await listPendingRelease(ctx.site.id)).changes
       expect(changes).toHaveLength(1)
       expect(changes[0]?.kind).toBe('scheduled')
     })

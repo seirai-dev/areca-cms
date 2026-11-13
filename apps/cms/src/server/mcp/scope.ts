@@ -1,7 +1,3 @@
-import { eq } from 'drizzle-orm'
-
-import { db } from '#/db'
-import { site } from '#/db/schema'
 import { getCollection, listCollections } from '#/server/content/collections'
 import { getEntry } from '#/server/content/entries'
 import {
@@ -13,6 +9,7 @@ import { getBuildJob, getPublication } from '#/server/publishing/publications'
 
 import { McpNotFoundError } from './errors'
 import type { McpActor } from './keys'
+import { findSite } from '#/server/content/site-core'
 
 /**
  * Tenancy checks for every id an agent sends. Services do not check the site,
@@ -32,9 +29,7 @@ function belongsTo<T extends { siteId: string }>(
 }
 
 export async function loadSiteRow(actor: McpActor) {
-  const row = (
-    await db.select().from(site).where(eq(site.id, actor.siteId)).limit(1)
-  ).at(0)
+  const row = await findSite(actor.siteId)
   if (!row) throw new McpNotFoundError('This site no longer exists.')
   return row
 }

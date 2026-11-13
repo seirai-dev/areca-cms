@@ -39,12 +39,7 @@ export function NotificationsSection() {
       description={m.notifications_section_description()}
     >
       {query.isError ? (
-        <QueryError
-          title={m.notifications_load_error()}
-          error={query.error}
-          onRetry={() => void query.refetch()}
-          retrying={query.isFetching}
-        />
+        <QueryError title={m.notifications_load_error()} query={query} />
       ) : query.isPending ? (
         <div className="grid gap-4" aria-busy="true">
           <Skeleton className="h-40 rounded-card" />

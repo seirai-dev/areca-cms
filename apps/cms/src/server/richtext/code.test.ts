@@ -176,8 +176,7 @@ describe('validator and marks', () => {
 describe('plain text for descriptions', () => {
   it('skips code blocks and keeps inline code', async () => {
     const { richTextPlainText } = await import('./index')
-    const { plainTextOf } = await import('#/features/editor/seo-panel')
-    const doc = {
+    const value = {
       type: 'doc',
       content: [
         {
@@ -196,7 +195,6 @@ describe('plain text for descriptions', () => {
         { type: 'paragraph', content: [{ type: 'text', text: 'Done.' }] },
       ],
     }
-    expect(richTextPlainText(doc)).toBe('Call getPost on the server.\nDone.')
-    expect(plainTextOf(doc)).toBe('Call getPost on the server. Done.')
+    expect(richTextPlainText(value)).toBe('Call getPost on the server.\nDone.')
   })
 })

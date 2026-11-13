@@ -4,7 +4,8 @@ import { CheckCircle, CloudArrowUp, Trash } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 import { useStepUp } from '#/features/security/step-up'
-import { adminQueryKeys, errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
+import { queryKeys } from '#/lib/query-keys'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { FormField } from '#/components/ui/form-field'
@@ -42,7 +43,7 @@ function useDokploy(organizationId: string) {
   const [failure, setFailure] = React.useState<string | null>(null)
   const refresh = () =>
     queryClient.invalidateQueries({
-      queryKey: adminQueryKeys.dokployCredentials(organizationId),
+      queryKey: queryKeys.dokployCredentials(organizationId),
     })
 
   const save = useMutation({
@@ -89,7 +90,7 @@ function useDokploy(organizationId: string) {
       setFailure(null)
       await refresh()
     },
-    onError: (err) => toast.error(errorMessage(err)),
+    // Only the remove dialog runs it; the dialog shows the error.
   })
 
   return { status, applications, failure, save, verify, remove }
@@ -101,21 +102,8 @@ export function ClientDeployment({
 }: {
   organizationId: string
 }) {
-  const { status, applications, failure, save, verify, remove } =
-    useDokploy(organizationId)
-  const [url, setUrl] = React.useState('')
-  const [apiKey, setApiKey] = React.useState('')
-  const configured = Boolean(status.data?.configured)
-
-  // Seed the address from the stored credentials; the key is never shown.
-  React.useEffect(() => {
-    if (status.data) {
-      setUrl(status.data.url ?? '')
-      setApiKey('')
-    }
-  }, [status.data])
-
-  const busy = save.isPending || verify.isPending || remove.isPending
+  const dokploy = useDokploy(organizationId)
+  const { status, applications } = dokploy
 
   return (
     <div className="grid">
@@ -124,12 +112,7 @@ export function ClientDeployment({
         description={m.agency_dokploy_description()}
       >
         {status.isError ? (
-          <QueryError
-            title={m.agency_dokploy_load_error()}
-            error={status.error}
-            onRetry={() => void status.refetch()}
-            retrying={status.isFetching}
-          />
+          <QueryError title={m.agency_dokploy_load_error()} query={status} />
         ) : status.isPending ? (
           <div className="grid gap-4" aria-busy="true">
             <Skeleton className="h-10 w-48" />
@@ -137,142 +120,12 @@ export function ClientDeployment({
             <Skeleton className="h-9 w-full" />
           </div>
         ) : (
-          <form
-            className="grid gap-5"
-            data-testid="dokploy-form"
-            onSubmit={(event) => {
-              event.preventDefault()
-              save.mutate({
-                url: url.trim(),
-                apiKey: apiKey.trim() || undefined,
-              })
-            }}
-          >
-            <div className="flex items-center gap-3">
-              <span className="grid size-10 shrink-0 place-content-center rounded-[11px] bg-background-subtle text-icon-default">
-                <CloudArrowUp className="size-5" />
-              </span>
-              <div className="grid min-w-0 flex-1 gap-0.5">
-                <span className="text-headline text-text-primary">
-                  {m.agency_dokploy_title()}
-                </span>
-                <span className="truncate text-caption font-normal text-text-muted">
-                  {configured && status.data.url
-                    ? status.data.url
-                    : m.agency_dokploy_not_set_up_body()}
-                </span>
-              </div>
-              {configured ? (
-                <StatusPill
-                  tone="success"
-                  icon="check"
-                  label={m.agency_dokploy_connected()}
-                  data-testid="dokploy-status"
-                  status="configured"
-                />
-              ) : (
-                <StatusPill
-                  tone="neutral"
-                  label={m.admin_org_dokploy_not_configured()}
-                  data-testid="dokploy-status"
-                  status="not-configured"
-                />
-              )}
-            </div>
-
-            <FormField label={m.admin_org_dokploy_url()} htmlFor="dokploy-url">
-              <Input
-                id="dokploy-url"
-                data-testid="dokploy-url"
-                type="url"
-                required
-                placeholder="https://dokploy.example.com"
-                value={url}
-                onChange={(event) => setUrl(event.target.value)}
-              />
-            </FormField>
-            <FormField
-              label={m.admin_org_dokploy_api_key()}
-              htmlFor="dokploy-api-key"
-              hint={
-                configured
-                  ? m.admin_org_dokploy_api_key_replace_hint()
-                  : m.admin_org_dokploy_api_key_new_hint()
-              }
-            >
-              <Input
-                id="dokploy-api-key"
-                data-testid="dokploy-api-key"
-                type="password"
-                required={!configured}
-                autoComplete="new-password"
-                placeholder={configured ? '••••••••••••' : undefined}
-                value={apiKey}
-                onChange={(event) => setApiKey(event.target.value)}
-              />
-            </FormField>
-
-            {failure ? (
-              <p
-                role="alert"
-                data-testid="dokploy-error"
-                className="rounded-control bg-status-error-bg px-3 py-2.5 text-callout text-text-error"
-              >
-                {m.agency_dokploy_failed({ message: failure })}
-              </p>
-            ) : null}
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="submit"
-                data-testid="save-dokploy-credentials"
-                loading={save.isPending}
-                disabled={busy && !save.isPending}
-              >
-                {m.agency_dokploy_save()}
-              </Button>
-              <Hint
-                label={configured ? '' : m.agency_dokploy_verify_reason()}
-                wrapDisabled={!configured}
-              >
-                <Button
-                  type="button"
-                  variant="secondary"
-                  data-testid="verify-dokploy-credentials"
-                  disabled={!configured || (busy && !verify.isPending)}
-                  loading={verify.isPending}
-                  onClick={() => verify.mutate()}
-                >
-                  {verify.isPending ? null : <CheckCircle />}
-                  {verify.isPending
-                    ? m.admin_org_dokploy_verifying()
-                    : m.admin_org_dokploy_verify()}
-                </Button>
-              </Hint>
-              {configured ? (
-                <ConfirmDialog
-                  title={m.admin_org_dokploy_remove_title()}
-                  description={m.admin_org_dokploy_remove_description()}
-                  confirmLabel={m.admin_org_dokploy_remove()}
-                  variant="destructive"
-                  onConfirm={async () => {
-                    await remove.mutateAsync()
-                  }}
-                >
-                  <Button
-                    type="button"
-                    variant="quiet"
-                    className="ml-auto text-text-error hover:text-text-error"
-                    data-testid="remove-dokploy-credentials"
-                    disabled={busy}
-                  >
-                    <Trash />
-                    {m.agency_dokploy_remove()}
-                  </Button>
-                </ConfirmDialog>
-              ) : null}
-            </div>
-          </form>
+          // Starts again whenever the saved credentials change.
+          <DokployForm
+            key={`${organizationId}:${JSON.stringify(status.data)}`}
+            saved={status.data}
+            dokploy={dokploy}
+          />
         )}
       </SettingsSection>
 
@@ -334,5 +187,169 @@ export function ClientDeployment({
 
       <CloudflareCard organizationId={organizationId} />
     </div>
+  )
+}
+
+type DokployStatus = NonNullable<
+  ReturnType<typeof useDokploy>['status']['data']
+>
+
+/** The address starts from the saved credentials; the key is never shown. */
+function DokployForm({
+  saved,
+  dokploy,
+}: {
+  saved: DokployStatus
+  dokploy: ReturnType<typeof useDokploy>
+}) {
+  const { failure, save, verify, remove } = dokploy
+  const [url, setUrl] = React.useState(saved.url ?? '')
+  const [apiKey, setApiKey] = React.useState('')
+  const configured = saved.configured
+  // The saved key is only sent to the URL it was saved for (the server checks).
+  const urlChanged =
+    configured && url.trim().replace(/\/+$/, '') !== (saved.url ?? '')
+  const keyRequired = !configured || urlChanged
+  const busy = save.isPending || verify.isPending || remove.isPending
+
+  return (
+    <form
+      className="grid gap-5"
+      data-testid="dokploy-form"
+      onSubmit={(event) => {
+        event.preventDefault()
+        save.mutate({
+          url: url.trim(),
+          apiKey: apiKey.trim() || undefined,
+        })
+      }}
+    >
+      <div className="flex items-center gap-3">
+        <span className="grid size-10 shrink-0 place-content-center rounded-[11px] bg-background-subtle text-icon-default">
+          <CloudArrowUp className="size-5" />
+        </span>
+        <div className="grid min-w-0 flex-1 gap-0.5">
+          <span className="text-headline text-text-primary">
+            {m.agency_dokploy_title()}
+          </span>
+          <span className="truncate text-caption font-normal text-text-muted">
+            {configured && saved.url
+              ? saved.url
+              : m.agency_dokploy_not_set_up_body()}
+          </span>
+        </div>
+        {configured ? (
+          <StatusPill
+            tone="success"
+            icon="check"
+            label={m.agency_dokploy_connected()}
+            data-testid="dokploy-status"
+            status="configured"
+          />
+        ) : (
+          <StatusPill
+            tone="neutral"
+            label={m.admin_org_dokploy_not_configured()}
+            data-testid="dokploy-status"
+            status="not-configured"
+          />
+        )}
+      </div>
+
+      <FormField label={m.admin_org_dokploy_url()} htmlFor="dokploy-url">
+        <Input
+          id="dokploy-url"
+          data-testid="dokploy-url"
+          type="url"
+          required
+          placeholder="https://dokploy.example.com"
+          value={url}
+          onChange={(event) => setUrl(event.target.value)}
+        />
+      </FormField>
+      <FormField
+        label={m.admin_org_dokploy_api_key()}
+        htmlFor="dokploy-api-key"
+        hint={
+          urlChanged
+            ? m.admin_org_dokploy_api_key_url_changed_hint()
+            : configured
+              ? m.admin_org_dokploy_api_key_replace_hint()
+              : m.admin_org_dokploy_api_key_new_hint()
+        }
+      >
+        <Input
+          id="dokploy-api-key"
+          data-testid="dokploy-api-key"
+          type="password"
+          required={keyRequired}
+          autoComplete="new-password"
+          placeholder={keyRequired ? undefined : '••••••••••••'}
+          value={apiKey}
+          onChange={(event) => setApiKey(event.target.value)}
+        />
+      </FormField>
+
+      {failure ? (
+        <p
+          role="alert"
+          data-testid="dokploy-error"
+          className="rounded-control bg-status-error-bg px-3 py-2.5 text-callout text-text-error"
+        >
+          {m.agency_dokploy_failed({ message: failure })}
+        </p>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="submit"
+          data-testid="save-dokploy-credentials"
+          loading={save.isPending}
+          disabled={busy && !save.isPending}
+        >
+          {m.agency_dokploy_save()}
+        </Button>
+        <Hint
+          label={configured ? '' : m.agency_dokploy_verify_reason()}
+          wrapDisabled={!configured}
+        >
+          <Button
+            type="button"
+            variant="secondary"
+            data-testid="verify-dokploy-credentials"
+            disabled={!configured || (busy && !verify.isPending)}
+            loading={verify.isPending}
+            onClick={() => verify.mutate()}
+          >
+            {verify.isPending ? null : <CheckCircle />}
+            {verify.isPending
+              ? m.admin_org_dokploy_verifying()
+              : m.admin_org_dokploy_verify()}
+          </Button>
+        </Hint>
+        {configured ? (
+          <ConfirmDialog
+            title={m.admin_org_dokploy_remove_title()}
+            description={m.admin_org_dokploy_remove_description()}
+            confirmLabel={m.admin_org_dokploy_remove()}
+            variant="destructive"
+            onConfirm={async () => {
+              await remove.mutateAsync()
+            }}
+          >
+            <Button
+              type="button"
+              variant="quiet"
+              className="ml-auto text-text-error hover:text-text-error"
+              data-testid="remove-dokploy-credentials"
+              disabled={busy}
+            >
+              <Trash />
+              {m.agency_dokploy_remove()}
+            </Button>
+          </ConfirmDialog>
+        ) : null}
+      </div>
+    </form>
   )
 }

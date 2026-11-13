@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups are checked defensively */
 import { createHash, createHmac, randomBytes } from 'node:crypto'
 
 import {
@@ -25,7 +24,7 @@ import {
 import { env } from '#/env'
 import { auth } from '#/lib/auth'
 import { MfaRequiredError, ReauthRequiredError } from '#/lib/security-errors'
-import { setAgencyAdmin } from '#/server/admin/members'
+import { setAgencyAdmin } from '#/server/admin/agency-admins'
 import { cleanupTestSite, createTestSite } from '#/server/content/test-utils'
 import { recordStepUp } from '#/server/security/step-up'
 
@@ -381,12 +380,14 @@ describe.skipIf(!runnable)(
 
     /** The newest session of a user: the one a sign-in just created. */
     async function newestSessionId(userId: string) {
-      const [row] = await db
-        .select({ id: session.id })
-        .from(session)
-        .where(eq(session.userId, userId))
-        .orderBy(desc(session.createdAt))
-        .limit(1)
+      const row = (
+        await db
+          .select({ id: session.id })
+          .from(session)
+          .where(eq(session.userId, userId))
+          .orderBy(desc(session.createdAt))
+          .limit(1)
+      ).at(0)
       if (!row) throw new Error('no session for the user')
       return row.id
     }
@@ -594,7 +595,7 @@ describe.skipIf(!runnable)(
         expect(agencyAccess.startsWith('areca_at_')).toBe(true)
         expect(agencyRefresh.startsWith('areca_rt_')).toBe(true)
 
-        const [connection] = await connectionsFor(admin.id)
+        const connection = (await connectionsFor(admin.id)).at(0)
         expect(connection).toMatchObject({
           clientId,
           clientName: 'Agency e2e app',
@@ -684,15 +685,17 @@ describe.skipIf(!runnable)(
       it('re-approving after the previous connection went idle retires that generation and its tokens', async () => {
         const clientId = await registerApp('Renewed agency app')
         const first = await connectAgency({ clientId, email: admin.email })
-        const [previous] = await db
-          .select({ id: mcpConnection.id })
-          .from(mcpConnection)
-          .where(
-            and(
-              eq(mcpConnection.clientId, clientId),
-              eq(mcpConnection.scope, 'agency'),
-            ),
-          )
+        const previous = (
+          await db
+            .select({ id: mcpConnection.id })
+            .from(mcpConnection)
+            .where(
+              and(
+                eq(mcpConnection.clientId, clientId),
+                eq(mcpConnection.scope, 'agency'),
+              ),
+            )
+        ).at(0)
         const oldId = previous?.id ?? ''
         expect(oldId).not.toBe('')
         expect(
@@ -721,10 +724,12 @@ describe.skipIf(!runnable)(
           (await exchange(flow, approved.redirectTo)).json.access_token,
         )
 
-        const [retired] = await db
-          .select({ revokedAt: mcpConnection.revokedAt })
-          .from(mcpConnection)
-          .where(eq(mcpConnection.id, oldId))
+        const retired = (
+          await db
+            .select({ revokedAt: mcpConnection.revokedAt })
+            .from(mcpConnection)
+            .where(eq(mcpConnection.id, oldId))
+        ).at(0)
         expect(retired?.revokedAt).not.toBeNull()
         expect(
           (await handleAgencyMcpRequest(pingRequest(AGENCY_URL, first.access)))
@@ -756,15 +761,17 @@ describe.skipIf(!runnable)(
           (await handleAgencyMcpRequest(pingRequest(AGENCY_URL, tokens.access)))
             .status,
         ).toBe(200)
-        const [row] = await db
-          .select({ id: mcpConnection.id })
-          .from(mcpConnection)
-          .where(
-            and(
-              eq(mcpConnection.clientId, clientId),
-              eq(mcpConnection.scope, 'agency'),
-            ),
-          )
+        const row = (
+          await db
+            .select({ id: mcpConnection.id })
+            .from(mcpConnection)
+            .where(
+              and(
+                eq(mcpConnection.clientId, clientId),
+                eq(mcpConnection.scope, 'agency'),
+              ),
+            )
+        ).at(0)
         await revokeAgencyConnection({ id: row?.id ?? '', actorId: admin.id })
         expect(
           (await handleAgencyMcpRequest(pingRequest(AGENCY_URL, tokens.access)))
@@ -787,15 +794,17 @@ describe.skipIf(!runnable)(
 
         await setAgencyAdmin(leaver.id, false, admin.id)
 
-        const [row] = await db
-          .select({ revokedAt: mcpConnection.revokedAt })
-          .from(mcpConnection)
-          .where(
-            and(
-              eq(mcpConnection.clientId, clientId),
-              eq(mcpConnection.scope, 'agency'),
-            ),
-          )
+        const row = (
+          await db
+            .select({ revokedAt: mcpConnection.revokedAt })
+            .from(mcpConnection)
+            .where(
+              and(
+                eq(mcpConnection.clientId, clientId),
+                eq(mcpConnection.scope, 'agency'),
+              ),
+            )
+        ).at(0)
         expect(row?.revokedAt).not.toBeNull()
         expect(
           (await handleAgencyMcpRequest(pingRequest(AGENCY_URL, tokens.access)))

@@ -15,8 +15,8 @@ import * as test from './templates/test.ts'
 import * as twoFactor from './templates/two-factor.ts'
 import * as verifyEmail from './templates/verify-email.ts'
 import { MailRenderError } from './types.ts'
+import type { DbExecutor } from '#/db'
 import type {
-  Executor,
   MailBrand,
   MailLocale,
   RenderContext,
@@ -24,7 +24,7 @@ import type {
 } from './types.ts'
 
 export { MailRenderError, mailLocale } from './types.ts'
-export type { Executor, MailBrand, MailLocale, RenderedMail } from './types.ts'
+export type { MailBrand, MailLocale, RenderedMail } from './types.ts'
 
 type Renderer = (
   params: Record<string, unknown>,
@@ -66,7 +66,7 @@ export function toMailBrand(brand: BrandingView): MailBrand {
 export async function renderTemplate(
   template: MailTemplate,
   params: Record<string, unknown>,
-  options: { locale: MailLocale; brand: BrandingView; connection?: Executor },
+  options: { locale: MailLocale; brand: BrandingView; connection?: DbExecutor },
 ): Promise<RenderedMail> {
   const renderer = RENDERERS[template] as Renderer | undefined
   if (!renderer) throw new MailRenderError(`unknown template ${template}`)

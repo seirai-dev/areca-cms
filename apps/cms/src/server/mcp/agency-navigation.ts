@@ -2,14 +2,13 @@ import type { ToolAnnotations } from '@modelcontextprotocol/server'
 import { z } from '#/lib/zod'
 
 import { isDevSite } from '#/lib/site-environment'
-import { NotFoundError } from '#/server/content/errors'
 import { AppError } from '#/server/http/app-error'
 
 import { agencyReachableSites } from './agency-access'
 import type { AgencySite } from './agency-access'
 import { db } from '#/db'
 import type { AgencyPrincipal } from './keys'
-import { loadReleaseState } from './release-state'
+import { loadReleaseStates } from './release-state'
 import type { SiteEnvironment } from './tool-kit'
 
 /**
@@ -46,8 +45,11 @@ async function navigationRows(
 ): Promise<NavigationRow[]> {
   const sites = await agencyReachableSites(db, principal.user)
   const byId = new Map(sites.map((row) => [row.id, row]))
+  const listed = sites.filter(include)
+  // A site deleted after the list was read has no state and is not listed.
+  const states = await loadReleaseStates(listed.map((row) => row.id))
   const rows: NavigationRow[] = []
-  for (const row of sites.filter(include)) {
+  for (const row of listed) {
     const environment: SiteEnvironment = isDevSite(row)
       ? 'development'
       : 'production'
@@ -56,12 +58,7 @@ async function navigationRows(
         ? byId.get(row.parentSiteId)
         : undefined
       : sites.find((other) => other.parentSiteId === row.id)
-    const state = await loadReleaseState(row.id).catch((error: unknown) => {
-      // Deleted after the list was read: a site that is gone is not listed,
-      // and it must not fail the whole listing.
-      if (error instanceof NotFoundError) return null
-      throw error
-    })
+    const state = states.get(row.id)
     if (!state) continue
     rows.push({
       slug: row.slug,
@@ -75,7 +72,7 @@ async function navigationRows(
           }
         : null,
       publishingMode: row.publishingMode,
-      live: Boolean(state.liveSnapshot),
+      live: state.live,
       pendingReadyChanges: state.pendingIds.size,
     })
   }

@@ -341,6 +341,8 @@ test('mod+Shift+E toggles between Write and Visual', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await servePreview(page)
   await savedEntry(page, `Mode key ${uniqueSuffix()}`)
+  // Visual, and its shortcut, wait for the entry's preview URL to load.
+  await expect(visualSegment(page)).toBeEnabled()
 
   await page.keyboard.press('ControlOrMeta+Shift+E')
   await expect(page.getByTestId('visual-editor')).toBeVisible({

@@ -37,8 +37,9 @@ import type { Field } from '#/lib/types'
 const { db, pool } = await import('#/db')
 const schema = await import('#/db/schema')
 const { listEntries } = await import('#/server/content/entries.ts')
-const { buildSnapshot, buildPreviewEntry } =
-  await import('#/server/content/snapshot.ts')
+const { buildSnapshot } = await import('#/server/content/snapshot.ts')
+const { buildPreviewEntry } =
+  await import('#/server/content/snapshot-preview.ts')
 const { listAssets, assetUsage } = await import('#/server/assets')
 
 const scale = Number(args.scale)

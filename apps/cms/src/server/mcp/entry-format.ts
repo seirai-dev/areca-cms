@@ -1,4 +1,5 @@
 import type { Asset } from '#/server/assets'
+import { richTextAssetRefs } from '#/server/assets/richtext-ownership'
 import { ValidationError } from '#/server/content/errors'
 import { SEO_KEY } from '#/lib/seo'
 import { isEditedSinceReady } from '#/features/golive/entry-live-state'
@@ -45,7 +46,20 @@ export function collectAssetIds(
   input: Record<string, unknown>,
   seo: Record<string, unknown> | null | undefined,
 ): string[] {
+  return collectAssetRefs(fields, input, seo).ids
+}
+
+/**
+ * The assets a write mentions: ids as collectAssetIds, and the storage keys of
+ * Markdown images written as stored file URLs (/api/assets/file/<key>).
+ */
+export function collectAssetRefs(
+  fields: Field[],
+  input: Record<string, unknown>,
+  seo: Record<string, unknown> | null | undefined,
+): { ids: string[]; storageKeys: string[] } {
   const ids = new Set<string>()
+  const storageKeys = new Set<string>()
   for (const field of fields) {
     const value = input[field.key]
     if (field.type === 'image') {
@@ -53,24 +67,33 @@ export function collectAssetIds(
       if (id) ids.add(id)
     }
     if (field.type === 'richtext' && typeof value === 'string') {
-      for (const id of markdownAssetIds(value)) ids.add(id)
+      const refs = markdownAssetRefs(value)
+      for (const id of refs.ids) ids.add(id)
+      for (const key of refs.storageKeys) storageKeys.add(key)
     }
   }
   if (typeof seo?.ogImage === 'string' && seo.ogImage) ids.add(seo.ogImage)
-  return [...ids]
+  return { ids: [...ids], storageKeys: [...storageKeys] }
 }
 
 export function markdownAssetIds(markdown: string): string[] {
+  return markdownAssetRefs(markdown).ids
+}
+
+function markdownAssetRefs(markdown: string): {
+  ids: string[]
+  storageKeys: string[]
+} {
   const ids = new Set<string>()
   // Use the converter's parsed image nodes, including titles and references,
   // while excluding examples inside fenced/inline code.
-  markdownToRichText(markdown, {
+  const doc = markdownToRichText(markdown, {
     resolveAssetSrc: (id) => {
       ids.add(id)
       return null
     },
   })
-  return [...ids]
+  return { ids: [...ids], storageKeys: richTextAssetRefs(doc).storageKeys }
 }
 
 function imageAssetId(value: unknown): string | null {

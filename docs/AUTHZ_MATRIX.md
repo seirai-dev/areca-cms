@@ -1,14 +1,21 @@
 # Authorization matrix
 
-Source of truth: `apps/cms/src/server/security/authz-matrix.ts` (data) executed by
-`authz-matrix.test.ts` (server functions) and `authz-routes.test.ts` (HTTP routes).
-Both run the real guards (`session.server.ts`, `step-up.ts`) against a real
-PostgreSQL database seeded with two tenants, bypassing the UI. Adding a server
-function or an `src/routes/api/**` file without a matrix entry fails the
-inventory tests.
+Source of truth: the rows in `apps/cms/src/server/security/authz-matrix/<fn module>.ts`,
+keyed by server function export name, executed by `authz-matrix.test.ts` (server
+functions) and `authz-routes.test.ts` (HTTP routes). Both run the real guards
+(`session.server.ts`, `step-up.ts`) against a real PostgreSQL database seeded
+with two tenants, bypassing the UI. A server function without a row does not
+typecheck, and an `src/routes/api/**` file without a matrix entry fails the
+route inventory test.
+
+The policy and server function tables below are generated from the rows: run
+`pnpm --filter @areca/cms authz:doc` after changing a row
+(`authz-matrix-doc.test.ts` fails while this file is stale).
 
 Role precedence: agency admin > org owner > org editor. Agency admins must have
-two-factor (`MFA_REQUIRED` otherwise). Step-up actions additionally need a
+two-factor (`MFA_REQUIRED` otherwise). Anyone with two-factor on must have
+entered a code in the current session (`requireUser`; `MFA_REQUIRED` otherwise),
+which a social or SSO sign-in has not done yet. Step-up actions additionally need a
 session created or re-verified in the last ten minutes (`REAUTH_REQUIRED`).
 
 ## Actors
@@ -25,6 +32,7 @@ session created or re-verified in the last ten minutes (`REAUTH_REQUIRED`).
 
 ## Policies
 
+<!-- generated:policies -->
 | Policy | anonymous | editorX | ownerX | ownerY | adminNoMfa | adminMfa | adminStale |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | public | allow | allow | allow | allow | allow | allow | allow |
@@ -33,14 +41,29 @@ session created or re-verified in the last ten minutes (`REAUTH_REQUIRED`).
 | org-owner | redirect /login | 403 | allow | 403 | MFA_REQUIRED | allow | allow |
 | agency | redirect /login | 403 | 403 | 403 | MFA_REQUIRED | allow | allow |
 | agency-fresh | redirect /login | 403 | 403 | 403 | MFA_REQUIRED | allow | REAUTH_REQUIRED |
+<!-- /generated:policies -->
 
 Denied calls must also (a) return no result and (b) leave the target resource
 unchanged (each row carries a side-effect probe).
 
 ## Server functions (`src/server/fn/*.ts`)
 
+<!-- generated:functions -->
 | Function | File | Policy | Who may call |
 | --- | --- | --- | --- |
+| `getPasswordResetAvailabilityFn` | `account.ts` | `public` | anyone |
+| `checkPasswordResetTokenFn` | `account.ts` | `public` | anyone |
+| `requestVerificationEmailFn` | `account.ts` | `user` | any signed-in user |
+| `updateEmailLocaleFn` | `account.ts` | `user` | any signed-in user |
+| `listMySessionsFn` | `account.ts` | `user` | any signed-in user, own live sessions only, never tokens; agency admins need local MFA |
+| `revokeMySessionFn` | `account.ts` | `user` | any signed-in user, own other sessions only (current session refused, NotFound for others); agency admins need local MFA |
+| `revokeMyOtherSessionsFn` | `account.ts` | `user` | any signed-in user, own other sessions only; agency admins need local MFA |
+| `sendPasswordResetLinkFn` | `account.ts` | `agency` | agency admin (MFA) |
+| `getMyAccountFn` | `account.ts` | `user` | any signed-in user, own password flag and deletion blockers only; agency admins need local MFA |
+| `getMySignInMethodFn` | `account.ts` | `user` | any signed-in user |
+| `updateMyNameFn` | `account.ts` | `user` | any signed-in user, own name only; agency admins need local MFA |
+| `deleteMyAccountFn` | `account.ts` | `user` | any signed-in user, own account only, after re-verifying the password or a second factor; agency admins need local MFA |
+| `getActivityEntriesFn` | `activity-entries.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `listOrganizationsFn` | `admin.ts` | `agency` | agency admin (MFA) |
 | `createOrganizationFn` | `admin.ts` | `agency` | agency admin (MFA) |
 | `updateOrganizationFn` | `admin.ts` | `agency` | agency admin (MFA) |
@@ -49,13 +72,80 @@ unchanged (each row carries a side-effect probe).
 | `saveDokployCredentialsFn` | `admin.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
 | `verifyDokployCredentialsFn` | `admin.ts` | `agency` | agency admin (MFA) |
 | `removeDokployCredentialsFn` | `admin.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
+| `getCloudflareCredentialStatusFn` | `admin.ts` | `agency` | agency admin (MFA) |
+| `saveCloudflareCredentialsFn` | `admin.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
+| `verifyCloudflareCredentialsFn` | `admin.ts` | `agency` | agency admin (MFA) |
+| `removeCloudflareCredentialsFn` | `admin.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
 | `listCloudflareDeployTargetsFn` | `admin.ts` | `agency` | agency admin (MFA); lists the client's Cloudflare Pages and Workers (outbound calls, no audit) |
 | `listSitesFn` | `admin.ts` | `agency` | agency admin (MFA) |
 | `getSiteFn` | `admin.ts` | `agency` | agency admin (MFA) |
 | `createSiteFn` | `admin.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
 | `updateSiteFn` | `admin.ts` | `agency` | agency admin (MFA) |
+| `changeSiteSlugFn` | `admin.ts` | `agency` | agency admin (MFA) |
+| `setSiteLanguagesFn` | `admin.ts` | `agency` | agency admin (MFA) |
+| `previewMainLanguageChangeFn` | `admin.ts` | `agency` | agency admin (MFA) |
 | `rotateSiteTokenFn` | `admin.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up); rotates the build or schema token according to `privilege` |
 | `deleteSiteFn` | `admin.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
+| `listMembersFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `updateMemberRoleFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `removeMemberFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `inviteMemberFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `listInvitationsFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `revokeInvitationFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `resendInvitationFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `regenerateInvitationLinkFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `listAuditLogFn (organizationId)` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `listAuditLogFn (instance-wide)` | `admin.ts` | `agency` | agency admin (MFA) |
+| `setAgencyAdminFn` | `admin.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
+| `listUsersFn` | `admin.ts` | `agency` | agency admin (MFA) |
+| `listPendingInvitationsFn` | `admin.ts` | `agency` | agency admin (MFA) |
+| `getAiSettingsFn` | `ai.ts` | `agency` | agency admin (MFA); never returns the API key |
+| `saveAiSettingsFn` | `ai.ts` | `agency` | agency admin (MFA); `agency-fresh` when the API key is set or removed |
+| `listAiModelsFn` | `ai.ts` | `agency` | agency admin (MFA) |
+| `getAiAvailabilityFn` | `ai.ts` | `user` | any signed-in user (boolean only) |
+| `generateEntrySeoFn` | `ai.ts` | `org-editor` | org member (editor/owner) or agency admin; NotFound outside the org; 30/hour per user |
+| `listAssetsFn` | `assets.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `getAssetFn` | `assets.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `updateAssetFn` | `assets.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `deleteAssetFn` | `assets.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `getAuthMethodsFn` | `auth-methods.ts` | `public` | anyone |
+| `getBrandingFn` | `branding.ts` | `public` | anyone |
+| `updateBrandingFn` | `branding.ts` | `agency` | agency admin (MFA) |
+| `clearBrandingImageFn` | `branding.ts` | `agency` | agency admin (MFA) |
+| `resetBrandingFn` | `branding.ts` | `agency` | agency admin (MFA) |
+| `listCollectionsFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `fieldDataUsageFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `listEntriesFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `listEntryCountsFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `listRecentEntriesFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `getEntryFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `getEntryTitleFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `listInboundReferencesFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `createEntryFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `updateDraftFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `publishEntryFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `unpublishEntryFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `archiveEntryFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `cancelScheduleFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `scheduleEntryFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `deleteEntryFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `bulkEntryActionFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA); ready, draft, archive or delete for up to 200 ids of one site, each id with the rules of its single action and its own result (not all-or-nothing) |
+| `listRevisionsFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `restoreRevisionFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `getPreviewUrlFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `resolvePreviewOwnersFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA); lists only the marked owners that exist on the site and are visible to the caller (archived, foreign-site and disabled-section owners come back null) |
+| `listLinkedFromFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `applySectionLinkUpdatesFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `upsertCollectionFn` | `content.ts` | `agency` | agency admin (MFA) |
+| `deleteCollectionFn` | `content.ts` | `agency` | agency admin (MFA) |
+| `listGlobalsFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA); disabled site content only for agency admin |
+| `getGlobalFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA); disabled site content only for agency admin |
+| `getGlobalPreviewUrlFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA); disabled site content only for agency admin |
+| `updateGlobalDraftFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA); disabled site content only for agency admin |
+| `discardGlobalDraftFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA); disabled site content only for agency admin |
+| `upsertGlobalFn` | `content.ts` | `agency` | agency admin (MFA) |
+| `deleteGlobalFn` | `content.ts` | `agency` | agency admin (MFA) |
+| `setGlobalEnabledFn` | `content.ts` | `agency` | agency admin (MFA) |
 | `getDevEnvironmentFn` | `dev-env.ts` | `agency` | agency admin (MFA); a production site's development environment, or null |
 | `createDevEnvironmentFn` | `dev-env.ts` | `agency` | agency admin (MFA); no step-up (throwaway dev env); production sites only |
 | `refreshDevEnvironmentFn` | `dev-env.ts` | `agency` | agency admin (MFA); no step-up; discards the dev env's content and forks again |
@@ -64,18 +154,46 @@ unchanged (each row carries a side-effect probe).
 | `getPushPlanFn` | `dev-env.ts` | `agency` | agency admin (MFA); the push plan items and the plan hash of a dev env. Writes nothing |
 | `pushToProductionFn` | `dev-env.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up); pushes the selected plan items to production; refused when the plan hash is stale |
 | `copyEntryToProductionFn` | `dev-env.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up); copies one dev entry or section to production as its draft; refused on a schema mismatch, on a production change since the last sync (unless `overwrite`), and on a scheduled production entry |
-| `listMembersFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
-| `updateMemberRoleFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
-| `removeMemberFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
-| `inviteMemberFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
-| `listInvitationsFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
-| `revokeInvitationFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
-| `resendInvitationFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
-| `listAuditLogFn (organizationId)` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
-| `listAuditLogFn (instance-wide)` | `admin.ts` | `agency` | agency admin (MFA) |
-| `setAgencyAdminFn` | `admin.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
-| `listUsersFn` | `admin.ts` | `agency` | agency admin (MFA) |
-| `listPendingInvitationsFn` | `admin.ts` | `agency` | agency admin (MFA) |
+| `getHomeActivityFn` | `home.ts` | `user` | any signed-in user |
+| `searchLinkTargetsFn` | `link-targets.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `linkTargetHeadingsFn` | `link-targets.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `checkLinkTargetsFn` | `link-targets.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `getMailSettingsFn` | `mail.ts` | `agency` | agency admin (MFA) |
+| `verifyMailDraftFn` | `mail.ts` | `agency` | agency admin (MFA) |
+| `sendTestEmailFn` | `mail.ts` | `agency` | agency admin (MFA) |
+| `saveMailSettingsFn` | `mail.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
+| `useEnvironmentMailFn` | `mail.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
+| `listRecentEmailsFn` | `mail.ts` | `agency` | agency admin (MFA) |
+| `getMailHealthFn` | `mail.ts` | `agency` | agency admin (MFA) |
+| `listMcpKeysFn` | `mcp-keys.ts` | `org-editor` | any site member; editors see only their own keys, owners and agency admins all keys on the site |
+| `createMcpKeyFn` | `mcp-keys.ts` | `org-editor` | any site member (MFA for agency admins); agency admins also need a fresh session (`REAUTH_REQUIRED`); editors cannot allow go-live |
+| `revokeMcpKeyFn` | `mcp-keys.ts` | `org-editor` | editors revoke their own keys; owners and agency admins any key on the site; other keys are NotFound |
+| `listAgencyMcpKeysFn` | `mcp-keys.ts` | `agency` | agency admin (MFA); the caller's own agency keys (no site); other roles are refused |
+| `createAgencyMcpKeyFn` | `mcp-keys.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up); agency keys have no go-live option, but the agency connector can always go live (`siteActorFor` sets `allowGoLive: true`, as for the agency admin in the CMS) |
+| `revokeAgencyMcpKeyFn` | `mcp-keys.ts` | `agency` | agency admin revokes their own agency key; another admin's key is NotFound |
+| `getOAuthConsentFn` | `mcp-oauth.ts` | `public` | anyone; signed-out, invalid or tampered requests and non-members get a reason instead of data; nothing is changed |
+| `approveOAuthConsentFn` | `mcp-oauth.ts` | `org-editor` | site access first (NotFound for other tenants); agency admins need a fresh second factor; editors cannot allow go-live; the signed query must name this site |
+| `denyOAuthConsentFn` | `mcp-oauth.ts` | `user` | any signed-in user may refuse a request addressed to them; the query must be signed by the server |
+| `listMcpConnectionsFn` | `mcp-oauth.ts` | `org-editor` | editors see only their own connected apps; owners and agency admins all on the site |
+| `revokeMcpConnectionFn` | `mcp-oauth.ts` | `org-editor` | editors disconnect their own apps; owners and agency admins any app on the site; others are NotFound |
+| `listAgencyMcpConnectionsFn` | `mcp-oauth.ts` | `agency` | agency admin (MFA); the caller's own agency apps (no site); other roles are refused |
+| `approveAgencyOAuthConsentFn` | `mcp-oauth.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) approves the agency connector for an app; the signed query must name the agency resource; agency connections have no go-live tick, and the agency connector can always go live (`allowGoLive: true`) |
+| `revokeAgencyMcpConnectionFn` | `mcp-oauth.ts` | `agency` | agency admin revokes their own agency app; another admin's app is NotFound |
+| `getMeFn` | `me.ts` | `public` | anyone |
+| `getInvitationFn` | `me.ts` | `public` | anyone |
+| `acceptInvitationFn` | `me.ts` | `user` | any signed-in user |
+| `getMyNotificationsFn` | `notifications.ts` | `user` | the caller's own notification choices and org memberships |
+| `setMyNotificationFn` | `notifications.ts` | `org-editor` | members change their own choice (agency admins for the agency scope); locked events refuse; a non-member admin gets a readable refusal |
+| `getOrgNotificationRulesFn` | `notifications.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `setOrgNotificationRuleFn` | `notifications.ts` | `org-owner` | org owner, agency admin (MFA); agency-locked cells refuse changes |
+| `getAgencyNotificationRulesFn` | `notifications.ts` | `agency` | agency admin (MFA) |
+| `setAgencyNotificationRuleFn` | `notifications.ts` | `agency` | agency admin (MFA); defaults and locks for clients and agency alerts |
+| `getUnsubscribeFn` | `notifications.ts` | `public` | reads a signed unsubscribe link; reveals only its status and event label |
+| `confirmUnsubscribeFn` | `notifications.ts` | `public` | the signed link is the authorization; a locked, expired or invalid link changes nothing |
+| `getSitesOverviewFn` | `overview.ts` | `user` | any signed-in user |
+| `listPausedJobsFn` | `paused-jobs.ts` | `agency` | agency admin (MFA) |
+| `retryPausedJobFn` | `paused-jobs.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
+| `dismissPausedJobFn` | `paused-jobs.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
 | `getUserDetailFn` | `people.ts` | `agency` | agency admin (MFA) |
 | `blockUserFn` | `people.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
 | `unblockUserFn` | `people.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
@@ -89,37 +207,6 @@ unchanged (each row carries a side-effect probe).
 | `bulkSignOutUsersFn` | `people.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
 | `bulkAddUsersToClientsFn` | `people.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
 | `searchPeopleFn` | `people.ts` | `agency` | agency admin (MFA) |
-| `listCollectionsFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
-| `listEntriesFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
-| `getEntryFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
-| `listInboundReferencesFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
-| `createEntryFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
-| `updateDraftFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
-| `publishEntryFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
-| `unpublishEntryFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
-| `archiveEntryFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
-| `bulkEntryActionFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA); ready, draft, archive or delete for up to 200 ids of one site, each id with the rules of its single action and its own result (not all-or-nothing) |
-| `cancelScheduleFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
-| `scheduleEntryFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
-| `deleteEntryFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
-| `listRevisionsFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
-| `restoreRevisionFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
-| `getPreviewUrlFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
-| `resolvePreviewOwnersFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA); lists only the marked owners that exist on the site and are visible to the caller (archived, foreign-site and disabled-section owners come back null) |
-| `upsertCollectionFn` | `content.ts` | `agency` | agency admin (MFA) |
-| `deleteCollectionFn` | `content.ts` | `agency` | agency admin (MFA) |
-| `listGlobalsFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA); disabled site content only for agency admin |
-| `getGlobalFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA); disabled site content only for agency admin |
-| `getGlobalPreviewUrlFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA); disabled site content only for agency admin |
-| `updateGlobalDraftFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA); disabled site content only for agency admin |
-| `discardGlobalDraftFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA); disabled site content only for agency admin |
-| `upsertGlobalFn` | `content.ts` | `agency` | agency admin (MFA) |
-| `setGlobalEnabledFn` | `content.ts` | `agency` | agency admin (MFA) |
-| `deleteGlobalFn` | `content.ts` | `agency` | agency admin (MFA) |
-| `listAssetsFn` | `assets.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
-| `getAssetFn` | `assets.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
-| `updateAssetFn` | `assets.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
-| `deleteAssetFn` | `assets.ts` | `org-owner` | org owner, agency admin (MFA) |
 | `requestPublicationFn` | `publishing.ts` | `org-owner` | org owner, agency admin (MFA) |
 | `requestRollbackFn` | `publishing.ts` | `org-owner` | org owner, agency admin (MFA) |
 | `listPublicationsFn` | `publishing.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
@@ -129,52 +216,14 @@ unchanged (each row carries a side-effect probe).
 | `reconcileDeploymentJobFn` | `publishing.ts` | `org-owner` | org owner, agency admin (MFA) |
 | `resolveUncertainDeploymentJobFn` | `publishing.ts` | `agency` | agency admin (MFA); reason and upstream-stop confirmation required |
 | `getSiteReleaseStatusFn` | `publishing.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
-| `getBrandingFn` | `branding.ts` | `public` | anyone |
-| `updateBrandingFn` | `branding.ts` | `agency` | agency admin (MFA) |
-| `clearBrandingImageFn` | `branding.ts` | `agency` | agency admin (MFA) |
-| `resetBrandingFn` | `branding.ts` | `agency` | agency admin (MFA) |
-| `getAiSettingsFn` | `ai.ts` | `agency` | agency admin (MFA); never returns the API key |
-| `saveAiSettingsFn` | `ai.ts` | `agency` | agency admin (MFA); `agency-fresh` when the API key is set or removed |
-| `listAiModelsFn` | `ai.ts` | `agency` | agency admin (MFA) |
-| `getAiAvailabilityFn` | `ai.ts` | `user` | any signed-in user (boolean only) |
-| `generateEntrySeoFn` | `ai.ts` | `org-editor` | org member (editor/owner) or agency admin; NotFound outside the org; 30/hour per user |
+| `listPendingReleaseChangesFn` | `publishing.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `verifyStepUpFn` | `security.ts` | `user` | any signed-in user |
-| `getMyAccountFn` | `account.ts` | `user` | any signed-in user, own password flag and deletion blockers only; agency admins need local MFA |
-| `listMySessionsFn` | `account.ts` | `user` | any signed-in user, own live sessions only, never tokens; agency admins need local MFA |
-| `revokeMySessionFn` | `account.ts` | `user` | any signed-in user, own other sessions only (current session refused, NotFound for others); agency admins need local MFA |
-| `revokeMyOtherSessionsFn` | `account.ts` | `user` | any signed-in user, own other sessions only; agency admins need local MFA |
-| `updateMyNameFn` | `account.ts` | `user` | any signed-in user, own name only; agency admins need local MFA |
-| `deleteMyAccountFn` | `account.ts` | `user` | any signed-in user, own account only, after re-verifying the password or a second factor; agency admins need local MFA |
-| `getAuthMethodsFn` | `auth-methods.ts` | `public` | anyone |
+| `resetAdminFactorLockoutFn` | `security.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
 | `getSetupStatusFn` | `setup.ts` | `public` | anyone |
 | `completeSetupFn` | `setup.ts` | `public` | anyone |
-| `getMeFn` | `me.ts` | `public` | anyone |
-| `getInvitationFn` | `me.ts` | `public` | anyone |
-| `acceptInvitationFn` | `me.ts` | `user` | any signed-in user |
-| `getSitesOverviewFn` | `overview.ts` | `user` | any signed-in user |
-| `getHomeActivityFn` | `home.ts` | `user` | any signed-in user |
-| `listMcpKeysFn` | `mcp-keys.ts` | `org-editor` | any site member; editors see only their own keys, owners and agency admins all keys on the site |
-| `createMcpKeyFn` | `mcp-keys.ts` | `org-editor` | any site member (MFA for agency admins); agency admins also need a fresh session (`REAUTH_REQUIRED`); editors cannot allow go-live |
-| `revokeMcpKeyFn` | `mcp-keys.ts` | `org-editor` | editors revoke their own keys; owners and agency admins any key on the site; other keys are NotFound |
-| `listAgencyMcpKeysFn` | `mcp-keys.ts` | `agency` | agency admin (MFA); the caller's own agency keys (no site); other roles are refused |
-| `createAgencyMcpKeyFn` | `mcp-keys.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up); agency keys have no go-live option, but the agency connector can always go live (`siteActorFor` sets `allowGoLive: true`, as for the agency admin in the CMS) |
-| `revokeAgencyMcpKeyFn` | `mcp-keys.ts` | `agency` | agency admin revokes their own agency key; another admin's key is NotFound |
-| `getOAuthConsentFn` | `mcp-oauth.ts` | `public` (reason-based) | signed-out, invalid or tampered requests and non-members get a reason instead of data; nothing is changed |
-| `approveOAuthConsentFn` | `mcp-oauth.ts` | `org-editor` | site access first (NotFound for other tenants); agency admins need a fresh second factor; editors cannot allow go-live; the signed query must name this site |
-| `denyOAuthConsentFn` | `mcp-oauth.ts` | `user` | any signed-in user may refuse a request addressed to them; the query must be signed by the server |
-| `listMcpConnectionsFn` | `mcp-oauth.ts` | `org-editor` | editors see only their own connected apps; owners and agency admins all on the site |
-| `revokeMcpConnectionFn` | `mcp-oauth.ts` | `org-editor` | editors disconnect their own apps; owners and agency admins any app on the site; others are NotFound |
-| `listAgencyMcpConnectionsFn` | `mcp-oauth.ts` | `agency` | agency admin (MFA); the caller's own agency apps (no site); other roles are refused |
-| `approveAgencyOAuthConsentFn` | `mcp-oauth.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) approves the agency connector for an app; the signed query must name the agency resource; agency connections have no go-live tick, and the agency connector can always go live (`allowGoLive: true`) |
-| `revokeAgencyMcpConnectionFn` | `mcp-oauth.ts` | `agency` | agency admin revokes their own agency app; another admin's app is NotFound |
-| `getMyNotificationsFn` | `notifications.ts` | `user` | the caller's own notification choices and org memberships |
-| `setMyNotificationFn` | `notifications.ts` | `org-editor` | members change their own choice (agency admins for the agency scope); locked events refuse; a non-member admin gets a readable refusal |
-| `getOrgNotificationRulesFn` | `notifications.ts` | `org-owner` | org owner, agency admin (MFA) |
-| `setOrgNotificationRuleFn` | `notifications.ts` | `org-owner` | org owner, agency admin (MFA); agency-locked cells refuse changes |
-| `getAgencyNotificationRulesFn` | `notifications.ts` | `agency` | agency admin (MFA) |
-| `setAgencyNotificationRuleFn` | `notifications.ts` | `agency` | agency admin (MFA); defaults and locks for clients and agency alerts |
-| `getUnsubscribeFn` | `notifications.ts` | `public` | reads a signed unsubscribe link; reveals only its status and event label |
-| `confirmUnsubscribeFn` | `notifications.ts` | `public` | the signed link is the authorization; a locked, expired or invalid link changes nothing |
+| `translateContentFn` | `translate.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `getUploadSessionFn` | `upload-session.ts` | `public` | anyone |
+<!-- /generated:functions -->
 
 Per-row exceptions (see `note`/`override` in the matrix): `verifyStepUpFn` needs a
 two-factor session (everyone else gets Forbidden; wrong codes are refused);
@@ -222,7 +271,7 @@ The AI endpoint's tools are not rows in `authz-matrix.ts`. Each tool declares
 its `access` level, `ToolRegistry` (`tool-kit.ts`) registers only the tools the
 caller may use, and `requireAccess` (`guard.ts`) refuses a direct call with a
 message that says who may do it. The access is re-read from the live role on
-every request (`resolveMcpActor`, `keys.ts`). `mcp.test.ts` covers the role
+every request (`resolveMcpActorResult`, `keys.ts`). `mcp.test.ts` covers the role
 listings, direct calls, cross-site ids, go-live and the agency schema tools.
 
 | Access | Who may call it | Tools |

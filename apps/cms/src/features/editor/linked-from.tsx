@@ -5,7 +5,8 @@ import { QueryError } from '#/components/ui/query-error'
 import { Skeleton } from '#/components/ui/skeleton'
 import { EntryPill } from '#/features/collection/entry-pill'
 import type { LiveMembership } from '#/features/golive/entry-live-state'
-import { queryKeys } from '#/lib/content/query-keys'
+import { contentRoute } from '#/lib/content-route'
+import { queryKeys } from '#/lib/query-keys'
 import { uiLanguageName } from '#/lib/site-languages'
 import { m } from '#/paraglide/messages'
 import { listLinkedFromFn } from '#/server/fn/content'
@@ -30,17 +31,13 @@ export function LinkedFrom({
   const query = useQuery({
     queryKey: queryKeys.linkedFrom(entryId),
     queryFn: () => listLinkedFromFn({ data: { id: entryId } }),
+    // Reloads when the editor opens and after an explicit save.
+    refetchOnWindowFocus: false,
   })
 
   if (query.isPending) return <Skeleton className="h-12" />
   if (query.isError) {
-    return (
-      <QueryError
-        error={query.error}
-        onRetry={() => void query.refetch()}
-        retrying={query.isFetching}
-      />
-    )
+    return <QueryError query={query} />
   }
   const groups = query.data
   if (groups.length === 0) {
@@ -126,28 +123,15 @@ function SourceLink({
   siteId: string
   source: LinkedFromSource
 }) {
-  const className =
-    'text-callout font-medium text-text-default underline-offset-2 hover:underline'
-  if (source.kind === 'global') {
-    return (
-      <Link
-        to="/sites/$siteId/globals/$globalKey"
-        params={{ siteId, globalKey: source.collectionKey }}
-        className={className}
-      >
-        {source.title}
-      </Link>
-    )
-  }
   return (
     <Link
-      to="/sites/$siteId/c/$collectionKey/$entryId"
-      params={{
+      {...contentRoute({
         siteId,
         collectionKey: source.collectionKey,
         entryId: source.id,
-      }}
-      className={className}
+        global: source.kind === 'global',
+      })}
+      className="text-callout font-medium text-text-default underline-offset-2 hover:underline"
     >
       {source.title}
     </Link>

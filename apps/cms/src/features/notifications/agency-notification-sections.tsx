@@ -23,12 +23,7 @@ export function AgencyClientDefaultsSection() {
       description={m.notifications_agency_clients_description()}
     >
       {query.isError ? (
-        <QueryError
-          title={m.notifications_load_error()}
-          error={query.error}
-          onRetry={() => void query.refetch()}
-          retrying={query.isFetching}
-        />
+        <QueryError title={m.notifications_load_error()} query={query} />
       ) : query.isPending ? (
         <Skeleton className="h-64 rounded-control" />
       ) : (
@@ -52,12 +47,7 @@ export function AgencyAlertsSection() {
       description={m.notifications_agency_alerts_description()}
     >
       {query.isError ? (
-        <QueryError
-          title={m.notifications_load_error()}
-          error={query.error}
-          onRetry={() => void query.refetch()}
-          retrying={query.isFetching}
-        />
+        <QueryError title={m.notifications_load_error()} query={query} />
       ) : query.isPending ? (
         <Skeleton className="h-32 rounded-control" />
       ) : (

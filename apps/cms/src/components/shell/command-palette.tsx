@@ -16,7 +16,7 @@ import {
   UserPlus,
 } from '@phosphor-icons/react'
 
-import { queryKeys } from '#/lib/content/query-keys'
+import { queryKeys } from '#/lib/query-keys'
 import { matchesSearch } from '#/lib/search-match'
 import { usePageCommands } from '#/components/shell/page-commands'
 import { useShell } from '#/components/shell/shell-context'
@@ -51,7 +51,6 @@ import {
   canManageSite,
   collectionIcon,
   displayHost,
-  newEntryLabel,
   siteNavItems,
 } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
@@ -100,7 +99,7 @@ export function CommandPalette() {
   const searching = needle.length >= 2 && Boolean(inSite)
   const hits = useQueries({
     queries: collections.map((collection) => ({
-      queryKey: ['palette-search', inSite?.id, collection.key, needle] as const,
+      queryKey: queryKeys.paletteSearch(inSite?.id, collection.key, needle),
       queryFn: async () =>
         (
           await listEntriesFn({
@@ -124,7 +123,7 @@ export function CommandPalette() {
   const searchingPeople =
     me.user.isAgencyAdmin && paletteOpen && peopleNeedle.length >= 2
   const peopleQuery = useQuery({
-    queryKey: ['palette-people', peopleNeedle] as const,
+    queryKey: queryKeys.palettePeople(peopleNeedle),
     queryFn: () => searchPeopleFn({ data: { query: peopleNeedle } }),
     enabled: searchingPeople,
     staleTime: 15_000,
@@ -376,7 +375,7 @@ export function CommandPalette() {
               <CommandItem
                 key={`new-${collection.id}`}
                 value={`create new ${collection.label} ${collection.key}`}
-                keywords={[newEntryLabel(collection.label), collection.label]}
+                keywords={[m.shell_new(), collection.label]}
                 onSelect={() =>
                   go({
                     to: '/sites/$siteId/c/$collectionKey/new',
@@ -388,7 +387,7 @@ export function CommandPalette() {
                 }
               >
                 <Plus />
-                {newEntryLabel(collection.label)}
+                {collection.label}
               </CommandItem>
             ))}
           </CommandGroup>

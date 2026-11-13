@@ -4,7 +4,12 @@ import { useChildMatches, useNavigate } from '@tanstack/react-router'
 import type { MeSite } from '#/lib/site-nav'
 import type { Me } from '#/server/fn/me'
 
-import { EditorScreen } from './editor-screen'
+import { EditorSkeleton } from './editor-skeleton'
+import { loadEditorScreen } from './load-editor'
+
+const EditorScreen = React.lazy(() =>
+  loadEditorScreen().then((module) => ({ default: module.EditorScreen })),
+)
 
 const NEW_ROUTE = '/_app/sites/$siteId/c/$collectionKey/new'
 const ENTRY_ROUTE = '/_app/sites/$siteId/c/$collectionKey/$entryId'
@@ -55,30 +60,32 @@ export function EditorHost({
   const key = entryId ? (adopted.get(entryId) ?? entryId) : newKey.current
 
   return (
-    <EditorScreen
-      key={`${collectionKey}:${key}`}
-      me={me}
-      site={site}
-      collectionKey={collectionKey}
-      entryId={entryId}
-      onCreated={(id) => {
-        adopted.set(id, key)
-        return navigate({
-          to: '/sites/$siteId/c/$collectionKey/$entryId',
-          params: { siteId: site.id, collectionKey, entryId: id },
-          // Keeps `?lang=` so the editor stays on the same language.
-          search: true,
-          replace: true,
-          viewTransition: false,
-          resetScroll: false,
-        })
-      }}
-      onDeleted={() =>
-        navigate({
-          to: '/sites/$siteId/c/$collectionKey',
-          params: { siteId: site.id, collectionKey },
-        })
-      }
-    />
+    <React.Suspense fallback={<EditorSkeleton />}>
+      <EditorScreen
+        key={`${collectionKey}:${key}`}
+        me={me}
+        site={site}
+        collectionKey={collectionKey}
+        entryId={entryId}
+        onCreated={(id) => {
+          adopted.set(id, key)
+          return navigate({
+            to: '/sites/$siteId/c/$collectionKey/$entryId',
+            params: { siteId: site.id, collectionKey, entryId: id },
+            // Keeps `?lang=` so the editor stays on the same language.
+            search: true,
+            replace: true,
+            viewTransition: false,
+            resetScroll: false,
+          })
+        }}
+        onDeleted={() =>
+          navigate({
+            to: '/sites/$siteId/c/$collectionKey',
+            params: { siteId: site.id, collectionKey },
+          })
+        }
+      />
+    </React.Suspense>
   )
 }

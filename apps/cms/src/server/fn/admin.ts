@@ -27,16 +27,18 @@ import {
   getInvitationById,
   inviteMember,
   listInvitations,
-  listMembers,
   listPendingInvitations,
-  listUsers,
   regenerateInvitationLink,
-  removeMember,
   resendInvitation,
   revokeInvitation,
-  setAgencyAdmin,
+} from '#/server/admin/invitations'
+import {
+  listMembers,
+  removeMember,
   updateMemberRole,
 } from '#/server/admin/members'
+import { listUsers } from '#/server/admin/user-directory'
+import { setAgencyAdmin } from '#/server/admin/agency-admins'
 import {
   createOrganization,
   deleteOrganization,
@@ -58,7 +60,7 @@ import {
   previewMainChange,
   setSiteLanguages,
 } from '#/server/admin/site-languages'
-import { localeTagSchema } from '#/lib/content-locale'
+import { localeTagSchema } from '#/lib/locale-tag-schema'
 import { MAX_SITE_LANGUAGES, SLUG_MAX_LENGTH } from '#/lib/content-limits'
 import { NotFoundError } from '#/server/content/errors'
 import {

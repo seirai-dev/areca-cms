@@ -9,7 +9,6 @@ import {
   diffLanguages,
   diffSnapshotCollections,
   pendingCountFromDiff,
-  stableJson,
 } from './release-diff.ts'
 
 function snap(
@@ -349,12 +348,6 @@ describe('pendingCountFromDiff', () => {
         removals: 0,
       }),
     ).toBe(0)
-  })
-})
-
-describe('stableJson', () => {
-  it('is order-insensitive for objects', () => {
-    expect(stableJson({ b: 2, a: 1 })).toBe(stableJson({ a: 1, b: 2 }))
   })
 })
 

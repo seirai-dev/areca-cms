@@ -32,7 +32,9 @@ import { audit } from '#/server/audit'
 import { createLogger } from '#/server/log'
 import {
   recordLocalMfaForToken,
+  owesLocalMfa,
   requireAdminLocalMfa,
+  requireLocalMfa,
 } from '#/server/security/local-mfa'
 import {
   assertEmailMayRegister,
@@ -79,11 +81,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-async function assertAuthAdminMfa(
+async function assertAuthLocalMfa(
   principal: Parameters<typeof requireAdminLocalMfa>[0],
+  check: typeof requireAdminLocalMfa = requireAdminLocalMfa,
 ) {
   try {
-    await requireAdminLocalMfa(principal)
+    await check(principal)
   } catch (error) {
     if (!(error instanceof MfaRequiredError)) throw error
     throw new APIError('FORBIDDEN', {
@@ -315,12 +318,11 @@ const authBase = betterAuth({
   // stay usable: Better Auth also tries the plain identifier for them.
   verification: { storeIdentifier: 'hashed' },
   account: {
-    accountLinking: {
-      // An invited or bootstrapped account is never email-verified locally, so
-      // linking has to rely on the provider vouching for the address instead.
-      enabled: true,
-      requireLocalEmailVerified: false,
-    },
+    // A provider links to an existing account only when that account's email
+    // is verified here too (Better Auth's default). Otherwise anyone who made
+    // the account first, for example with a shared invitation link, would keep
+    // their password next to the real owner's provider sign-in.
+    accountLinking: { enabled: true },
   },
   databaseHooks: {
     session: {
@@ -448,11 +450,25 @@ const authBase = betterAuth({
       // the row when the authorization request names one, so the plugin accepts it.
       if (ctx.path === '/oauth2/authorize') {
         const session = await getSessionFromCtx(ctx)
-        if (session) await assertAuthAdminMfa(session)
+        // A session that still owes a code is sent to the consent screen by
+        // `postLogin.shouldRedirect` below, where the code dialog runs. This
+        // refuses what a code cannot fix: an admin who has not enrolled.
+        if (session && !(await owesLocalMfa(session)))
+          await assertAuthLocalMfa(session, requireLocalMfa)
         assertSingleMcpResource(ctx.query?.resource, true)
         for (const resource of resourceParams(ctx.query?.resource)) {
           await ensureMcpResource(resource)
         }
+      }
+      // The consent screen asks for the code before it accepts. A direct call
+      // to the plugin's endpoint must not skip that.
+      if (
+        ctx.path === '/oauth2/consent' &&
+        isRecord(ctx.body) &&
+        ctx.body.accept === true
+      ) {
+        const session = await getSessionFromCtx(ctx)
+        if (session) await assertAuthLocalMfa(session, requireLocalMfa)
       }
       if (ctx.path === '/oauth2/token' && isRecord(ctx.body)) {
         assertSingleMcpResource(
@@ -516,7 +532,9 @@ const authBase = betterAuth({
           if (ctx.path === '/two-factor/get-totp-uri') {
             assertTotpUriAvailable(session.user.twoFactorEnabled)
           }
-          if (session.user.twoFactorEnabled) await assertAuthAdminMfa(session)
+          // Someone who signed in with a provider has not entered a code yet.
+          if (session.user.twoFactorEnabled)
+            await assertAuthLocalMfa(session, requireLocalMfa)
           const credential =
             await ctx.context.internalAdapter.findCredentialAccount(
               session.user.id,
@@ -628,9 +646,12 @@ const authBase = betterAuth({
         mcp_connection_id: referenceId,
       }),
       postLogin: {
-        // Never redirects: the plugin only needs `consentReferenceId` here.
+        // Sends a session that still owes a two-factor code (a provider
+        // sign-in) to the consent screen, whose code dialog runs before any
+        // approval. Without it, a remembered consent would issue a code at
+        // once. Otherwise the plugin only needs `consentReferenceId` here.
         page: '/oauth/consent',
-        shouldRedirect: () => false,
+        shouldRedirect: ({ user, session }) => owesLocalMfa({ user, session }),
         // Consent is remembered per (app, user, site), not per app, so an
         // approval for one site never covers another.
         consentReferenceId: async ({ user }) =>

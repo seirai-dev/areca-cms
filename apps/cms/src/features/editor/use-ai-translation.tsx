@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
-import { errorMessage } from '#/lib/content/utils'
+import { errorMessage } from '#/lib/errors'
 import { uiLanguageName } from '#/lib/site-languages'
 import type { EntryData, Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'

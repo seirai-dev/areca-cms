@@ -3,6 +3,7 @@ import type {
   CloudflareDeployTarget,
   CloudflareDeployTargets,
 } from '#/adapters/deployment/cloudflare-targets'
+import { hasCompleteDeploymentTarget } from '#/lib/deployment-target'
 import type { DeploymentTarget } from '#/lib/types'
 
 /**
@@ -200,6 +201,11 @@ export function buildDeploymentTarget(
     branch: selection.branch,
     healthCheckUrl,
   }
+}
+
+/** Whether the draft would save a target that production publishing accepts. */
+export function draftTargetComplete(draft: DraftTarget) {
+  return hasCompleteDeploymentTarget(buildDeploymentTarget(draft))
 }
 
 /** A stable identity for dirty checks: which thing the site deploys to. */

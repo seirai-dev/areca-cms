@@ -1,5 +1,6 @@
 import * as React from 'react'
 import {
+  infiniteQueryOptions,
   keepPreviousData,
   useInfiniteQuery,
   useMutation,
@@ -8,14 +9,15 @@ import {
 import { useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import { queryKeys } from '#/lib/content/query-keys'
-import { errorMessage } from '#/lib/content/utils'
+import { queryKeys } from '#/lib/query-keys'
+import { errorMessage } from '#/lib/errors'
 import { useInvalidateGoLive } from '#/features/golive/use-go-live'
 import {
   bulkQueryKeys,
   invalidateQueryKeys,
 } from '#/features/dev-env/invalidate'
-import type { EntryStatus } from '#/lib/types'
+import type { EntryStatus, SiteLanguages } from '#/lib/types'
+import { isMultilingual, nonMainLanguages } from '#/lib/site-languages'
 import {
   DUE_POLL_MS,
   nextPollStart,
@@ -23,6 +25,8 @@ import {
   shouldPollScheduled,
 } from './scheduled-poll'
 import { m } from '#/paraglide/messages'
+import { useStoredState } from '#/hooks/use-stored-state'
+import type { StoredCodec } from '#/hooks/use-stored-state'
 import { BULK_ENTRY_MAX_IDS } from '#/lib/content-limits'
 import { bulkEntryActionFn, listEntriesFn } from '#/server/fn/content'
 import type { BulkEntryActionResult } from '#/server/fn/content'
@@ -40,13 +44,20 @@ function pageTotal(page: { total?: number } | null | undefined): number {
   return page?.total ?? 0
 }
 
-/**
- * One collection's entries for the Collection screen (brief §3.4): status
- * filter and search go to the server; "Show more" appends pages of 25
- * (server `offset`). Keys live under `['entries', siteId, key, …]`, so every
- * existing invalidation (editor saves, bulk actions) refreshes them.
- */
-export function useCollectionEntries({
+/** `?missing=` as the list filters by it: only a non-main language of a multilingual site. */
+export function missingLanguageFilter(
+  languages: SiteLanguages | null | undefined,
+  missing: string | null | undefined,
+): string | undefined {
+  return isMultilingual(languages) &&
+    missing &&
+    nonMainLanguages(languages).includes(missing)
+    ? missing
+    : undefined
+}
+
+/** The paged entry list of one collection, for one filter. */
+export function collectionEntriesQuery({
   siteId,
   collectionKey,
   status,
@@ -57,10 +68,9 @@ export function useCollectionEntries({
   collectionKey: string
   status: StatusFilter
   search: string
-  /** Only entries not complete in this language (multilingual sites). */
   missingLanguage?: string
 }) {
-  const query = useInfiniteQuery({
+  return infiniteQueryOptions({
     queryKey: [
       ...queryKeys.entries(siteId, collectionKey, {
         status,
@@ -89,7 +99,6 @@ export function useCollectionEntries({
       )
       return loaded < pageTotal(last) ? loaded : undefined
     },
-    placeholderData: keepPreviousData,
     // A scheduled entry goes live on the server; refresh the list while one
     // is due (or less than a minute away) and stop once none is.
     refetchInterval: (q) => {
@@ -97,6 +106,38 @@ export function useCollectionEntries({
       const times = scheduledTimes(pages.flatMap((page) => pageItems(page)))
       return shouldPollScheduled(times) ? DUE_POLL_MS : false
     },
+  })
+}
+
+/**
+ * One collection's entries for the Collection screen (brief §3.4): status
+ * filter and search go to the server; "Show more" appends pages of 25
+ * (server `offset`). Keys live under `['entries', siteId, key, …]`, so every
+ * existing invalidation (editor saves, bulk actions) refreshes them.
+ */
+export function useCollectionEntries({
+  siteId,
+  collectionKey,
+  status,
+  search,
+  missingLanguage,
+}: {
+  siteId: string
+  collectionKey: string
+  status: StatusFilter
+  search: string
+  /** Only entries not complete in this language (multilingual sites). */
+  missingLanguage?: string
+}) {
+  const query = useInfiniteQuery({
+    ...collectionEntriesQuery({
+      siteId,
+      collectionKey,
+      status,
+      search,
+      missingLanguage,
+    }),
+    placeholderData: keepPreviousData,
   })
 
   // A malformed response shows the list's normal empty or error state rather
@@ -348,35 +389,21 @@ export function useEntryBulkActions(
 
 export type CollectionView = 'cards' | 'list'
 
+const COLLECTION_VIEW: StoredCodec<CollectionView | null> = {
+  parse: (raw) => (raw === 'cards' || raw === 'list' ? raw : null),
+  serialize: (view) => view,
+}
+
 /** Cards / List, remembered per collection in this browser. */
 export function useCollectionView(
   siteId: string,
   collectionKey: string,
   fallback: CollectionView,
 ) {
-  const storageKey = `areca.collection-view.${siteId}.${collectionKey}`
-  const [view, setViewState] = React.useState<CollectionView | null>(null)
-
-  React.useEffect(() => {
-    try {
-      const stored = localStorage.getItem(storageKey)
-      setViewState(stored === 'cards' || stored === 'list' ? stored : null)
-    } catch {
-      setViewState(null)
-    }
-  }, [storageKey])
-
-  const setView = React.useCallback(
-    (next: CollectionView) => {
-      setViewState(next)
-      try {
-        localStorage.setItem(storageKey, next)
-      } catch {
-        /* localStorage unavailable */
-      }
-    },
-    [storageKey],
+  const [view, setView] = useStoredState(
+    `areca.collection-view.${siteId}.${collectionKey}`,
+    COLLECTION_VIEW,
+    { serverValue: null },
   )
-
   return [view ?? fallback, setView] as const
 }

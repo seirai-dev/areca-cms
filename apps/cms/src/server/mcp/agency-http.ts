@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .select() are checked defensively */
 import { createMcpHandler } from '@modelcontextprotocol/server'
 import type { McpRequestContext } from '@modelcontextprotocol/server'
 import { eq } from 'drizzle-orm'
@@ -19,13 +18,12 @@ import { MCP_SCOPE, agencyMcpResourceUrl } from './oauth-resource'
 import { verifyMcpAccessToken } from './oauth-tokens'
 import {
   MCP_TRANSPORT_OPTIONS,
-  challengeHeaderAt,
   isSuccessfulMcpResponse,
+  mcpChallenges,
   mfaRequired,
   protectedResourceMetadataUrlFor,
   unknownSite,
 } from './http'
-import type { ChallengeParams } from './http'
 
 const handler = createMcpHandler(
   (ctx: McpRequestContext) => createArecaAgencyMcpServer(principalFrom(ctx)),
@@ -55,26 +53,14 @@ function isPrincipal(value: unknown): value is AgencyPrincipal {
 }
 
 /**
- * The RFC 6750 / RFC 9728 401 for the agency address. It names the agency
+ * The RFC 6750 / RFC 9728 answers for the agency address. They name the agency
  * resource's metadata, so a client without a token finds how to sign in.
  */
-function challenge401(
-  params: ChallengeParams & { message?: string } = {},
-): Response {
-  const { message, ...challenge } = params
-  return Response.json(
-    {
-      error:
-        message ?? challenge.description ?? 'Sign in to connect to the agency',
-    },
-    {
-      status: 401,
-      headers: {
-        'WWW-Authenticate': challengeHeaderAt(agencyMetadataUrl(), challenge),
-      },
-    },
-  )
-}
+const { challenge401, insufficientScope } = mcpChallenges(agencyMetadataUrl, {
+  signIn: 'Sign in to connect to the agency',
+  insufficientScope:
+    'This connection is not allowed to use the agency connector',
+})
 
 function agencyMetadataUrl(): string {
   return protectedResourceMetadataUrlFor(agencyMcpResourceUrl())
@@ -86,22 +72,6 @@ function wrongScope(): Response {
     message:
       'This key is for one site. Use that site’s connector address, or create an agency key.',
   })
-}
-
-function insufficientScope(dpop: boolean): Response {
-  return Response.json(
-    { error: 'This connection is not allowed to use the agency connector' },
-    {
-      status: 403,
-      headers: {
-        'WWW-Authenticate': challengeHeaderAt(agencyMetadataUrl(), {
-          error: 'insufficient_scope',
-          scope: MCP_SCOPE,
-          dpop,
-        }),
-      },
-    },
-  )
 }
 
 /**
@@ -195,17 +165,19 @@ async function agencyOAuthRequest(
   }
   const { userId, clientId, connectionId, resources, scopes } = verdict.token
 
-  const [owner] = await db
-    .select({
-      id: user.id,
-      name: user.name,
-      isAgencyAdmin: user.isAgencyAdmin,
-      twoFactorEnabled: user.twoFactorEnabled,
-      blockedAt: user.blockedAt,
-    })
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1)
+  const owner = (
+    await db
+      .select({
+        id: user.id,
+        name: user.name,
+        isAgencyAdmin: user.isAgencyAdmin,
+        twoFactorEnabled: user.twoFactorEnabled,
+        blockedAt: user.blockedAt,
+      })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1)
+  ).at(0)
   if (!owner) return challenge401({ error: 'invalid_token', dpop })
 
   // The live rules come first: a caller who is no longer an agency admin gets

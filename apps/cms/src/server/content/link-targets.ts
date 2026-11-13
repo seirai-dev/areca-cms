@@ -171,6 +171,12 @@ function titleIn(data: EntryData, fields: Field[]): string | null {
 type Ctx = { languages: SiteLanguages | null; locale: string | null }
 
 /**
+ * An entry as a search reads it: `LinkTargetRow` without the approved and
+ * scheduled documents, which the link field never reads.
+ */
+type SearchRow = Omit<LinkTargetRow, 'publishedData' | 'scheduledData'>
+
+/**
  * The title and slug an entry shows in the link field, in `ctx.locale`. This is
  * the one locale rule of the field; `viewValueSql`, `localizedTitleSql` and
  * `localizedSlugSql` mirror it in SQL, so the search and the row agree.
@@ -205,7 +211,7 @@ function labelsOf(
  * `labelsOf`. The path follows the release rule (`placeLinkTarget`), so it is
  * where the link goes.
  */
-function optionOf(row: LinkTargetRow, ctx: Ctx): LinkTargetOption {
+function optionOf(row: SearchRow, ctx: Ctx): LinkTargetOption {
   const { languages, locale } = ctx
   const { title, slug } = labelsOf(row, ctx)
   const placed = placeLinkTarget(
@@ -233,13 +239,13 @@ function optionOf(row: LinkTargetRow, ctx: Ctx): LinkTargetOption {
 }
 
 /** Every path an entry answers to: one per language it ships in, plus the main one. */
-function pathsOf(row: LinkTargetRow, ctx: Ctx): string[] {
+function pathsOf(row: SearchRow, ctx: Ctx): string[] {
   return [...new Set(pathsByCode(row, ctx).map((item) => item.path))]
 }
 
 /** The path an entry has in each language code of the site, with that code (null on a single-language site). */
 function pathsByCode(
-  row: LinkTargetRow,
+  row: SearchRow,
   ctx: Ctx,
 ): { code: string | null; path: string }[] {
   const languages = ctx.languages
@@ -350,22 +356,73 @@ function jsonText(term: string): string {
   return JSON.stringify(term).slice(1, -1)
 }
 
-/** The columns a search reads: an entry and its collection, as `LinkTargetRow`. */
-const searchColumns = {
-  id: entry.id,
-  siteId: entry.siteId,
-  slug: entry.slug,
-  status: entry.status,
-  publishedSlug: entry.publishedSlug,
-  draftData: entry.draftData,
-  publishedData: entry.publishedData,
-  scheduledData: entry.scheduledData,
-  collectionKey: collection.key,
-  collectionLabel: collection.label,
-  collectionKind: collection.kind,
-  routePattern: collection.routePattern,
-  localizedRoutes: collection.localizedRoutes,
-  fields: collection.fields,
+/**
+ * The draft a search reads. A site with languages needs the whole draft: which
+ * translations ship depends on every required field (`placeLinkTarget`).
+ * Without languages, only the title field and `$slug` are read (`labelsOf`).
+ */
+function searchDraftSql(languages: SiteLanguages | null): SQL<EntryData> {
+  if (languages) return sql<EntryData>`${entry.draftData}`
+  const key = titleKeySql()
+  const slug = sql`${entry.draftData} -> ${SLUG_KEY}`
+  return sql<EntryData>`(CASE WHEN ${key} IS NULL
+    THEN jsonb_build_object(${SLUG_KEY}::text, ${slug})
+    ELSE jsonb_build_object(${key}, ${entry.draftData} -> ${key}, ${SLUG_KEY}::text, ${slug}) END)`
+}
+
+/**
+ * The columns a search reads: an entry and its collection, as `SearchRow`
+ * without `fields`. The fields come once per collection (`searchSite`).
+ */
+function searchColumns(languages: SiteLanguages | null) {
+  return {
+    id: entry.id,
+    siteId: entry.siteId,
+    slug: entry.slug,
+    status: entry.status,
+    publishedSlug: entry.publishedSlug,
+    draftData: searchDraftSql(languages),
+    collectionId: entry.collectionId,
+    collectionKey: collection.key,
+    collectionLabel: collection.label,
+    collectionKind: collection.kind,
+    routePattern: collection.routePattern,
+    localizedRoutes: collection.localizedRoutes,
+  }
+}
+
+function withFields<T extends { collectionId: string }>(
+  rows: T[],
+  fields: Map<string, Field[]>,
+): (Omit<T, 'collectionId'> & { fields: Field[] })[] {
+  return rows.map(({ collectionId, ...row }) => ({
+    ...row,
+    fields: fields.get(collectionId) ?? [],
+  }))
+}
+
+/**
+ * The site facts a search needs, with the fields of each routed collection by
+ * collection id, in the same query.
+ */
+async function searchSite(siteId: string) {
+  const row = (
+    await db
+      .select({
+        languages: site.languages,
+        productionUrl: site.productionUrl,
+        previewUrl: site.previewUrl,
+        fields: sql<Record<
+          string,
+          Field[]
+        > | null>`(SELECT jsonb_object_agg(c.id, c.fields) FROM ${collection} c WHERE c.site_id = ${siteId} AND c.kind = 'collection' AND c.route_pattern <> '')`,
+      })
+      .from(site)
+      .where(eq(site.id, siteId))
+      .limit(1)
+  ).at(0)
+  if (!row) return undefined
+  return { ...row, fields: new Map(Object.entries(row.fields ?? {})) }
 }
 
 /**
@@ -403,7 +460,8 @@ async function searchWordRows(
   ctx: Ctx,
   term: string,
   limit: number,
-): Promise<LinkTargetRow[]> {
+  fields: Map<string, Field[]>,
+): Promise<SearchRow[]> {
   const title = localizedTitleSql(ctx)
   const slug = localizedSlugSql(ctx)
   const contains = `%${escapeLike(term)}%`
@@ -427,13 +485,14 @@ async function searchWordRows(
         WHEN lower(${title}) LIKE ${`% ${escapeLike(term)}%`} THEN 3
         ELSE 4 END)`
     : sql<number>`0::int`
-  return db
-    .select({ ...searchColumns, rank })
+  const rows = await db
+    .select({ ...searchColumns(ctx.languages), rank })
     .from(entry)
     .innerJoin(collection, eq(entry.collectionId, collection.id))
     .where(routedWhere(siteId, enabledOnly, candidates, matches))
     .orderBy(rank, desc(entry.updatedAt), entry.slug)
     .limit(limit)
+  return withFields(rows, fields)
 }
 
 /**
@@ -457,15 +516,17 @@ const PATH_MAX_PAGES = 10
  * with `wanted`, in one query. The paths are matched in SQL in lower case.
  * Entries whose path is exactly `wanted` come first, then the newest, then by
  * id so that pages do not overlap. `rank` is 0 for an exact match. The caller
- * checks the paths of the rows it gets and asks for the next page.
+ * checks the paths of the rows it gets and asks for the page after the last
+ * row it got (`after`): keyset paging, so a page does not redo the earlier ones.
  */
 async function searchPathRows(
   siteId: string,
   enabledOnly: boolean,
   languages: SiteLanguages | null,
   wanted: string,
-  offset: number,
-): Promise<(LinkTargetRow & { rank: number })[]> {
+  after: PathCursor | null,
+  fields: Map<string, Field[]>,
+): Promise<(SearchRow & { rank: number; cursor: PathCursor })[]> {
   const paths = pathExprsSql(languages)
   const prefix = sql.join(
     paths.map((path) => sql`lower(${path}) LIKE ${`${escapeLike(wanted)}%`}`),
@@ -475,15 +536,26 @@ async function searchPathRows(
     paths.map((path) => sql`lower(${path}) = ${wanted}`),
     sql` OR `,
   )} THEN 0 ELSE 1 END)`
-  return db
-    .select({ ...searchColumns, rank: exact })
+  // `updated_at` as text keeps its microseconds, which a JS Date drops.
+  const updatedAt = sql<string>`${entry.updatedAt}::text`
+  const rest = after
+    ? sql`(${exact} > ${after.rank} OR (${exact} = ${after.rank} AND (${entry.updatedAt} < ${after.updatedAt}::timestamptz OR (${entry.updatedAt} = ${after.updatedAt}::timestamptz AND (${entry.slug} > ${after.slug} OR (${entry.slug} = ${after.slug} AND ${entry.id} > ${after.id}))))))`
+    : undefined
+  const rows = await db
+    .select({ ...searchColumns(languages), rank: exact, updatedAt })
     .from(entry)
     .innerJoin(collection, eq(entry.collectionId, collection.id))
-    .where(routedWhere(siteId, enabledOnly, sql`(${prefix})`))
+    .where(routedWhere(siteId, enabledOnly, sql`(${prefix})`, rest))
     .orderBy(exact, desc(entry.updatedAt), entry.slug, entry.id)
     .limit(PATH_PAGE_SIZE)
-    .offset(offset)
+  return withFields(rows, fields).map(({ updatedAt: at, ...row }) => ({
+    ...row,
+    cursor: { rank: row.rank, updatedAt: at, slug: row.slug, id: row.id },
+  }))
 }
+
+/** Where a path search page ended: its last row's sort key. */
+type PathCursor = { rank: number; updatedAt: string; slug: string; id: string }
 
 /**
  * The search behind the link field. `query` is what the editor typed:
@@ -491,8 +563,9 @@ async function searchPathRows(
  * - words: entries whose title or slug matches, in the editor's language;
  * - `/…` or an own-domain URL: entries whose path starts with it, and the
  *   entry at exactly that path (`resolved`), with its section.
- * Two queries whatever the number of collections: the site, then the entries.
- * A path search reads the entries a page at a time, up to PATH_MAX_PAGES.
+ * Two queries whatever the number of collections: the site (with the fields of
+ * its collections), then the entries. A path search reads the entries a page
+ * at a time, up to PATH_MAX_PAGES.
  */
 export async function searchLinkTargets(
   siteId: string,
@@ -503,19 +576,10 @@ export async function searchLinkTargets(
     enabledOnly: boolean
   },
 ): Promise<LinkTargetSearch> {
-  const siteRow = (
-    await db
-      .select({
-        languages: site.languages,
-        productionUrl: site.productionUrl,
-        previewUrl: site.previewUrl,
-      })
-      .from(site)
-      .where(eq(site.id, siteId))
-      .limit(1)
-  ).at(0)
+  const siteRow = await searchSite(siteId)
   const empty: LinkTargetSearch = { entries: [], resolved: null, ownPath: null }
   if (!siteRow) return empty
+  const fields = siteRow.fields
   const ctx: Ctx = { languages: siteRow.languages, locale: input.locale }
   const parsed = parseLinkQuery(input.query, siteHosts(siteRow))
 
@@ -529,6 +593,7 @@ export async function searchLinkTargets(
       ctx,
       parsed.text.toLowerCase(),
       input.limit,
+      fields,
     )
     return { ...empty, entries: rows.map((row) => optionOf(row, ctx)) }
   }
@@ -544,14 +609,17 @@ export async function searchLinkTargets(
   // Exact matches come first, so once a page has a non-exact row, no later
   // page can have an exact one.
   let pastExact = false
+  let after: PathCursor | null = null
   for (let page = 0; page < PATH_MAX_PAGES; page++) {
     const rows = await searchPathRows(
       siteId,
       input.enabledOnly,
       siteRow.languages,
       wanted,
-      page * PATH_PAGE_SIZE,
+      after,
+      fields,
     )
+    after = rows.at(-1)?.cursor ?? null
     for (const row of rows) {
       if (row.rank !== 0) pastExact = true
       const paths = pathsOf(row, ctx).map((path) =>
@@ -701,17 +769,7 @@ export async function resolveMarkdownLinkTargets(
     for (const href of markdownLinkHrefs(markdown)) hrefs.add(href)
   }
   if (hrefs.size === 0) return out
-  const siteRow = (
-    await db
-      .select({
-        languages: site.languages,
-        productionUrl: site.productionUrl,
-        previewUrl: site.previewUrl,
-      })
-      .from(site)
-      .where(eq(site.id, siteId))
-      .limit(1)
-  ).at(0)
+  const siteRow = await searchSite(siteId)
   if (!siteRow) return out
   const ctx: Ctx = { languages: siteRow.languages, locale }
   const hosts = siteHosts(siteRow)
@@ -765,12 +823,13 @@ export async function resolveMarkdownLinkTargets(
           )})`,
       ),
     )
-    const rows = await db
-      .select(searchColumns)
+    const found = await db
+      .select(searchColumns(siteRow.languages))
       .from(entry)
       .innerJoin(collection, eq(entry.collectionId, collection.id))
       .where(routedWhere(siteId, false, pathMatch))
       .orderBy(entry.slug, entry.id)
+    const rows = withFields(found, siteRow.fields)
     // The tier of each entry for each path: 0 in the language of the text,
     // 1 in the main language, 2 in another. A row can match on a language
     // that does not ship: `pathsByCode` places it on the main path then.
@@ -779,7 +838,7 @@ export async function resolveMarkdownLinkTargets(
     const mainCode = siteRow.languages?.main ?? null
     const answers = new Map<
       string,
-      Map<string, { row: LinkTargetRow; tier: number }>
+      Map<string, { row: SearchRow; tier: number }>
     >()
     for (const row of rows) {
       for (const { code, path } of pathsByCode(row, ctx)) {
@@ -813,7 +872,7 @@ export async function resolveMarkdownLinkTargets(
 
 /** The link target of one entry: its path in the text's language, with the section. */
 function markdownTargetOf(
-  row: LinkTargetRow,
+  row: SearchRow,
   ctx: Ctx,
   anchor: string | null,
 ): MarkdownLinkTarget | null {

@@ -18,6 +18,7 @@ import { SegmentedControl } from '#/components/ui/segmented-control'
 import { SlideOver } from '#/components/ui/slide-over'
 import { Tag } from '#/components/ui/tag'
 import { useIsMobile, useMediaQuery } from '#/hooks/use-mobile'
+import { useSelection } from '#/hooks/use-selection'
 import { membershipRoleLabel } from '#/lib/admin/helpers'
 import { cn } from '#/lib/utils'
 import type { MembershipRole } from '#/lib/types'
@@ -69,7 +70,7 @@ export function ClientPicker({
   const touch = useMediaQuery('(pointer: coarse)')
   const [open, setOpen] = React.useState(false)
   const [query, setQuery] = React.useState('')
-  const [picked, setPicked] = React.useState<ReadonlySet<string>>(new Set())
+  const selection = useSelection()
   const [role, setRole] = React.useState<MembershipRole>('editor')
   const [highlight, setHighlight] = React.useState('')
   // The highlight paints only once the keyboard moves it. Otherwise the first
@@ -106,26 +107,21 @@ export function ClientPicker({
 
   function toggle(id: string) {
     if (existing?.has(id) || staged?.has(id)) return
-    setPicked((current) => {
-      const next = new Set(current)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+    selection.toggle(id)
   }
 
   function close(next: boolean) {
     setOpen(next)
     if (!next) {
       setQuery('')
-      setPicked(new Set())
+      selection.clear()
       // Each opening starts from the default role (Editor).
       setRole('editor')
     }
   }
 
   const picks: ClientPick[] = clients
-    .filter((client) => picked.has(client.id))
+    .filter((client) => selection.isSelected(client.id))
     .map((client) => ({
       organizationId: client.id,
       name: client.name,
@@ -174,7 +170,8 @@ export function ClientPicker({
         {visible.map((client) => {
           const current = existing?.get(client.id)
           const isStaged = staged?.has(client.id) ?? false
-          const checked = picked.has(client.id) || isStaged || Boolean(current)
+          const checked =
+            selection.isSelected(client.id) || isStaged || Boolean(current)
           return (
             <CommandItem
               key={client.id}

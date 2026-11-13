@@ -5,6 +5,7 @@ import type { InferSelectModel } from 'drizzle-orm'
 import { z } from '#/lib/zod'
 
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import {
   buildJob,
   collection,
@@ -20,6 +21,7 @@ import { isDevSite } from '#/server/security/site-visibility'
 import type { DeploymentTarget } from '#/lib/types'
 import {
   deploymentTargetResourceId,
+  hasCompleteDeploymentTarget,
   sameDeploymentTarget,
 } from '#/lib/deployment-target'
 import { m } from '#/paraglide/messages'
@@ -32,9 +34,11 @@ import {
   ValidationError,
 } from '#/server/content/errors'
 import { generateSiteToken } from '#/server/content/site-auth'
+import { getSiteOrThrow } from '#/server/content/site-core'
 import { deleteDevSiteRows } from '#/server/dev-env/delete'
 import { lockProductionSite } from '#/server/dev-env/lock'
 import { lockProductionRow } from '#/server/dev-env/rows'
+import { hasGoneLive } from '#/server/dev-env/status'
 
 const healthCheckUrlSchema = z
   .string()
@@ -280,6 +284,43 @@ function changesDeploymentSettings(
   )
 }
 
+/**
+ * The publishing-mode rules for the UI and MCP alike: a site that has gone
+ * live cannot switch back to Demo, and Production needs a complete deployment
+ * target (the one in the patch, or the stored one).
+ */
+async function assertPublishingModeAllowed(
+  tx: Tx,
+  siteId: string,
+  patch: {
+    publishingMode?: 'production' | 'demo'
+    deploymentTarget?: DeploymentTarget | null
+  },
+  stored: {
+    publishingMode: 'production' | 'demo'
+    deploymentTarget: DeploymentTarget | null
+  },
+) {
+  if (
+    patch.publishingMode === undefined ||
+    patch.publishingMode === stored.publishingMode
+  )
+    return
+  if (patch.publishingMode === 'demo') {
+    if (await hasGoneLive(siteId, tx)) {
+      throw new ConflictError(m.server_publishing_mode_demo_after_live())
+    }
+    return
+  }
+  const target =
+    'deploymentTarget' in patch
+      ? patch.deploymentTarget
+      : stored.deploymentTarget
+  if (!hasCompleteDeploymentTarget(target)) {
+    throw new ConflictError(m.server_publishing_mode_needs_target())
+  }
+}
+
 export async function updateSite(
   id: string,
   input: {
@@ -292,12 +333,7 @@ export async function updateSite(
   },
   actorId: string,
 ) {
-  const existing = (
-    await db.select().from(site).where(eq(site.id, id)).limit(1)
-  ).at(0)
-  if (!existing) {
-    throw new NotFoundError(m.server_site_not_found())
-  }
+  const existing = await getSiteOrThrow(id)
   if (isDevSite(existing)) {
     // Dev envs stay in Demo mode with no deployment target (Decision 7).
     // The production URL and the preview URL stay editable.
@@ -348,6 +384,7 @@ export async function updateSite(
       ).at(0)
       if (!locked) throw new NotFoundError(m.server_site_not_found())
       if (changesDeploymentSettings(patch, locked)) {
+        await assertPublishingModeAllowed(tx, id, patch, locked)
         await assertSiteHasNoPendingDeployment(
           tx,
           id,
@@ -526,12 +563,7 @@ export async function rotateSiteTokenAdmin(
   privilege: 'build' | 'schema' = 'build',
   actorId: string,
 ) {
-  const existing = (
-    await db.select().from(site).where(eq(site.id, id)).limit(1)
-  ).at(0)
-  if (!existing) {
-    throw new NotFoundError(m.server_site_not_found())
-  }
+  const existing = await getSiteOrThrow(id)
 
   const generated = generateSiteToken()
   await db.transaction(async (tx) => {
@@ -565,12 +597,7 @@ export async function rotateSiteTokenAdmin(
 }
 
 export async function deleteSite(id: string, actorId: string) {
-  const existing = (
-    await db.select().from(site).where(eq(site.id, id)).limit(1)
-  ).at(0)
-  if (!existing) {
-    throw new NotFoundError(m.server_site_not_found())
-  }
+  const existing = await getSiteOrThrow(id)
 
   if (isDevSite(existing)) {
     // Dev content is never archived; the dev env is deleted from its

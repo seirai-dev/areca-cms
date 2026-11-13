@@ -1,10 +1,9 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 /**
  * What publishing and invitations call. Each entry point runs after the
  * caller's own commit and never throws: a notification problem must not fail
  * a release or an invitation.
  */
-import { and, asc, desc, eq, isNotNull, lte, ne } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNotNull, lte, ne } from 'drizzle-orm'
 
 import { db } from '#/db'
 import {
@@ -19,6 +18,7 @@ import {
 import type { NotificationPayload, NotificationRole } from '#/lib/notifications'
 import type { PublicationStatus, Snapshot } from '#/lib/types'
 import { createLogger } from '#/server/log'
+import { membershipRoles } from '#/server/security/org-role'
 import { diffSnapshotCollections } from '#/server/publishing/release-diff'
 import type { ReleaseDiffEntry } from '#/server/publishing/release-diff'
 
@@ -41,55 +41,50 @@ type Entries = Pick<NotificationPayload, 'entries' | 'moreEntries'>
  * (docs/design/dev-environments.md, Decision 22). Every caller returns early.
  */
 async function siteContext(siteId: string) {
-  const [row] = await db
-    .select({
-      siteId: site.id,
-      siteName: site.name,
-      organizationId: site.organizationId,
-      orgName: organization.name,
-    })
-    .from(site)
-    .innerJoin(organization, eq(organization.id, site.organizationId))
-    .where(and(eq(site.id, siteId), eq(site.environment, 'production')))
-    .limit(1)
+  const row = (
+    await db
+      .select({
+        siteId: site.id,
+        siteName: site.name,
+        organizationId: site.organizationId,
+        orgName: organization.name,
+      })
+      .from(site)
+      .innerJoin(organization, eq(organization.id, site.organizationId))
+      .where(and(eq(site.id, siteId), eq(site.environment, 'production')))
+      .limit(1)
+  ).at(0)
   return row ?? null
 }
 
-/** Membership role, or 'agency' for an agency admin who is not a member. */
-async function roleFor(
-  userId: string,
-  organizationId: string,
-): Promise<NotificationRole | null> {
-  const [member] = await db
-    .select({ role: membership.role })
-    .from(membership)
-    .where(
-      and(
-        eq(membership.userId, userId),
-        eq(membership.organizationId, organizationId),
-      ),
-    )
-    .limit(1)
-  if (member) return member.role
-  const [person] = await db
-    .select({ isAgencyAdmin: user.isAgencyAdmin })
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1)
-  return person?.isAgencyAdmin ? 'agency' : null
-}
-
+/**
+ * Each person's membership role, or 'agency' for an agency admin who is not a
+ * member. Unlike `orgRoleOf`, membership wins here: an agency admin who is
+ * also a member gets the org's events under that role, with the org's rules
+ * and the per-org choices their Notifications settings show for it.
+ */
 async function recipientsFor(
   userIds: Array<string | null>,
   organizationId: string,
 ): Promise<NotificationRecipient[]> {
-  const recipients: NotificationRecipient[] = []
-  for (const userId of new Set(userIds)) {
-    if (!userId) continue
-    const role = await roleFor(userId, organizationId)
-    if (role) recipients.push({ userId, role })
-  }
-  return recipients
+  const ids = [...new Set(userIds)].filter((id): id is string => Boolean(id))
+  const roles = await membershipRoles(organizationId, ids)
+  const others = ids.filter((id) => !roles.has(id))
+  const agencyAdmins = new Set(
+    others.length === 0
+      ? []
+      : (
+          await db
+            .select({ id: user.id })
+            .from(user)
+            .where(and(inArray(user.id, others), eq(user.isAgencyAdmin, true)))
+        ).map((row) => row.id),
+  )
+  return ids.flatMap((userId): NotificationRecipient[] => {
+    const role: NotificationRole | undefined =
+      roles.get(userId) ?? (agencyAdmins.has(userId) ? 'agency' : undefined)
+    return role ? [{ userId, role }] : []
+  })
 }
 
 async function ownersOf(
@@ -143,29 +138,33 @@ function entriesBetween(current: Snapshot, previous: Snapshot | null): Entries {
 }
 
 async function publicationRow(publicationId: string) {
-  const [row] = await db
-    .select()
-    .from(publication)
-    .where(eq(publication.id, publicationId))
-    .limit(1)
+  const row = (
+    await db
+      .select()
+      .from(publication)
+      .where(eq(publication.id, publicationId))
+      .limit(1)
+  ).at(0)
   return row ?? null
 }
 
 /** Latest live release before this one, the baseline for "what changed". */
 async function previousLive(pub: typeof publication.$inferSelect) {
-  const [row] = await db
-    .select()
-    .from(publication)
-    .where(
-      and(
-        eq(publication.siteId, pub.siteId),
-        eq(publication.status, 'live'),
-        ne(publication.id, pub.id),
-        lte(publication.createdAt, pub.createdAt),
-      ),
-    )
-    .orderBy(desc(publication.createdAt))
-    .limit(1)
+  const row = (
+    await db
+      .select()
+      .from(publication)
+      .where(
+        and(
+          eq(publication.siteId, pub.siteId),
+          eq(publication.status, 'live'),
+          ne(publication.id, pub.id),
+          lte(publication.createdAt, pub.createdAt),
+        ),
+      )
+      .orderBy(desc(publication.createdAt))
+      .limit(1)
+  ).at(0)
   return row ?? null
 }
 
@@ -196,16 +195,7 @@ async function alertAgencyAdmins(input: {
  * A release went live (publication status `live`). Scheduled releases notify
  * the people who scheduled them; rollbacks tell owners; manual releases tell
  * the requester, and other owners get the `.others` variant.
- */
-export async function notifyPublicationLive(publicationId: string) {
-  try {
-    await deliverPublicationLive(publicationId)
-  } catch (error) {
-    log.error('live notification failed', { publicationId, err: error })
-  }
-}
-
-/**
+ *
  * Fans out the live notifications and throws on failure, so the publication
  * events loop can retry. `previousPublicationId` is the release that was live
  * before this one, read before it was superseded. Omitted: look it up now
@@ -285,20 +275,9 @@ export async function deliverPublicationLive(
 /**
  * A release failed (`stuck` when its outcome is unknown). The requester, the
  * people who scheduled it and owners are told, then agency admins who did not
- * already hear about it.
+ * already hear about it. Throws on failure so the publication events loop
+ * retries it.
  */
-export async function notifyPublicationFailed(
-  publicationId: string,
-  opts: { stuck: boolean },
-) {
-  try {
-    await deliverPublicationFailed(publicationId, opts)
-  } catch (error) {
-    log.error('failure notification failed', { publicationId, err: error })
-  }
-}
-
-/** Throws on failure so the publication events loop retries it. */
 export async function deliverPublicationFailed(
   publicationId: string,
   opts: { stuck: boolean },
@@ -382,35 +361,43 @@ export async function notifyInviteAccepted(
   acceptedUserId: string,
 ) {
   try {
-    const [invite] = await db
-      .select()
-      .from(invitation)
-      .where(eq(invitation.id, invitationId))
-      .limit(1)
+    const invite = (
+      await db
+        .select()
+        .from(invitation)
+        .where(eq(invitation.id, invitationId))
+        .limit(1)
+    ).at(0)
     if (!invite) return
-    const [org] = await db
-      .select({ name: organization.name })
-      .from(organization)
-      .where(eq(organization.id, invite.organizationId))
-      .limit(1)
-    const [invitee] = await db
-      .select({ name: user.name, email: user.email })
-      .from(user)
-      .where(eq(user.id, acceptedUserId))
-      .limit(1)
+    const org = (
+      await db
+        .select({ name: organization.name })
+        .from(organization)
+        .where(eq(organization.id, invite.organizationId))
+        .limit(1)
+    ).at(0)
+    const invitee = (
+      await db
+        .select({ name: user.name, email: user.email })
+        .from(user)
+        .where(eq(user.id, acceptedUserId))
+        .limit(1)
+    ).at(0)
     // The audit row written when the invitation was sent names its sender.
-    const [sent] = await db
-      .select({ actorId: auditLog.actorId })
-      .from(auditLog)
-      .where(
-        and(
-          eq(auditLog.action, 'member.invite'),
-          eq(auditLog.targetId, invitationId),
-          isNotNull(auditLog.actorId),
-        ),
-      )
-      .orderBy(asc(auditLog.createdAt))
-      .limit(1)
+    const sent = (
+      await db
+        .select({ actorId: auditLog.actorId })
+        .from(auditLog)
+        .where(
+          and(
+            eq(auditLog.action, 'member.invite'),
+            eq(auditLog.targetId, invitationId),
+            isNotNull(auditLog.actorId),
+          ),
+        )
+        .orderBy(asc(auditLog.createdAt))
+        .limit(1)
+    ).at(0)
     if (!sent?.actorId) return
     await notify({
       event: 'invite.accepted',

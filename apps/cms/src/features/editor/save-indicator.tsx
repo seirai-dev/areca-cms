@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { WarningCircle } from '@phosphor-icons/react'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { AnimatePresence, useReducedMotion } from 'motion/react'
+import * as motion from 'motion/react-m'
 
 import { CheckDraw, FailedIcon, SpinnerRing } from '#/components/ui/status-pill'
 import { formatRelativeTime } from '#/lib/relative-time'

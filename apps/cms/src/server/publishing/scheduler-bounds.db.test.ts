@@ -1,11 +1,10 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import type * as PublicationsModule from './publications.ts'
 
 import { eq, inArray } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { db } from '#/db'
-import { buildJob, entry, organization } from '#/db/schema'
+import { buildJob, entry, organization, schedulerBackoff } from '#/db/schema'
 import {
   createTestCollection,
   createTestSite,
@@ -15,7 +14,7 @@ import {
   removeUsers,
 } from '#/server/notifications/test-utils'
 
-import { recoverStaleJobs } from './worker.ts'
+import { recoverStaleJobs } from './job-run.ts'
 import { runSchedulerTick } from './scheduler.ts'
 
 const requested = vi.hoisted(() => ({ siteIds: [] as string[] }))
@@ -38,8 +37,8 @@ afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.()
 })
 
-/** A site with one scheduled entry that is already due. */
-async function dueSite() {
+/** A site with one scheduled entry that is already due (an hour ago by default). */
+async function dueSite(dueAgoMs = 60 * 60_000) {
   const ctx = await createTestSite()
   const collection = await createTestCollection(ctx.site.id)
   await db.insert(entry).values({
@@ -50,7 +49,7 @@ async function dueSite() {
     draftData: {},
     scheduledData: {},
     scheduledVersion: crypto.randomUUID(),
-    scheduledAt: new Date(Date.now() - 60 * 60_000),
+    scheduledAt: new Date(Date.now() - dueAgoMs),
   })
   cleanups.push(async () => {
     await db.delete(organization).where(eq(organization.id, ctx.org.id))
@@ -76,6 +75,22 @@ describe.skipIf(!hasDb)(
       ).toEqual(new Set(mine))
     })
 
+    it('puts paused sites after the others, so they cannot take every slot', async () => {
+      const year = 365 * 24 * 60 * 60_000
+      // Due long before anything other suites schedule, so these two lead.
+      const paused = await dueSite(20 * year)
+      const healthy = await dueSite(19 * year)
+      await db.insert(schedulerBackoff).values({
+        siteId: paused,
+        approvalFingerprint: 'old',
+        failureCount: 4,
+        lastAttemptAt: new Date(),
+      })
+
+      await runSchedulerTick({ maxSites: 1 })
+      expect(requested.siteIds).toEqual([healthy])
+    })
+
     it('recovers stale jobs batch by batch and fails every one of them', async () => {
       const stale: string[] = []
       for (let i = 0; i < 5; i++) {
@@ -84,17 +99,19 @@ describe.skipIf(!hasDb)(
           siteId: ctx.site.id,
           status: 'building',
         })
-        const [job] = await db
-          .insert(buildJob)
-          .values({
-            siteId: ctx.site.id,
-            publicationId: pub.id,
-            status: 'building',
-            attempts: 1,
-            startedAt: new Date(Date.now() - 2 * 60 * 60_000),
-            leaseExpiresAt: new Date(Date.now() - 60_000),
-          })
-          .returning()
+        const job = (
+          await db
+            .insert(buildJob)
+            .values({
+              siteId: ctx.site.id,
+              publicationId: pub.id,
+              status: 'building',
+              attempts: 1,
+              startedAt: new Date(Date.now() - 2 * 60 * 60_000),
+              leaseExpiresAt: new Date(Date.now() - 60_000),
+            })
+            .returning()
+        ).at(0)
         if (!job) throw new Error('fixture failed')
         stale.push(job.id)
         cleanups.push(async () => {

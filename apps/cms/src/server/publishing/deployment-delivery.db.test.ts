@@ -1,6 +1,5 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it, vi } from 'vitest'
-import { createMockDeploymentAdapter } from '#/adapters/deployment/mock'
 import {
   DeploymentNotDispatchedError,
   DeploymentUncertainError,
@@ -16,7 +15,8 @@ import {
   reconcileDeploymentJob,
   recoverStaleJobs,
   resolveUncertainDeploymentJob,
-} from './worker'
+} from './job-run'
+import { createMockDeploymentAdapter } from './test-helpers'
 
 const target = {
   provider: 'dokploy' as const,

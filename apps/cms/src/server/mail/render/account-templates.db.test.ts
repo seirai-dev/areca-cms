@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
@@ -19,20 +18,24 @@ const hasDb = Boolean(process.env.DATABASE_URL)
 
 async function fixture(options: { verified: boolean }) {
   const suffix = crypto.randomUUID()
-  const [org] = await db
-    .insert(organization)
-    .values({ name: `Northbound ${suffix}`, slug: `tpl-${suffix}` })
-    .returning()
-  const [person] = await db
-    .insert(user)
-    .values({
-      id: crypto.randomUUID(),
-      name: 'Ada Recipient',
-      email: `ada-${suffix}@test.local`,
-      emailVerified: options.verified,
-      locale: 'en',
-    })
-    .returning()
+  const org = (
+    await db
+      .insert(organization)
+      .values({ name: `Northbound ${suffix}`, slug: `tpl-${suffix}` })
+      .returning()
+  ).at(0)
+  const person = (
+    await db
+      .insert(user)
+      .values({
+        id: crypto.randomUUID(),
+        name: 'Ada Recipient',
+        email: `ada-${suffix}@test.local`,
+        emailVerified: options.verified,
+        locale: 'en',
+      })
+      .returning()
+  ).at(0)
   if (!org || !person) throw new Error('fixture failed')
   return {
     org,

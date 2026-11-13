@@ -3,7 +3,7 @@ import { CheckCircle, Prohibit } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 import type { CloudflareDeployTarget } from '#/adapters/deployment/cloudflare-targets'
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { Tag } from '#/components/ui/tag'
 import { Button } from '#/components/ui/button'
@@ -18,6 +18,7 @@ import { m } from '#/paraglide/messages'
 import { CloudflareTargetFields } from './cloudflare-target-fields'
 import {
   buildDeploymentTarget,
+  draftTargetComplete,
   findListed,
   nextHealthUrl,
   pickTrigger,
@@ -53,15 +54,21 @@ function isUrl(value: string) {
  * shared searchable target picker for the chosen provider, the health check
  * URL, and Stop deploying. Edits stay local until Save.
  */
-export function DeploymentTab({
-  site,
-  meSite,
-  settings,
-}: {
+export function DeploymentTab(props: DeploymentTabProps) {
+  const { site } = props
+  // The draft starts from the saved settings, and starts again whenever they
+  // change (after a save, or a refetch that brings new values).
+  const savedKey = JSON.stringify([site.publishingMode, site.deploymentTarget])
+  return <DeploymentForm key={savedKey} {...props} />
+}
+
+type DeploymentTabProps = {
   site: SiteRecord
   meSite: MeSite
   settings: ReturnType<typeof useSiteSettings>
-}) {
+}
+
+function DeploymentForm({ site, meSite, settings }: DeploymentTabProps) {
   const formId = React.useId()
   const client = meSite.organizationName
   const dokploy = useDokployApplications(site.organizationId)
@@ -106,21 +113,21 @@ export function DeploymentTab({
   // This tab's own save. The settings mutation is shared with the other tabs.
   const [saving, setSaving] = React.useState(false)
 
-  // Re-seed the draft whenever the saved settings change (after a save, or a refetch).
-  React.useEffect(() => {
-    setMode(site.publishingMode)
-    setProvider(savedProvider)
-    setAppId(savedApp)
-    setSelection(savedSelection)
-    setHealth(savedHealth)
-    setErrors({})
-  }, [
-    site.publishingMode,
-    savedProvider,
-    savedApp,
-    savedHealth,
-    savedSelection,
-  ])
+  const draft = {
+    provider,
+    applicationId: appId.trim(),
+    selection,
+    healthCheckUrl: health.trim(),
+  }
+
+  // A site that has gone live stays in Production (the server refuses Demo too).
+  const demoLocked = site.hasGoneLive && site.publishingMode === 'production'
+  const modeHint = demoLocked
+    ? m.settings_publishing_mode_demo_locked()
+    : mode === 'production' && !draftTargetComplete(draft)
+      ? m.settings_publishing_mode_needs_target()
+      : null
+  const modeHintId = React.useId()
 
   const listed =
     selection && targets.data ? findListed(selection, targets.data) : null
@@ -176,13 +183,8 @@ export function DeploymentTab({
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault()
-    const trimmedHealth = health.trim()
-    const target = buildDeploymentTarget({
-      provider,
-      applicationId: appId.trim(),
-      selection,
-      healthCheckUrl: trimmedHealth,
-    })
+    const trimmedHealth = draft.healthCheckUrl
+    const target = buildDeploymentTarget(draft)
     const problems: typeof errors = {}
     if (mode === 'production' && !target) problems.target = targetProblem()
     if (
@@ -244,6 +246,7 @@ export function DeploymentTab({
           data-testid="publishing-mode"
           value={mode}
           disabled={locked}
+          aria-describedby={modeHint ? modeHintId : undefined}
           onChange={(event) =>
             setMode(event.target.value as 'production' | 'demo')
           }
@@ -252,8 +255,19 @@ export function DeploymentTab({
           <option value="production">
             {m.settings_publishing_mode_production()}
           </option>
-          <option value="demo">{m.settings_publishing_mode_demo()}</option>
+          <option value="demo" disabled={demoLocked}>
+            {m.settings_publishing_mode_demo()}
+          </option>
         </select>
+        {modeHint ? (
+          <p
+            id={modeHintId}
+            data-testid="publishing-mode-hint"
+            className="text-callout text-text-secondary"
+          >
+            {modeHint}
+          </p>
+        ) : null}
         {site.publishingMode === 'demo' ? (
           <Tag tone="warning">{m.settings_publishing_mode_demo_warning()}</Tag>
         ) : null}

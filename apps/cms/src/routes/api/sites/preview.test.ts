@@ -26,7 +26,7 @@ vi.mock('#/db', () => ({
     }),
   },
 }))
-vi.mock('#/server/content/snapshot', () => ({
+vi.mock('#/server/content/snapshot-preview', () => ({
   buildPreviewEntry: async (...args: unknown[]) => {
     state.calls.push(['entry', args])
     return state.entry

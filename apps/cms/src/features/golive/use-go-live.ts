@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
+import { useRouteContext } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import { authClient } from '#/lib/auth-client'
 import { publishingRequestIdentity } from './request-identity'
 
-import { queryKeys } from '#/lib/content/query-keys'
-import { errorMessage } from '#/lib/content/utils'
+import { errorMessage } from '#/lib/errors'
+import { queryKeys } from '#/lib/query-keys'
 import { m } from '#/paraglide/messages'
 import {
   cancelJobFn,
@@ -15,8 +15,6 @@ import {
   requestPublicationFn,
   requestRollbackFn,
 } from '#/server/fn/publishing'
-
-const errorsKey = (siteId: string) => ['golive-errors', siteId] as const
 
 /**
  * Invalidate everything Go‑live reads for one site. `refetchType: 'none'`
@@ -41,7 +39,12 @@ export function invalidateGoLiveKeys(
       refetchType,
     }),
     queryClient.invalidateQueries({
-      queryKey: ['golive-pending', siteId],
+      queryKey: queryKeys.goLivePending(siteId),
+      refetchType,
+    }),
+    // The agency "needs attention" lists read failed builds from it.
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.sitesOverview(),
       refetchType,
     }),
   ])
@@ -60,11 +63,11 @@ export function useInvalidateGoLive(siteId: string) {
  */
 export function useGoLive(siteId: string) {
   const queryClient = useQueryClient()
-  const actorId = authClient.useSession().data?.user.id
+  const actorId = useRouteContext({ from: '/_app' }).me.user.id
   const invalidate = useInvalidateGoLive(siteId)
 
   const errorsQuery = useQuery({
-    queryKey: errorsKey(siteId),
+    queryKey: queryKeys.goLiveErrors(siteId),
     queryFn: () => [] as string[],
     initialData: [] as string[],
     staleTime: Infinity,
@@ -91,10 +94,10 @@ export function useGoLive(siteId: string) {
     },
     onSuccess: async (result) => {
       if ('ok' in result && result.ok === false) {
-        queryClient.setQueryData(errorsKey(siteId), result.errors)
+        queryClient.setQueryData(queryKeys.goLiveErrors(siteId), result.errors)
         return
       }
-      queryClient.setQueryData(errorsKey(siteId), [])
+      queryClient.setQueryData(queryKeys.goLiveErrors(siteId), [])
       toast.success(m.golive_toast_started(), {
         description: m.golive_toast_started_description(),
       })
@@ -109,13 +112,14 @@ export function useGoLive(siteId: string) {
       mutation.mutateAsync(options ?? {}),
     isPending: mutation.isPending,
     errors: errorsQuery.data,
-    clearErrors: () => queryClient.setQueryData(errorsKey(siteId), []),
+    clearErrors: () =>
+      queryClient.setQueryData(queryKeys.goLiveErrors(siteId), []),
   }
 }
 
 /** Restore a previously live release ("Restore this version"). */
 export function useRollback(siteId: string) {
-  const actorId = authClient.useSession().data?.user.id
+  const actorId = useRouteContext({ from: '/_app' }).me.user.id
   const invalidate = useInvalidateGoLive(siteId)
   return useMutation({
     mutationFn: async (publicationId: string) => {

@@ -1,6 +1,5 @@
 import { isSafeIdentifier } from '#/lib/content-identifiers'
-import { localeTagSchema } from '#/lib/content-locale'
-import { previewBaseUrl } from '#/lib/preview-url'
+import { localeTagSchema } from '#/lib/locale-tag-schema'
 import {
   GLOBAL_GROUP_MAX_LENGTH,
   GLOBAL_PREVIEW_PATH_MAX_LENGTH,
@@ -20,6 +19,7 @@ import {
   SLUG_MAX_LENGTH,
 } from '#/lib/content-limits'
 import { createServerFn } from '@tanstack/react-start'
+import { entryTitle } from '#/lib/content/utils'
 import { z } from '#/lib/zod'
 
 import { db } from '#/db'
@@ -75,11 +75,7 @@ import {
   upsertGlobal,
 } from '#/server/content/globals'
 import { fieldDataUsageForCollection } from '#/server/content/field-data'
-import {
-  buildGlobalPreviewUrl,
-  buildPreviewUrl,
-  signPreviewToken,
-} from '#/server/content/preview-token'
+import { previewLinkFor } from '#/server/content/preview-token'
 import { inArray } from 'drizzle-orm'
 
 const fieldTypes = [
@@ -247,13 +243,56 @@ export const listInboundReferencesFn = createServerFn({
     return listInboundReferences(data.id, session.user.isAgencyAdmin)
   })
 
+/**
+ * The entry as the editor sees it: the heading and dev origin baselines stay
+ * on the server.
+ */
+function withoutBaselines<
+  T extends { headingBaseline: unknown; originBaseline: unknown },
+>(row: T) {
+  const { headingBaseline: _heading, originBaseline: _origin, ...rest } = row
+  return rest
+}
+
+/**
+ * What the editor reads back after a save. A draft save never changes the
+ * ready or scheduled copy, so those stay out of the reply too; the editor
+ * keeps the copies it loaded.
+ */
+function saveReply<
+  T extends {
+    headingBaseline: unknown
+    originBaseline: unknown
+    publishedData: unknown
+    scheduledData: unknown
+  },
+>(saved: T) {
+  const {
+    publishedData: _published,
+    scheduledData: _scheduled,
+    ...rest
+  } = withoutBaselines(saved)
+  return rest
+}
+
 export const getEntryFn = createServerFn({ method: 'GET', ...entryFn })
   .validator(z.object({ id: z.string().min(1).max(ID_MAX_LENGTH) }))
   .handler(async ({ data }) => {
     const { entry, createdByName, updatedByName } = await requireEntryAccess(
       data.id,
     )
-    return { ...entry, createdByName, updatedByName }
+    return { ...withoutBaselines(entry), createdByName, updatedByName }
+  })
+
+/** What a reference field shows for its chosen entry: the title, not the record. */
+export const getEntryTitleFn = createServerFn({ method: 'GET', ...entryFn })
+  .validator(z.object({ id: z.string().min(1).max(ID_MAX_LENGTH) }))
+  .handler(async ({ data }) => {
+    const { entry, collection } = await requireEntryAccess(data.id)
+    return {
+      id: entry.id,
+      title: entryTitle(entry.draftData, collection.fields, entry.slug),
+    }
   })
 
 export const createEntryFn = createServerFn({ method: 'POST', ...entryFn })
@@ -298,7 +337,7 @@ export const updateDraftFn = createServerFn({ method: 'POST', ...entryFn })
       { explicit: data.explicit === true },
     )
     return {
-      ...saved,
+      ...saveReply(saved),
       sectionChanges: await attachSectionLinkers(
         data.id,
         saved.sectionChanges,
@@ -539,23 +578,11 @@ export const getPreviewUrlFn = createServerFn({ method: 'GET' })
   )
   .handler(async ({ data }) => {
     const { site: found } = await requireSiteAccess(data.siteId)
-    const token = signPreviewToken({
-      siteId: found.id,
-      collection: data.collection,
-      slug: data.slug,
-      secret: found.previewSecret,
-      locale: data.locale,
-    })
-    return {
-      token,
-      url: buildPreviewUrl(
-        previewBaseUrl(found),
-        data.collection,
-        data.slug,
-        token,
-        data.locale,
-      ),
-    }
+    return previewLinkFor(
+      found,
+      { kind: 'collection', key: data.collection, slug: data.slug },
+      data.locale,
+    )
   })
 
 /**
@@ -661,7 +688,7 @@ export const getGlobalFn = createServerFn({ method: 'GET', ...entryFn })
     return {
       global,
       entry: {
-        ...entry,
+        ...withoutBaselines(entry),
         createdByName: entry.createdBy
           ? (names.get(entry.createdBy) ?? null)
           : null,
@@ -686,11 +713,13 @@ export const updateGlobalDraftFn = createServerFn({
   )
   .handler(async ({ data }) => {
     const { session, entry } = await requireGlobalAccess(data.siteId, data.key)
-    return updateDraft(
-      entry.id,
-      data.data,
-      session.user.id,
-      data.expectedVersion,
+    return saveReply(
+      await updateDraft(
+        entry.id,
+        data.data,
+        session.user.id,
+        data.expectedVersion,
+      ),
     )
   })
 
@@ -727,22 +756,11 @@ export const getGlobalPreviewUrlFn = createServerFn({ method: 'GET' })
       data.siteId,
       data.key,
     )
-    if (!global.previewPath) return null
-    const token = signPreviewToken({
-      siteId: found.id,
-      global: data.key,
-      secret: found.previewSecret,
-      locale: data.locale,
-    })
-    return {
-      token,
-      url: buildGlobalPreviewUrl(
-        previewBaseUrl(found),
-        global.previewPath,
-        token,
-        data.locale,
-      ),
-    }
+    return previewLinkFor(
+      found,
+      { kind: 'global', key: data.key, previewPath: global.previewPath },
+      data.locale,
+    )
   })
 
 export const upsertGlobalFn = createServerFn({ method: 'POST' })

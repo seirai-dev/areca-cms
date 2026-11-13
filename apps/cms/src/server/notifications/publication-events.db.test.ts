@@ -1,10 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import type * as TriggersModule from './triggers.ts'
 
 import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createMockDeploymentAdapter } from '#/adapters/deployment/mock'
 import { db } from '#/db'
 import {
   buildJob,
@@ -15,7 +13,7 @@ import {
   site,
 } from '#/db/schema'
 import type { Snapshot } from '#/lib/types'
-import { processJob } from '#/server/publishing/worker'
+import { processJob } from '#/server/publishing/job-run'
 
 import {
   createTestSite,
@@ -28,6 +26,7 @@ import {
   processPublicationEvents,
   queuePublicationEvent,
 } from './publication-events.ts'
+import { createMockDeploymentAdapter } from '#/server/publishing/test-helpers'
 
 // `failNext` makes the next live delivery throw, as a failing SMTP or database
 // would. Everything else runs for real.
@@ -102,16 +101,18 @@ describe('release notices survive a crash or a failed delivery', () => {
         },
       })
       .where(eq(site.id, s.id))
-    const [pub] = await db
-      .insert(publication)
-      .values({
-        siteId: s.id,
-        snapshot: { hash, collections: {} } as unknown as Snapshot,
-        snapshotHash: hash,
-        status: 'pending',
-        requestedBy: requester.id,
-      })
-      .returning()
+    const pub = (
+      await db
+        .insert(publication)
+        .values({
+          siteId: s.id,
+          snapshot: { hash, collections: {} } as unknown as Snapshot,
+          snapshotHash: hash,
+          status: 'pending',
+          requestedBy: requester.id,
+        })
+        .returning()
+    ).at(0)
     if (!pub) throw new Error('fixture failed')
     const [job] = await db
       .insert(buildJob)
@@ -132,10 +133,12 @@ describe('release notices survive a crash or a failed delivery', () => {
     })
 
     // The release is live and its notice is already durable, not yet sent.
-    const [live] = await db
-      .select({ status: publication.status })
-      .from(publication)
-      .where(eq(publication.id, pub.id))
+    const live = (
+      await db
+        .select({ status: publication.status })
+        .from(publication)
+        .where(eq(publication.id, pub.id))
+    ).at(0)
     expect(live?.status).toBe('live')
     expect(await eventFor(pub.id)).toMatchObject({ status: 'pending' })
 
@@ -181,31 +184,35 @@ describe('release notices survive a crash or a failed delivery', () => {
       })
       .where(eq(site.id, s.id))
     // The release being published: `gone` is removed, `new` is added.
-    const [pub] = await db
-      .insert(publication)
-      .values({
-        siteId: s.id,
-        snapshot: {
-          hash: 'after',
-          collections: { blog: [entry('keep', 'Keep'), entry('new', 'New')] },
-        } as unknown as Snapshot,
-        snapshotHash: 'after',
-        status: 'pending',
-        requestedBy: requester.id,
-      })
-      .returning()
+    const pub = (
+      await db
+        .insert(publication)
+        .values({
+          siteId: s.id,
+          snapshot: {
+            hash: 'after',
+            collections: { blog: [entry('keep', 'Keep'), entry('new', 'New')] },
+          } as unknown as Snapshot,
+          snapshotHash: 'after',
+          status: 'pending',
+          requestedBy: requester.id,
+        })
+        .returning()
+    ).at(0)
     if (!pub) throw new Error('fixture failed')
-    const [job] = await db
-      .insert(buildJob)
-      .values({
-        siteId: s.id,
-        publicationId: pub.id,
-        status: 'building',
-        attempts: 1,
-        startedAt: new Date(),
-        leaseExpiresAt: new Date(Date.now() + 10 * 60_000),
-      })
-      .returning()
+    const job = (
+      await db
+        .insert(buildJob)
+        .values({
+          siteId: s.id,
+          publicationId: pub.id,
+          status: 'building',
+          attempts: 1,
+          startedAt: new Date(),
+          leaseExpiresAt: new Date(Date.now() + 10 * 60_000),
+        })
+        .returning()
+    ).at(0)
     if (!job) throw new Error('fixture failed')
 
     // The worker supersedes the old release. The notice still sees it.

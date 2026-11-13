@@ -1,6 +1,6 @@
 import { asc, eq } from 'drizzle-orm'
 
-import type { db } from '#/db'
+import type { DbReader } from '#/db'
 import { collection, site } from '#/db/schema'
 import type { SchemaSnapshot } from '#/lib/types'
 
@@ -10,7 +10,7 @@ import type { SchemaSnapshot } from '#/lib/types'
  * `site.schema_baseline`, the push plan, and "schema matches" checks.
  */
 export async function schemaSnapshot(
-  connection: Pick<typeof db, 'select'>,
+  connection: DbReader,
   siteId: string,
 ): Promise<SchemaSnapshot> {
   const siteRow = (

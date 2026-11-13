@@ -13,7 +13,7 @@ import {
 } from '#/server/richtext/section-diff'
 import type { SectionChange } from '#/server/richtext/section-diff'
 
-import { mapRichTextValues } from './entry-links.ts'
+import { forEachRichTextValue } from './entry-links.ts'
 import { localeCtxFor } from './locale-validation.ts'
 
 /**
@@ -52,20 +52,19 @@ export function titleIn(input: {
  * index keys its rows: the language of the text ('' on a single-language
  * site, the main language for the base slot of a multilingual one).
  */
-export async function sectionSnapshotsOf(
+export function sectionSnapshotsOf(
   data: EntryData,
   fields: Field[],
   languages: SiteLanguages | null,
-): Promise<SectionSnapshots> {
+): SectionSnapshots {
   const ctx = languages ? localeCtxFor(languages, fields) : null
   const base = ctx ? baseLocale(data, ctx) : ''
   const out: SectionSnapshots = {}
-  await mapRichTextValues(data, fields, (json, slot) => {
+  forEachRichTextValue(data, fields, (json, slot) => {
     const locale = slot.locale ?? base
     out[sectionKey(locale, slot.field)] = richTextHeadings(json).map(
       (heading) => ({ id: heading.id, text: heading.text }),
     )
-    return json
   })
   return out
 }
@@ -76,24 +75,16 @@ export async function sectionSnapshotsOf(
  * null for an entry that has none yet: then the previous draft is the
  * baseline.
  */
-export async function sectionChangesOf(input: {
+export function sectionChangesOf(input: {
   previousData: EntryData
   baseline: SectionSnapshots | null
   nextData: EntryData
   fields: Field[]
   languages: SiteLanguages | null
-}): Promise<{ changes: SectionChange[]; next: SectionSnapshots }> {
-  const next = await sectionSnapshotsOf(
-    input.nextData,
-    input.fields,
-    input.languages,
-  )
+}): { changes: SectionChange[]; next: SectionSnapshots } {
+  const next = sectionSnapshotsOf(input.nextData, input.fields, input.languages)
   const before =
     input.baseline ??
-    (await sectionSnapshotsOf(
-      input.previousData,
-      input.fields,
-      input.languages,
-    ))
+    sectionSnapshotsOf(input.previousData, input.fields, input.languages)
   return { changes: diffSectionSnapshots(before, next), next }
 }

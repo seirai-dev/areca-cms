@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 
+import { queryKeys } from '#/lib/query-keys'
 import { useStepUp } from '#/features/security/step-up'
 import {
   createAgencyMcpKeyFn,
@@ -13,9 +14,6 @@ import {
 } from '#/server/fn/mcp-oauth'
 
 import type { McpKeyInput } from './use-mcp-keys'
-
-const KEYS_QUERY_KEY = ['connect-ai', 'agency', 'keys'] as const
-const CONNECTIONS_QUERY_KEY = ['connect-ai', 'agency', 'connections'] as const
 
 /**
  * The caller's personal agency keys and their mutations. Creating a key is a
@@ -30,12 +28,12 @@ export function useAgencyMcpKeys() {
   const stepUp = useStepUp()
 
   const keys = useQuery({
-    queryKey: KEYS_QUERY_KEY,
+    queryKey: queryKeys.agencyMcpKeys(),
     queryFn: () => listKeys(),
   })
 
   const refresh = () =>
-    queryClient.invalidateQueries({ queryKey: KEYS_QUERY_KEY })
+    queryClient.invalidateQueries({ queryKey: queryKeys.agencyMcpKeys() })
 
   const create = useMutation({
     mutationFn: (input: McpKeyInput) =>
@@ -62,14 +60,16 @@ export function useAgencyMcpConnections() {
   const revokeConnection = useServerFn(revokeAgencyMcpConnectionFn)
 
   const connections = useQuery({
-    queryKey: CONNECTIONS_QUERY_KEY,
+    queryKey: queryKeys.agencyMcpConnections(),
     queryFn: () => listConnections(),
   })
 
   const revoke = useMutation({
     mutationFn: (id: string) => revokeConnection({ data: { id } }),
     onSettled: () =>
-      queryClient.invalidateQueries({ queryKey: CONNECTIONS_QUERY_KEY }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.agencyMcpConnections(),
+      }),
   })
 
   return { connections, revoke }

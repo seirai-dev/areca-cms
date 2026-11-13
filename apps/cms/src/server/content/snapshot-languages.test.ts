@@ -8,11 +8,8 @@ import type { EntryData, Field } from '#/lib/types'
 
 import { createEntry, publishEntry, updateDraft } from './entries.ts'
 import { upsertGlobal } from './globals.ts'
-import {
-  buildPreviewEntry,
-  buildPreviewGlobal,
-  buildSnapshot,
-} from './snapshot.ts'
+import { buildSnapshot } from './snapshot.ts'
+import { buildPreviewEntry, buildPreviewGlobal } from './snapshot-preview.ts'
 import {
   createTestCollection,
   createTestGlobal,

@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import '@tanstack/react-start'
+import { createHash } from 'node:crypto'
 import { and, desc, eq } from 'drizzle-orm'
 
 import { db } from '#/db'
@@ -12,6 +13,8 @@ import { authenticateSite } from '#/server/content/site-auth'
 import { isDevSite } from '#/lib/site-environment'
 
 const NO_STORE = { 'Cache-Control': 'no-store' }
+// A stored publication may be kept by the puller and revalidated with its ETag.
+const REVALIDATE = { 'Cache-Control': 'private, no-cache' }
 
 export async function getSitesSnapshotCurrent(request: Request) {
   const site = await authenticateSite(request)
@@ -45,9 +48,13 @@ export async function getSitesSnapshotCurrent(request: Request) {
   }
   // Build pulls select their frozen publication explicitly. Ordinary pulls
   // read only successful releases, even while a new deployment is in flight.
-  const pub = (
+  const found = (
     await db
-      .select()
+      .select({
+        id: publication.id,
+        snapshotHash: publication.snapshotHash,
+        hasAssets: publication.hasAssets,
+      })
       .from(publication)
       .where(
         and(
@@ -64,6 +71,33 @@ export async function getSitesSnapshotCurrent(request: Request) {
       .limit(1)
   ).at(0)
 
+  if (!found) {
+    return Response.json(
+      { error: 'No publication exists' },
+      { status: 404, headers: NO_STORE },
+    )
+  }
+
+  const siteUrl = siteOrigin(site.productionUrl)
+  // A stored snapshot never changes, so its response is fixed by the
+  // publication and the site URL. Older publications without a stored asset
+  // list get one computed from current assets, so they get no ETag.
+  const etag = found.hasAssets
+    ? snapshotEtag(found.id, found.snapshotHash, siteUrl)
+    : null
+  if (etag && etagMatches(request.headers.get('If-None-Match'), etag)) {
+    return new Response(null, {
+      status: 304,
+      headers: { ...REVALIDATE, ETag: etag },
+    })
+  }
+  const pub = (
+    await db
+      .select({ id: publication.id, snapshot: publication.snapshot })
+      .from(publication)
+      .where(and(eq(publication.siteId, site.id), eq(publication.id, found.id)))
+      .limit(1)
+  ).at(0)
   if (!pub) {
     return Response.json(
       { error: 'No publication exists' },
@@ -81,10 +115,33 @@ export async function getSitesSnapshotCurrent(request: Request) {
         ...pub.snapshot.collections,
         ...globalsAsEntryLists(pub.snapshot.globals),
       })),
-    siteUrl: siteOrigin(site.productionUrl),
+    siteUrl,
   }
 
-  return Response.json(snapshot, { headers: NO_STORE })
+  return Response.json(snapshot, {
+    headers: etag ? { ...REVALIDATE, ETag: etag } : NO_STORE,
+  })
+}
+
+/** Strong validator for a stored publication served with this site URL. */
+function snapshotEtag(
+  publicationId: string,
+  snapshotHash: string,
+  siteUrl: string | null,
+): string {
+  const digest = createHash('sha256')
+    .update(`${publicationId}\n${snapshotHash}\n${siteUrl ?? ''}`)
+    .digest('hex')
+  return `"${digest.slice(0, 40)}"`
+}
+
+/** `If-None-Match` per RFC 9110: a list of tags, `*`, weak tags compared weakly. */
+function etagMatches(header: string | null, etag: string): boolean {
+  if (!header) return false
+  if (header.trim() === '*') return true
+  return header
+    .split(',')
+    .some((tag) => tag.trim().replace(/^W\//, '') === etag)
 }
 
 /**

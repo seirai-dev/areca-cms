@@ -11,7 +11,8 @@ import {
   Stack,
 } from '@phosphor-icons/react'
 
-import { queryKeys } from '#/lib/content/query-keys'
+import { queryKeys } from '#/lib/query-keys'
+import { draftsByOthersQuery, recentEntriesQuery } from '#/lib/content/queries'
 import { EntryThumb } from '#/features/collection/entry-cover'
 import { useShell } from '#/components/shell/shell-context'
 import { useSiteCollections } from '#/components/shell/sidebar'
@@ -20,7 +21,7 @@ import { UserAvatar } from '#/components/ui/avatar'
 import { Button } from '#/components/ui/button'
 import { Card } from '#/components/ui/card'
 import { ConnectAiCard } from '#/features/connect-ai/connect-ai-card'
-import { GLOBAL_ROUTE } from '#/features/globals/site-content'
+import { contentRoute } from '#/lib/content-route'
 import { greeting, greetingName } from '#/features/overview/greeting'
 import { EmptyState } from '#/components/ui/empty-state'
 import { InsetList, InsetRow } from '#/components/ui/inset-list'
@@ -44,15 +45,9 @@ import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { usePanel } from '#/features/shell/panel'
 import { formatRelativeTime } from '#/lib/relative-time'
 import { isDevSite } from '#/lib/site-environment'
-import {
-  canManageSite,
-  collectionIcon,
-  displayHost,
-  newEntryLabel,
-} from '#/lib/site-nav'
+import { canManageSite, collectionIcon, displayHost } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
-import { listRecentEntriesFn } from '#/server/fn/content'
 
 /**
  * Site Overview (brief §3.3), phase 1: greeting, the attention strip, create
@@ -201,7 +196,7 @@ export function OverviewScreen({ site }: { site: MeSite }) {
                       </span>
                       <span className="grid min-w-0 gap-0.5">
                         <span className="truncate text-[14px] leading-5 font-semibold text-text-primary sm:text-headline">
-                          {newEntryLabel(collection.label)}
+                          {collection.label}
                         </span>
                         <span className="truncate text-mono text-text-muted max-sm:hidden">
                           {collection.routePattern}
@@ -376,22 +371,12 @@ function AttentionStrip({
                     className="truncate text-callout text-text-secondary"
                   >
                     <Link
-                      {...(entry.global
-                        ? {
-                            to: GLOBAL_ROUTE,
-                            params: {
-                              siteId: site.id,
-                              globalKey: entry.collectionKey,
-                            },
-                          }
-                        : {
-                            to: '/sites/$siteId/c/$collectionKey/$entryId' as const,
-                            params: {
-                              siteId: site.id,
-                              collectionKey: entry.collectionKey,
-                              entryId: entry.id,
-                            },
-                          })}
+                      {...contentRoute({
+                        siteId: site.id,
+                        collectionKey: entry.collectionKey,
+                        entryId: entry.id,
+                        global: entry.global,
+                      })}
                       className="hover:text-text-primary hover:underline"
                     >
                       {entry.title}
@@ -532,11 +517,7 @@ function RecentlyEdited({
   collections: SidebarCollection[]
 }) {
   const release = useReleaseStatus(site.id)
-  const recent = useQuery({
-    queryKey: queryKeys.recentEntries(site.id, 'recent'),
-    queryFn: () => listRecentEntriesFn({ data: { siteId: site.id, limit: 8 } }),
-    staleTime: 15_000,
-  })
+  const recent = useQuery(recentEntriesQuery(site.id))
   const loading = recent.isLoading
   const failed = recent.isError ? recent : undefined
   const byKey = new Map(collections.map((c) => [c.key, c]))
@@ -633,15 +614,7 @@ function useDraftsWaiting(
   collections: SidebarCollection[],
   enabled: boolean,
 ) {
-  const result = useQuery({
-    queryKey: queryKeys.recentEntries(siteId, 'drafts-by-others'),
-    queryFn: () =>
-      listRecentEntriesFn({
-        data: { siteId, draftsByOthers: true, limit: 3 },
-      }),
-    enabled,
-    staleTime: 30_000,
-  })
+  const result = useQuery({ ...draftsByOthersQuery(siteId), enabled })
   if (!enabled || !result.data) return { total: 0, items: [] }
   const keys = new Set(collections.map((c) => c.key))
   return {

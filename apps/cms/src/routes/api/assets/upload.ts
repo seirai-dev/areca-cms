@@ -1,11 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import '@tanstack/react-start'
 
-import { securityErrorCode } from '#/lib/security-errors'
 import { getSession, requireOrgMember } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { AssetValidationError, uploadAsset } from '#/server/assets'
+import { guardErrorResponse } from '#/server/http/guard-response'
 import { parseLimitedFormData, UploadTooLargeError } from '#/server/http/upload'
 
 // Allow multipart framing and the small text fields in addition to the 20 MiB file.
@@ -45,11 +45,8 @@ export const Route = createFileRoute('/api/assets/upload')({
         try {
           await requireOrgMember(organizationId)
         } catch (err) {
-          if (err instanceof Response) return err
-          // An agency admin without two-factor: a 403 carrying the code, the
-          // same shape as the branding upload, not an unhandled 500.
-          const code = securityErrorCode(err)
-          if (code) return new Response(code, { status: 403 })
+          const refused = guardErrorResponse(err)
+          if (refused) return refused
           throw err
         }
 

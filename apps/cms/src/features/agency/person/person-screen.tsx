@@ -26,7 +26,7 @@ import type { PersonDetail } from '#/features/agency/queries'
 import { formatRelativeTime } from '#/lib/relative-time'
 import { m } from '#/paraglide/messages'
 import type { Me } from '#/server/fn/me'
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 
 import { AccessSection } from './access-section'
 import { DangerSection } from './danger-section'
@@ -66,14 +66,7 @@ export function PersonScreen({ me, userId }: { me: Me; userId: string }) {
         />
       )
     }
-    return (
-      <QueryError
-        title={m.agency_person_load_error()}
-        error={detail.error}
-        onRetry={() => void detail.refetch()}
-        retrying={detail.isFetching}
-      />
-    )
+    return <QueryError title={m.agency_person_load_error()} query={detail} />
   }
 
   const person = detail.data

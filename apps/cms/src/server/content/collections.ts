@@ -1,13 +1,19 @@
 import { archiveDeletedContent } from './deletion-archive'
-import { and, eq, notInArray } from 'drizzle-orm'
+import { and, eq, inArray, notInArray } from 'drizzle-orm'
 
 import { db } from '#/db'
-import { collection, site } from '#/db/schema'
+import type { DbReader, Tx } from '#/db'
+import { collection, entry, site } from '#/db/schema'
+import { GLOBAL_ENTRY_SLUG } from '#/lib/globals'
+import { stableEqual } from '#/lib/stable-json'
 import type { Field, SiteManifest } from '#/lib/types'
 import { withRequiredSlugField } from '#/lib/collection-fields'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
-import { applySiteLanguages } from '#/server/admin/site-languages'
+import {
+  applySiteLanguages,
+  normalizeSiteLanguages,
+} from '#/server/admin/site-languages'
 
 import {
   assertKindsUnchanged,
@@ -24,11 +30,12 @@ import { lockSiteLinkIndex } from './entry-link-index.ts'
 import { ensureGlobalEntry } from './globals.ts'
 import { normalizeRequiredLanguages } from './locale-validation.ts'
 import { NotFoundError, ValidationError } from './errors.ts'
+import { getSiteOrThrow } from './site-core.ts'
 
 export async function listCollections(
   siteId: string,
   options: { enabledOnly?: boolean } = {},
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ) {
   const filters = [
     eq(collection.siteId, siteId),
@@ -51,7 +58,7 @@ export async function listCollections(
 export async function getCollection(
   siteId: string,
   key: string,
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ) {
   const row = (
     await connection
@@ -99,160 +106,122 @@ export async function syncManifest(
   for (const [key, def] of Object.entries(globals)) {
     assertPreviewPath(def.previewPath, key)
   }
-  const existingSite = (
-    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
-  ).at(0)
-  if (!existingSite) {
-    throw new NotFoundError(m.server_site_not_found())
-  }
+  const existingSite = await getSiteOrThrow(siteId)
 
   const now = new Date()
 
-  await db.transaction(async (tx) => {
-    await lockSiteLinkIndex(tx, siteId)
-    // NO KEY UPDATE, not FOR UPDATE: entries' foreign keys to the site need KEY
-    // SHARE, which FOR UPDATE blocks, so a save that holds an entry row would
-    // wait on this push while this push waits on that row (see
-    // `lockSiteLinkIndex`). NO KEY UPDATE still conflicts with FOR UPDATE, so
-    // publishing (publishing/worker.ts) and the scheduler (scheduler.ts) still
-    // wait for a manifest push, as before.
-    await tx
-      .select({ id: site.id })
-      .from(site)
-      .where(eq(site.id, siteId))
-      .for('no key update')
-    // Omitted languages leave the site's setting alone.
-    if (manifest.languages) {
-      await applySiteLanguages(tx, siteId, manifest.languages)
-    }
-    const existing = await tx
-      .select()
-      .from(collection)
-      .where(eq(collection.siteId, siteId))
-    assertKindsUnchanged(existing, declaredDefs)
-    validateContentDefinitions([
-      ...existing
-        .filter((row) => !declaredKeys.has(row.key))
-        .map((row) => ({ ...row, enabled: false })),
-      ...declaredDefs,
-    ])
-    // Refuses a removal that would delete content before anything is written.
-    const purge = await planManifestFieldDrops(tx, {
-      existing,
-      declared: declaredDefs.map((def) => ({
-        key: def.key,
-        kind: def.kind,
-        fields:
-          def.kind === 'collection'
-            ? withRequiredSlugField(def.fields)
-            : def.fields,
-      })),
-      confirmDropFields: options.confirmDropFields,
-    })
-    for (const [collectionId, fieldKeys] of purge) {
-      await purgeFieldContent(tx, collectionId, fieldKeys)
-    }
-    for (const [key, def] of Object.entries(manifest.collections)) {
+  // Most pushes change nothing: skip the site lock and the rewrites.
+  const unchanged = await manifestAlreadyApplied(siteId, manifest, declaredDefs)
+  if (!unchanged) {
+    await db.transaction(async (tx) => {
+      await lockSiteLinkIndex(tx, siteId)
+      // NO KEY UPDATE, not FOR UPDATE: entries' foreign keys to the site need KEY
+      // SHARE, which FOR UPDATE blocks, so a save that holds an entry row would
+      // wait on this push while this push waits on that row (see
+      // `lockSiteLinkIndex`). NO KEY UPDATE still conflicts with FOR UPDATE, so
+      // publishing (publishing/worker.ts) and the scheduler (scheduler.ts) still
+      // wait for a manifest push, as before.
       await tx
-        .insert(collection)
-        .values({
-          siteId,
-          key,
-          label: def.label ?? key,
-          routePattern: def.route,
-          fields: withRequiredSlugField(def.fields),
-          enabled: true,
-          requiredLanguages: normalizeRequiredLanguages(
-            def.requiredLanguages ?? [],
-          ),
-          localizedRoutes: def.routes ?? null,
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: [collection.siteId, collection.key],
-          set: {
-            label: def.label ?? key,
-            routePattern: def.route,
-            fields: withRequiredSlugField(def.fields),
-            enabled: true,
-            requiredLanguages: normalizeRequiredLanguages(
-              def.requiredLanguages ?? [],
-            ),
-            localizedRoutes: def.routes ?? null,
-            updatedAt: now,
-          },
-        })
-    }
-    for (const [key, def] of Object.entries(globals)) {
-      const row = (
+        .select({ id: site.id })
+        .from(site)
+        .where(eq(site.id, siteId))
+        .for('no key update')
+      // Omitted languages leave the site's setting alone.
+      if (manifest.languages) {
+        await applySiteLanguages(tx, siteId, manifest.languages)
+      }
+      const existing = await tx
+        .select()
+        .from(collection)
+        .where(eq(collection.siteId, siteId))
+      assertKindsUnchanged(existing, declaredDefs)
+      validateContentDefinitions([
+        ...existing
+          .filter((row) => !declaredKeys.has(row.key))
+          .map((row) => ({ ...row, enabled: false })),
+        ...declaredDefs,
+      ])
+      // Refuses a removal that would delete content before anything is written.
+      const purge = await planManifestFieldDrops(tx, {
+        existing,
+        declared: declaredDefs.map((def) => ({
+          key: def.key,
+          kind: def.kind,
+          fields:
+            def.kind === 'collection'
+              ? withRequiredSlugField(def.fields)
+              : def.fields,
+        })),
+        confirmDropFields: options.confirmDropFields,
+      })
+      for (const [collectionId, fieldKeys] of purge) {
+        await purgeFieldContent(tx, collectionId, fieldKeys)
+      }
+      for (const [key, def] of Object.entries(manifest.collections)) {
+        const columns = manifestCollectionColumns(key, def)
         await tx
           .insert(collection)
-          .values({
-            siteId,
-            key,
-            label: def.label ?? key,
-            routePattern: '',
-            kind: 'global',
-            fields: def.fields,
-            enabled: true,
-            seoEnabled: def.seo ?? false,
-            previewPath: def.previewPath ?? null,
-            requiredLanguages: normalizeRequiredLanguages(
-              def.requiredLanguages ?? [],
-            ),
-            updatedAt: now,
-          })
+          .values({ siteId, key, ...columns, updatedAt: now })
           .onConflictDoUpdate({
             target: [collection.siteId, collection.key],
-            set: {
-              label: def.label ?? key,
-              fields: def.fields,
-              enabled: true,
-              seoEnabled: def.seo ?? false,
-              previewPath: def.previewPath ?? null,
-              requiredLanguages: normalizeRequiredLanguages(
-                def.requiredLanguages ?? [],
-              ),
-              updatedAt: now,
-            },
+            set: { ...columns, updatedAt: now },
           })
-          .returning({ id: collection.id })
-      ).at(0)
-      if (!row) {
-        throw new Error(m.server_failed_to_upsert_collection())
       }
-      await ensureGlobalEntry(tx, siteId, row.id)
-    }
+      for (const [key, def] of Object.entries(globals)) {
+        const columns = manifestGlobalColumns(key, def)
+        const row = (
+          await tx
+            .insert(collection)
+            .values({
+              siteId,
+              key,
+              routePattern: '',
+              kind: 'global',
+              ...columns,
+              updatedAt: now,
+            })
+            .onConflictDoUpdate({
+              target: [collection.siteId, collection.key],
+              set: { ...columns, updatedAt: now },
+            })
+            .returning({ id: collection.id })
+        ).at(0)
+        if (!row) {
+          throw new Error(m.server_failed_to_upsert_collection())
+        }
+        await ensureGlobalEntry(tx, siteId, row.id)
+      }
 
-    // A push disables what it does not declare. Content is kept.
-    await tx
-      .update(collection)
-      .set({ enabled: false, updatedAt: now })
-      .where(
-        and(
-          eq(collection.siteId, siteId),
-          eq(collection.kind, 'collection'),
-          ...(keys.length > 0 ? [notInArray(collection.key, keys)] : []),
-        ),
-      )
-    await tx
-      .update(collection)
-      .set({ enabled: false, updatedAt: now })
-      .where(
-        and(
-          eq(collection.siteId, siteId),
-          eq(collection.kind, 'global'),
-          ...(globalKeys.length > 0
-            ? [notInArray(collection.key, globalKeys)]
-            : []),
-        ),
-      )
+      // A push disables what it does not declare. Content is kept.
+      await tx
+        .update(collection)
+        .set({ enabled: false, updatedAt: now })
+        .where(
+          and(
+            eq(collection.siteId, siteId),
+            eq(collection.kind, 'collection'),
+            ...(keys.length > 0 ? [notInArray(collection.key, keys)] : []),
+          ),
+        )
+      await tx
+        .update(collection)
+        .set({ enabled: false, updatedAt: now })
+        .where(
+          and(
+            eq(collection.siteId, siteId),
+            eq(collection.kind, 'global'),
+            ...(globalKeys.length > 0
+              ? [notInArray(collection.key, globalKeys)]
+              : []),
+          ),
+        )
 
-    await tx
-      .update(site)
-      .set({ lastManifest: manifest, updatedAt: now })
-      .where(eq(site.id, siteId))
-  })
+      await tx
+        .update(site)
+        .set({ lastManifest: manifest, updatedAt: now })
+        .where(eq(site.id, siteId))
+    })
+  }
 
   await audit({
     organizationId: existingSite.organizationId,
@@ -263,7 +232,105 @@ export async function syncManifest(
   })
 }
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+type ManifestCollection = SiteManifest['collections'][string]
+type ManifestGlobal = NonNullable<SiteManifest['globals']>[string]
+
+/** What a push stores for a declared collection, besides its site and key. */
+function manifestCollectionColumns(key: string, def: ManifestCollection) {
+  return {
+    label: def.label ?? key,
+    routePattern: def.route,
+    fields: withRequiredSlugField(def.fields),
+    enabled: true,
+    requiredLanguages: normalizeRequiredLanguages(def.requiredLanguages ?? []),
+    localizedRoutes: def.routes ?? null,
+  }
+}
+
+/** What a push stores for a declared section, on insert and update alike. */
+function manifestGlobalColumns(key: string, def: ManifestGlobal) {
+  return {
+    label: def.label ?? key,
+    fields: def.fields,
+    enabled: true,
+    seoEnabled: def.seo ?? false,
+    previewPath: def.previewPath ?? null,
+    requiredLanguages: normalizeRequiredLanguages(def.requiredLanguages ?? []),
+  }
+}
+
+/**
+ * True when a push would write nothing new: the stored manifest, languages,
+ * declared rows and their section entries already match, and every undeclared
+ * row is disabled. Runs the kind check a push runs, so it refuses alike.
+ */
+async function manifestAlreadyApplied(
+  siteId: string,
+  manifest: SiteManifest,
+  declaredDefs: { key: string; kind: 'collection' | 'global' }[],
+): Promise<boolean> {
+  const stored = (
+    await db
+      .select({ lastManifest: site.lastManifest, languages: site.languages })
+      .from(site)
+      .where(eq(site.id, siteId))
+      .limit(1)
+  ).at(0)
+  if (!stored || !stableEqual(stored.lastManifest, manifest)) return false
+  if (
+    manifest.languages &&
+    !stableEqual(stored.languages, normalizeSiteLanguages(manifest.languages))
+  ) {
+    return false
+  }
+  const existing = await db
+    .select()
+    .from(collection)
+    .where(eq(collection.siteId, siteId))
+  assertKindsUnchanged(existing, declaredDefs)
+  const globals = manifest.globals ?? {}
+  const expected = new Map<string, Record<string, unknown>>([
+    ...Object.entries(manifest.collections).map(
+      ([key, def]) =>
+        [`collection:${key}`, manifestCollectionColumns(key, def)] as const,
+    ),
+    ...Object.entries(globals).map(
+      ([key, def]) =>
+        [`global:${key}`, manifestGlobalColumns(key, def)] as const,
+    ),
+  ])
+  let declaredFound = 0
+  for (const row of existing) {
+    const columns = expected.get(`${row.kind}:${row.key}`)
+    if (!columns) {
+      if (row.enabled) return false
+      continue
+    }
+    declaredFound += 1
+    const current: Record<string, unknown> = row
+    for (const [column, value] of Object.entries(columns)) {
+      if (!stableEqual(current[column], value)) return false
+    }
+  }
+  if (declaredFound !== expected.size) return false
+  const globalIds = existing
+    .filter((row) => row.kind === 'global' && row.key in globals)
+    .map((row) => row.id)
+  if (globalIds.length === 0) return true
+  const sectionEntries = await db
+    .select({ collectionId: entry.collectionId })
+    .from(entry)
+    .where(
+      and(
+        inArray(entry.collectionId, globalIds),
+        eq(entry.slug, GLOBAL_ENTRY_SLUG),
+      ),
+    )
+  return (
+    new Set(sectionEntries.map((row) => row.collectionId)).size ===
+    globalIds.length
+  )
+}
 
 export type CollectionUpsertInput = {
   key: string
@@ -387,12 +454,7 @@ export async function upsertCollection(
   actorId?: string,
 ) {
   const prepared = prepareCollectionUpsert(input)
-  const existingSite = (
-    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
-  ).at(0)
-  if (!existingSite) {
-    throw new NotFoundError(m.server_site_not_found())
-  }
+  const existingSite = await getSiteOrThrow(siteId)
 
   const now = new Date()
 
@@ -496,14 +558,5 @@ export async function writeCollectionDelete(
       meta: { key: existing.key },
     },
     tx,
-  )
-}
-
-/** Collection-only validation (every definition is a collection). */
-export function validateCollectionDefinitions(
-  defs: { key: string; fields: Field[]; enabled?: boolean }[],
-) {
-  validateContentDefinitions(
-    defs.map((def) => ({ ...def, kind: 'collection' as const })),
   )
 }

@@ -3,26 +3,20 @@ import { and, eq, inArray, lte, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { buildJob, entry, schedulerBackoff, site } from '#/db/schema'
+import { ACTIVE_JOB_STATUSES } from '#/lib/job-status'
 import { audit } from '#/server/audit'
 import { createLogger } from '#/server/log'
 import { queueScheduleFailedEvent } from '#/server/notifications/publication-events'
 
 import { requestPublication } from './publications.ts'
+import {
+  SCHEDULER_MAX_FAILURES,
+  backoffBlocks,
+  recordSchedulerFailure,
+  startSchedulerCycle,
+} from './scheduler-backoff.ts'
 
 const log = createLogger('scheduler')
-export const SCHEDULER_RETRY_DELAYS_MS = [60_000, 5 * 60_000, 15 * 60_000]
-/** Failed attempts after which a schedule stops retrying (paused until an operator acts). */
-export const SCHEDULER_MAX_FAILURES = 4
-const BLOCKING_JOB_STATUSES = [
-  'queued',
-  'building',
-  'validating',
-  'deploying',
-] as const
-type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
-
-/** Kept for tests; retry state is durable, never process-local. */
-export function resetSchedulerAttempts() {}
 
 export function scheduleFingerprint(
   rows: Array<{ id: string; scheduledVersion: string | null }>,
@@ -38,74 +32,6 @@ export function scheduleFingerprint(
     .digest('hex')
 }
 
-export function nextSchedulerAttempt(failureCount: number, at: Date) {
-  const delay = SCHEDULER_RETRY_DELAYS_MS[failureCount - 1] as
-    number | undefined
-  return delay === undefined ? null : new Date(at.getTime() + delay)
-}
-
-export async function recordSchedulerFailure(
-  tx: Transaction,
-  job: Pick<typeof buildJob.$inferSelect, 'siteId' | 'schedulerFingerprint'>,
-  error: string,
-  at: Date,
-) {
-  if (!job.schedulerFingerprint) return
-  const current = (
-    await tx
-      .select()
-      .from(schedulerBackoff)
-      .where(eq(schedulerBackoff.siteId, job.siteId))
-      .for('update')
-  ).at(0)
-  // A replaced approval or manual retry starts a new cycle; an older job
-  // must not consume its retry budget.
-  if (current && current.approvalFingerprint !== job.schedulerFingerprint)
-    return
-  const failureCount = (current?.failureCount ?? 0) + 1
-  if (failureCount === SCHEDULER_MAX_FAILURES) {
-    // Stops retrying until an operator retries it from Paused jobs.
-    log.error('scheduled publication paused after four failed attempts', {
-      siteId: job.siteId,
-      reason: error,
-    })
-  }
-  await tx
-    .insert(schedulerBackoff)
-    .values({
-      siteId: job.siteId,
-      approvalFingerprint: job.schedulerFingerprint,
-      failureCount,
-      lastAttemptAt: at,
-      lastError: error,
-      nextAttemptAt: nextSchedulerAttempt(failureCount, at),
-    })
-    .onConflictDoUpdate({
-      target: schedulerBackoff.siteId,
-      set: {
-        failureCount,
-        lastAttemptAt: at,
-        lastError: error,
-        nextAttemptAt: nextSchedulerAttempt(failureCount, at),
-      },
-    })
-}
-
-export async function clearSchedulerFailure(
-  tx: Transaction,
-  job: Pick<typeof buildJob.$inferSelect, 'siteId' | 'schedulerFingerprint'>,
-) {
-  if (!job.schedulerFingerprint) return
-  await tx
-    .delete(schedulerBackoff)
-    .where(
-      and(
-        eq(schedulerBackoff.siteId, job.siteId),
-        eq(schedulerBackoff.approvalFingerprint, job.schedulerFingerprint),
-      ),
-    )
-}
-
 /** Sites handled per tick. Each site's work is independent, so the rest wait one tick. */
 export const SCHEDULER_SITE_LIMIT = 50
 
@@ -118,12 +44,17 @@ export async function runSchedulerTick({
   maxSites = SCHEDULER_SITE_LIMIT,
 }: { maxSites?: number } = {}) {
   const now = new Date()
+  // Sites that are paused or cooling down go last, so their old due entries
+  // cannot fill every slot. Whether they really wait is decided below, by
+  // the fingerprint of their due entries.
+  const waiting = sql`coalesce(bool_or(${schedulerBackoff.failureCount} >= ${SCHEDULER_MAX_FAILURES} OR ${schedulerBackoff.nextAttemptAt} > ${now}), false)`
   const dueSites = await db
     .select({ siteId: entry.siteId })
     .from(entry)
+    .leftJoin(schedulerBackoff, eq(schedulerBackoff.siteId, entry.siteId))
     .where(and(eq(entry.status, 'scheduled'), lte(entry.scheduledAt, now)))
     .groupBy(entry.siteId)
-    .orderBy(sql`min(${entry.scheduledAt})`)
+    .orderBy(waiting, sql`min(${entry.scheduledAt})`)
     .limit(maxSites)
   const siteIds = dueSites.map((row) => row.siteId)
   if (siteIds.length === 0) return
@@ -166,7 +97,7 @@ export async function runSchedulerTick({
         .where(
           and(
             inArray(buildJob.siteId, siteIds),
-            inArray(buildJob.status, [...BLOCKING_JOB_STATUSES]),
+            inArray(buildJob.status, ACTIVE_JOB_STATUSES),
           ),
         )
     ).map((row) => row.siteId),
@@ -176,13 +107,7 @@ export async function runSchedulerTick({
     const owners = ownersBySite.get(siteId) ?? []
     if (!owners.length) continue
     const fingerprint = scheduleFingerprint(owners)
-    const backoff = backoffs.get(siteId)
-    if (
-      backoff?.approvalFingerprint === fingerprint &&
-      (backoff.failureCount >= SCHEDULER_MAX_FAILURES ||
-        (backoff.nextAttemptAt && backoff.nextAttemptAt > now))
-    )
-      continue
+    if (backoffBlocks(backoffs.get(siteId), fingerprint, now)) continue
     if (busySites.has(siteId)) continue
     const scheduledBy = [
       ...new Set(
@@ -257,32 +182,9 @@ async function recordRequestFailure(
         .from(schedulerBackoff)
         .where(eq(schedulerBackoff.siteId, siteId))
     ).at(0)
-    if (current?.approvalFingerprint !== fingerprint) {
-      await tx
-        .insert(schedulerBackoff)
-        .values({
-          siteId,
-          lastAttemptAt: at,
-          approvalFingerprint: fingerprint,
-          failureCount: 0,
-        })
-        .onConflictDoUpdate({
-          target: schedulerBackoff.siteId,
-          set: {
-            approvalFingerprint: fingerprint,
-            failureCount: 0,
-            nextAttemptAt: null,
-            lastAttemptAt: at,
-            lastError: null,
-            // A new approval is a new cycle, so an old dismissal does not carry over.
-            dismissedAt: null,
-          },
-        })
-    } else if (
-      current.failureCount >= SCHEDULER_MAX_FAILURES ||
-      (current.nextAttemptAt && current.nextAttemptAt > at)
-    )
-      return
+    if (current?.approvalFingerprint !== fingerprint)
+      await startSchedulerCycle(tx, siteId, fingerprint, at)
+    else if (backoffBlocks(current, fingerprint, at)) return
     await recordSchedulerFailure(
       tx,
       { siteId, schedulerFingerprint: fingerprint },

@@ -1,4 +1,5 @@
 import { Outlet, createFileRoute, redirect } from '@tanstack/react-router'
+import { LazyMotion } from 'motion/react'
 
 import { AppShell } from '#/components/shell/app-shell'
 import { NotFoundCard } from '#/components/shell/not-found'
@@ -28,8 +29,9 @@ export const Route = createFileRoute('/_app')({
         search: { redirect: location.href },
       })
     }
-    // Agency admins must enrol in two-factor before anything else; the
-    // account page is where they do it.
+    // Agency admins must enrol in two-factor before anything else, and anyone
+    // with two-factor on enters a code once per session; the account page is
+    // where they do it.
     if (
       (me.mfaEnrolmentRequired || me.mfaVerificationRequired) &&
       !isAccountPath(location.pathname)
@@ -42,14 +44,19 @@ export const Route = createFileRoute('/_app')({
   component: AppLayout,
 })
 
+const loadMotionFeatures = () =>
+  import('#/lib/motion-features').then((mod) => mod.default)
+
 /** Signed-in frame: the shell (sidebar, mobile bars, panels, palette). */
 function AppLayout() {
   const { me } = Route.useRouteContext()
   return (
-    <StepUpProvider>
-      <AppShell me={me}>
-        <Outlet />
-      </AppShell>
-    </StepUpProvider>
+    <LazyMotion features={loadMotionFeatures}>
+      <StepUpProvider>
+        <AppShell me={me}>
+          <Outlet />
+        </AppShell>
+      </StepUpProvider>
+    </LazyMotion>
   )
 }

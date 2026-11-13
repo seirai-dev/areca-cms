@@ -1,9 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { z } from '#/lib/zod'
+import { localeTagParam, optionalParam, z } from '#/lib/search-params'
 
-import { localeTagSchema } from '#/lib/content-locale'
-
-import { GlobalEditorScreen } from '#/features/globals/global-editor-screen'
+import {
+  GlobalEditorScreen,
+  globalQuery,
+} from '#/features/globals/global-editor-screen'
+import { aiAvailabilityQuery } from '#/lib/content/queries'
+import { prefetchInBrowser } from '#/lib/route-prefetch'
 
 /**
  * Site content section (global): the single-form editor. Any site member can
@@ -13,10 +16,18 @@ import { GlobalEditorScreen } from '#/features/globals/global-editor-screen'
 export const Route = createFileRoute('/_app/sites/$siteId/globals/$globalKey')({
   /** Content language shown in the editor, e.g. `?lang=en`. Optional. */
   validateSearch: z.object({
-    lang: localeTagSchema.optional().catch(undefined),
+    lang: optionalParam(localeTagParam),
     /** Visual mode (docs/design/visual-editor.md). Below 1280 px it is ignored. */
-    view: z.enum(['visual']).optional().catch(undefined),
+    view: optionalParam(z.enum(['visual'])),
   }),
+  // Started early (see lib/route-prefetch.ts).
+  loader: ({ context, params, preload }) => {
+    const { queryClient, site } = context
+    prefetchInBrowser(
+      () => queryClient.prefetchQuery(globalQuery(site.id, params.globalKey)),
+      () => !preload && queryClient.prefetchQuery(aiAvailabilityQuery()),
+    )
+  },
   component: GlobalRoute,
 })
 

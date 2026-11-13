@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { eq, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import { collection, entry, organization, site, user } from '#/db/schema'
 import type { Field, SiteLanguages } from '#/lib/types'
 import { assetAttachLock } from '#/server/assets/usage'
@@ -240,9 +241,7 @@ export function dueScheduleIso() {
  */
 export async function holdEntryLock(
   organizationId: string,
-  write?: (
-    tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
-  ) => Promise<void>,
+  write?: (tx: Tx) => Promise<void>,
 ) {
   let release!: () => void
   const released = new Promise<void>((resolve) => {

@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useQueries, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { LayoutGroup } from 'motion/react'
 import {
@@ -12,13 +12,14 @@ import {
   WarningCircle,
 } from '@phosphor-icons/react'
 
-import { queryKeys } from '#/lib/content/query-keys'
+import { queryKeys } from '#/lib/query-keys'
 import { AccountMenu } from '#/components/shell/account-menu'
 import { NavCount, NavGroupLabel, NavItem } from '#/components/shell/nav-item'
 import { useShell } from '#/components/shell/shell-context'
 import {
   AllSitesNav,
   WorkspaceSwitcher,
+  sitesOverviewQueryOptions,
 } from '#/components/shell/workspace-switcher'
 import { Tag } from '#/components/ui/tag'
 import { Button } from '#/components/ui/button'
@@ -33,13 +34,11 @@ import { KbdCombo, useModifierKey } from '#/components/ui/kbd'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Hint } from '#/components/ui/tooltip'
 import { SiteContentGroup } from '#/features/globals/site-content-nav'
-import { latestJobsQuery } from '#/features/golive/queries'
 import { GoLiveTray } from '#/features/golive/golive-tray'
 import {
   agencyNavItems,
   canManageSite,
   collectionIcon,
-  newEntryLabel,
   siteNavItems,
 } from '#/lib/site-nav'
 import { isDevSite } from '#/lib/site-environment'
@@ -47,7 +46,8 @@ import type { MeSite } from '#/lib/site-nav'
 import type { Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
-import { listCollectionsFn, listEntryCountsFn } from '#/server/fn/content'
+import { listEntryCountsFn } from '#/server/fn/content'
+import { collectionsQuery } from '#/lib/content/queries'
 
 export type SidebarCollection = {
   id: string
@@ -64,11 +64,8 @@ export function useSiteCollections(
   isAdmin: boolean,
 ) {
   const query = useQuery({
-    queryKey: queryKeys.collections(siteId ?? ''),
-    queryFn: () => listCollectionsFn({ data: { siteId: siteId! } }),
+    ...collectionsQuery(siteId ?? ''),
     enabled: Boolean(siteId),
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
   })
   const all = (query.data ?? []) as SidebarCollection[]
   const visible = isAdmin ? all : all.filter((item) => item.enabled)
@@ -223,7 +220,7 @@ function ContentGroup({
                             data-testid={`new-${collection.key}`}
                           >
                             <Icon />
-                            {newEntryLabel(collection.label)}
+                            {collection.label}
                           </Link>
                         </DropdownMenuItem>
                       )
@@ -438,18 +435,15 @@ function AgencyNav({
   )
 }
 
-/** Sites whose newest build failed (cached per site, capped at 30 sites). */
+/** Sites whose newest build failed, from the (cached) sites overview. */
 export function useFailedSites(sites: MeSite[], enabled: boolean) {
-  const capped = sites.slice(0, 30)
-  const results = useQueries({
-    queries: capped.map((site) => ({ ...latestJobsQuery(site.id), enabled })),
-  })
-  return capped.filter((_, index) => {
-    const latest = results[index]?.data?.find(
-      (job) => job.status !== 'cancelled',
-    )
-    return latest?.status === 'failed'
-  })
+  const overview = useQuery({ ...sitesOverviewQueryOptions(), enabled })
+  const failed = new Set(
+    (overview.data?.sites ?? [])
+      .filter((site) => site.lastBuildFailed)
+      .map((site) => site.id),
+  )
+  return sites.filter((site) => failed.has(site.id))
 }
 
 /**

@@ -6,6 +6,8 @@ import type { Snapshot } from '#/lib/types'
  */
 
 export type ReleaseState = {
+  /** A go live has happened: the site has a live publication. */
+  live: boolean
   liveSnapshot?: Snapshot | null
   liveIds: ReadonlySet<string>
   pendingIds: ReadonlySet<string>
@@ -24,13 +26,14 @@ export type ReleaseFlags = {
  * `live: false, pendingRelease: false` and keeps its `ready` status.
  */
 export const NO_RELEASE_STATE: ReleaseState = {
+  live: false,
   liveSnapshot: null,
   liveIds: new Set(),
   pendingIds: new Set(),
 }
 
 export function releaseFlags(
-  state: ReleaseState,
+  state: Pick<ReleaseState, 'liveIds' | 'pendingIds'>,
   entryId: string,
 ): ReleaseFlags {
   return {

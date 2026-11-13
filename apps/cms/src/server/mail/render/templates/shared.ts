@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import { eq } from 'drizzle-orm'
 
 import { db } from '#/db'
@@ -6,7 +5,8 @@ import { user } from '#/db/schema'
 import { m } from '#/paraglide/messages'
 
 import { MailRenderError } from '../types.ts'
-import type { Executor, MailLocale } from '../types.ts'
+import type { DbExecutor } from '#/db'
+import type { MailLocale } from '../types.ts'
 
 export type Recipient = {
   id: string
@@ -18,18 +18,20 @@ export type Recipient = {
 /** Reads the account an email is about. Fails when it no longer exists. */
 export async function loadRecipient(
   userId: unknown,
-  connection?: Executor,
+  connection?: DbExecutor,
 ): Promise<Recipient> {
-  const [row] = await (connection ?? db)
-    .select({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      emailVerified: user.emailVerified,
-    })
-    .from(user)
-    .where(eq(user.id, String(userId ?? '')))
-    .limit(1)
+  const row = (
+    await (connection ?? db)
+      .select({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        emailVerified: user.emailVerified,
+      })
+      .from(user)
+      .where(eq(user.id, String(userId ?? '')))
+      .limit(1)
+  ).at(0)
   if (!row) throw new MailRenderError('the account no longer exists')
   return row
 }

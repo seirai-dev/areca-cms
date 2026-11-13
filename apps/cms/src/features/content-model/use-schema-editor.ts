@@ -4,10 +4,9 @@ import { useServerFn } from '@tanstack/react-start'
 import { toast } from 'sonner'
 
 import { invalidateDevSync } from '#/features/dev-env/invalidate'
-import { globalsQueryKey } from '#/features/globals/use-globals'
 import { useSiteLanguages } from '#/features/site-settings/use-site-settings'
-import { errorMessage } from '#/lib/admin/helpers'
-import { queryKeys } from '#/lib/content/query-keys'
+import { errorMessage } from '#/lib/errors'
+import { queryKeys } from '#/lib/query-keys'
 import { ROUTE_PATTERN_MAX_LENGTH } from '#/lib/content-limits'
 import { isValidPreviewPath } from '#/lib/globals'
 import { isMultilingual } from '#/lib/site-languages'
@@ -136,7 +135,7 @@ export function useSchemaEditor({
   const savedKey = collection?.key
   // Entries holding content per field key. Saved fields with content are locked.
   const usageQuery = useQuery({
-    queryKey: ['field-data-usage', siteId, savedKey] as const,
+    queryKey: queryKeys.fieldDataUsage(siteId, savedKey ?? ''),
     queryFn: () => fieldUsage({ data: { siteId, key: savedKey ?? '' } }),
     enabled: open && Boolean(savedKey),
     staleTime: 0,
@@ -231,7 +230,7 @@ export function useSchemaEditor({
     return Promise.all([
       queryClient.invalidateQueries({
         queryKey: isGlobal
-          ? globalsQueryKey(siteId)
+          ? queryKeys.globals(siteId)
           : queryKeys.collections(siteId),
       }),
       // A collection's entries, and whether the sidebar lists it, change with its schema.
@@ -294,7 +293,7 @@ export function useSchemaEditor({
       setPendingDrop(null)
       await invalidateSchemas()
       await queryClient.invalidateQueries({
-        queryKey: ['field-data-usage', siteId],
+        queryKey: queryKeys.fieldDataUsage(siteId),
       })
       setBaseline(current)
       if (creating) {
@@ -319,7 +318,7 @@ export function useSchemaEditor({
       onOpenChange(false)
       onDeleted?.()
     },
-    onError: (error) => toast.error(errorMessage(error)),
+    // Only the confirm dialog deletes; it shows the error.
   })
 
   function save() {

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -63,16 +62,18 @@ describe('unsubscribe links', () => {
     })
     expect(await applyUnsubscribe(token)).toEqual({ ok: true, changed: false })
 
-    const [choice] = await db
-      .select()
-      .from(notificationPreference)
-      .where(
-        and(
-          eq(notificationPreference.userId, owner.id),
-          eq(notificationPreference.organizationId, org.id),
-          eq(notificationPreference.event, 'release.live'),
-        ),
-      )
+    const choice = (
+      await db
+        .select()
+        .from(notificationPreference)
+        .where(
+          and(
+            eq(notificationPreference.userId, owner.id),
+            eq(notificationPreference.organizationId, org.id),
+            eq(notificationPreference.event, 'release.live'),
+          ),
+        )
+    ).at(0)
     expect(choice?.enabled).toBe(false)
 
     const audited = await db

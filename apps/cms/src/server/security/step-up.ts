@@ -1,10 +1,10 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
-import { and, eq, gt } from 'drizzle-orm'
+import { and, eq, gt, like } from 'drizzle-orm'
 
 import { withFactorLock } from './factor-lock'
 import { env } from '#/env'
 import { localMfaVerifiedAt } from './local-mfa'
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import { verification } from '#/db/schema'
 import { ReauthRequiredError } from '#/lib/security-errors'
 import { STEP_UP_WINDOW_MS, isFresh } from '#/lib/step-up'
@@ -41,16 +41,18 @@ export async function assertFreshSession(
     : session.session.createdAt
   if (isFresh([factorAt], now)) return
 
-  const [marker] = await db
-    .select({ createdAt: verification.createdAt })
-    .from(verification)
-    .where(
-      and(
-        eq(verification.identifier, markerId(session.session.id)),
-        gt(verification.expiresAt, now),
-      ),
-    )
-    .limit(1)
+  const marker = (
+    await db
+      .select({ createdAt: verification.createdAt })
+      .from(verification)
+      .where(
+        and(
+          eq(verification.identifier, markerId(session.session.id)),
+          gt(verification.expiresAt, now),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   if (isFresh([marker?.createdAt], now)) return
 
   throw new ReauthRequiredError()
@@ -78,16 +80,18 @@ export async function recordStepUp(
 }
 
 async function failureCount(userId: string, now: Date) {
-  const [row] = await db
-    .select({ value: verification.value })
-    .from(verification)
-    .where(
-      and(
-        eq(verification.identifier, failureId(userId)),
-        gt(verification.expiresAt, now),
-      ),
-    )
-    .limit(1)
+  const row = (
+    await db
+      .select({ value: verification.value })
+      .from(verification)
+      .where(
+        and(
+          eq(verification.identifier, failureId(userId)),
+          gt(verification.expiresAt, now),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   return row ? Number(row.value) || 0 : 0
 }
 
@@ -123,5 +127,37 @@ export async function clearStepUpFailures(userId: string) {
     db
       .delete(verification)
       .where(eq(verification.identifier, failureId(userId))),
+  )
+}
+
+/** Deletes the failure budget in the caller's transaction; the caller holds `withFactorLock`. */
+export async function clearFactorLockout(tx: Tx, userId: string) {
+  await tx
+    .delete(verification)
+    .where(eq(verification.identifier, failureId(userId)))
+}
+
+/** Users whose step-up is locked right now, with the time each lock ends. */
+export async function activeFactorLockouts(now: Date = new Date()) {
+  const rows = await db
+    .select({
+      identifier: verification.identifier,
+      value: verification.value,
+      expiresAt: verification.expiresAt,
+    })
+    .from(verification)
+    .where(
+      and(
+        like(verification.identifier, failureId('%')),
+        gt(verification.expiresAt, now),
+      ),
+    )
+  return new Map(
+    rows
+      .filter((row) => Number(row.value) >= MAX_FAILED_ATTEMPTS)
+      .map((row) => [
+        row.identifier.slice(failureId('').length),
+        row.expiresAt,
+      ]),
   )
 }

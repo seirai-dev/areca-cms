@@ -3,17 +3,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
 import { useStepUp } from '#/features/security/step-up'
-import { errorMessage } from '#/lib/admin/helpers'
-import { queryKeys } from '#/lib/content/query-keys'
+import { errorMessage } from '#/lib/errors'
+import { queryKeys } from '#/lib/query-keys'
 import { m } from '#/paraglide/messages'
 import {
   getAiSettingsFn,
   listAiModelsFn,
   saveAiSettingsFn,
 } from '#/server/fn/ai'
-
-const aiSettingsQueryKey = ['ai-settings'] as const
-const aiModelsQueryKey = ['ai-models'] as const
 
 export const AI_PROMPT_MAX_LENGTH = 20_000
 
@@ -26,14 +23,14 @@ export function useAiSettings() {
   const queryClient = useQueryClient()
   const stepUp = useStepUp()
   const query = useQuery({
-    queryKey: aiSettingsQueryKey,
+    queryKey: queryKeys.aiSettings(),
     queryFn: () => getAiSettingsFn(),
   })
   const saved = query.data
 
   // The model list comes from OpenRouter; it changes slowly.
   const models = useQuery({
-    queryKey: aiModelsQueryKey,
+    queryKey: queryKeys.aiModels(),
     queryFn: () => listAiModelsFn(),
     staleTime: 10 * 60_000,
     retry: false,
@@ -78,7 +75,7 @@ export function useAiSettings() {
     onSuccess: (next) => {
       seed(next)
       toast.success(m.agency_ai_saved())
-      queryClient.setQueryData(aiSettingsQueryKey, next)
+      queryClient.setQueryData(queryKeys.aiSettings(), next)
       // Editors' "Generate with AI" depends on this; don't wait for staleTime.
       void queryClient.invalidateQueries({
         queryKey: queryKeys.aiAvailability(),
@@ -92,12 +89,12 @@ export function useAiSettings() {
       stepUp.run(() => saveAiSettingsFn({ data: { clearApiKey: true } })),
     onSuccess: (next) => {
       toast.success(m.agency_ai_key_removed())
-      queryClient.setQueryData(aiSettingsQueryKey, next)
+      queryClient.setQueryData(queryKeys.aiSettings(), next)
       void queryClient.invalidateQueries({
         queryKey: queryKeys.aiAvailability(),
       })
     },
-    onError: (err) => toast.error(errorMessage(err)),
+    // Only the confirm dialog removes the key; it shows the error.
   })
 
   const promptEmpty = prompt.trim().length === 0

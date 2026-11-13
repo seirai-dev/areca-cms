@@ -12,6 +12,7 @@ import {
   forgetSession,
   requireAccountUser,
   requireAgencyAdmin,
+  requireSignedIn,
   requireUser,
 } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
@@ -21,7 +22,7 @@ import {
 } from '#/server/auth/own-sessions'
 import { allowUserAction } from '#/server/http/rate-limit.server'
 import { ForbiddenError, ConflictError } from '#/server/content/errors'
-import { LastAgencyAdminError } from '#/server/admin/members'
+import { LastAgencyAdminError } from '#/server/admin/agency-admin-roster'
 import { verifySelfDeletion } from '#/server/admin/self-delete-verification'
 import {
   PERSON_NAME_MAX_LENGTH,
@@ -252,14 +253,14 @@ export const getMyAccountFn = createServerFn({
 /**
  * How the caller signs in, for the two-factor section: whether they have a
  * password to confirm, and otherwise which provider to sign in again with
- * when the server asks for a fresh session. Not behind the admin MFA gate:
+ * when the server asks for a fresh session. Not behind the two-factor gate:
  * an agency admin without two-factor needs this to enrol.
  */
 export const getMySignInMethodFn = createServerFn({
   method: 'GET',
   ...accountFn,
 }).handler(async () => {
-  const session = await requireUser()
+  const session = await requireSignedIn()
   const rows = await db
     .select({ providerId: account.providerId, password: account.password })
     .from(account)

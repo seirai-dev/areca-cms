@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import {
   ArrowLeft,
@@ -9,7 +8,6 @@ import {
   ClockCounterClockwise,
   DotsThree,
   Eye,
-  UploadSimple,
   WarningCircle,
 } from '@phosphor-icons/react'
 
@@ -25,16 +23,16 @@ import {
 import { Hint } from '#/components/ui/tooltip'
 import { Popover, PopoverAnchor, PopoverContent } from '#/components/ui/popover'
 import { EntryPillView } from '#/features/collection/entry-pill'
-import { SaveIndicator } from '#/features/editor/save-indicator'
+import {
+  CopyToProductionItem,
+  EditorSaveIndicator,
+} from '#/features/editor/editor-bar-parts'
+import type { EditorBarCommon } from '#/features/editor/editor-bar-parts'
 import { ScheduleForm } from '#/features/editor/schedule-form'
-import type { SaveStatus } from '#/features/editor/use-entry-editor'
-import type { CopyEntryAction } from '#/features/dev-env/use-copy-to-production'
 import { editorPublishReason } from '#/features/golive/golive-tray'
 import { useIsMobile } from '#/hooks/use-mobile'
 import { VisualModeControl } from '#/features/visual/visual-mode-control'
 import { useVisualModeActive } from '#/features/visual/visual-mode'
-import type { EditorMode } from '#/features/visual/visual-preferences'
-import type { EntryUiStatus } from '#/lib/status'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
@@ -49,103 +47,44 @@ import { m } from '#/paraglide/messages'
  * items reuse the same handlers and gates as the inline buttons.
  */
 export function GlobalEditorTopBar({
+  editor,
   siteId,
-  label,
   uiStatus,
-  backendStatus,
-  scheduledAt,
   editedSinceReady,
-  saveStatus,
-  conflict = false,
-  lastSavedAt,
-  updatedAt,
-  errorCount,
-  onSave,
   canManage,
-  busy,
-  markReadyPending,
-  markable,
-  hasReady,
-  canDiscard,
-  discardPending,
-  onMarkReady,
-  onDiscard,
-  discardReason,
-  previewAvailable,
-  previewUrl,
-  previewReason,
-  onPreview,
-  scheduled,
-  scheduleOpen,
-  onScheduleOpenChange,
-  schedulePending,
-  scheduleInitialAt,
-  scheduleInitialTimeZone,
-  onScheduleSubmit,
-  onCancelSchedule,
-  canSchedule = true,
-  onOpenHistory,
+  readyBlock,
+  copyAction,
   languageBar,
-  readyBlock = null,
-  copyAction = null,
   visualMode,
-}: {
-  siteId: string
+  label,
+  canSchedule,
+  hasReady,
+  discardReason,
+  preview,
+  schedule,
+  onOpenHistory,
+}: EditorBarCommon & {
   label: string
-  uiStatus: EntryUiStatus
-  backendStatus: string
-  scheduledAt?: string | Date | null
-  editedSinceReady: boolean
-  saveStatus: SaveStatus
-  /** The draft moved on the server; the header says so instead of Retry. */
-  conflict?: boolean
-  lastSavedAt: Date | null
-  updatedAt?: string | Date
-  errorCount: number
-  onSave: () => void
-  canManage: boolean
-  busy: boolean
-  markReadyPending: boolean
-  markable: boolean
-  hasReady: boolean
-  canDiscard: boolean
-  discardPending: boolean
-  onMarkReady: () => void
-  onDiscard: () => void
-  discardReason: string | null
-  previewAvailable: boolean
-  previewUrl?: string
-  previewReason: string | null
-  onPreview: () => void
-  scheduled: boolean
-  scheduleOpen: boolean
-  onScheduleOpenChange: (open: boolean) => void
-  schedulePending: boolean
-  scheduleInitialAt: Date | null
-  scheduleInitialTimeZone?: string | null
-  onScheduleSubmit: (at: Date, timeZone: string) => void
-  onCancelSchedule: () => void
   /** False on a development environment: no scheduling (Decision 8). */
-  canSchedule?: boolean
-  onOpenHistory: () => void
-  /** The language bar, rendered as the second row of the sticky header. */
-  languageBar?: ReactNode
-  /**
-   * Blocks ready and schedule: a draft conflict (fix reloads the latest
-   * version) or a required language (fix switches to it). The reason is
-   * clickable.
-   */
-  readyBlock?: { message: string; onFix: () => void } | null
-  /** Copy to production as a draft (development environments only; null elsewhere). */
-  copyAction?: CopyEntryAction | null
-  /** The Write | Visual switch. Omitted where Visual mode is unavailable. */
-  visualMode?: {
-    active: boolean
-    canVisual: boolean
-    disabledReason: string | null
-    onSetMode: (mode: EditorMode) => void
+  canSchedule: boolean
+  /** The section has a ready (or scheduled) version. */
+  hasReady: boolean
+  /** Why Discard draft is unavailable; null when it can discard. */
+  discardReason: string | null
+  /** The section's preview page; `reason` says why there is none. */
+  preview: { available: boolean; reason: string | null; open: () => void }
+  schedule: {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    onSubmit: (at: Date, timeZone: string) => void
   }
+  onOpenHistory: () => void
 }) {
+  const { entry, busy, markable, previewUrl } = editor
+  const backendStatus = entry?.status ?? 'draft'
+  const scheduled = backendStatus === 'scheduled'
+  const canDiscard = discardReason === null
+  const onDiscard = () => void editor.discard().catch(() => undefined)
   const mobile = useIsMobile()
   // Full-bleed (Visual mode) drops the page padding the header compensates for.
   const fullBleed = useVisualModeActive()
@@ -164,7 +103,7 @@ export function GlobalEditorTopBar({
   // Reasons for disabled secondary actions, shown in the ⋯ menu on phones
   // (where there is no hover tooltip).
   const menuNotes = [
-    previewReason,
+    preview.reason,
     discardReason,
     !canManage ? editorPublishReason() : null,
   ].filter((note): note is string => Boolean(note))
@@ -175,7 +114,7 @@ export function GlobalEditorTopBar({
       variant="quiet"
       size="sm"
       disabled={busy || !hasReady || readyBlock !== null}
-      onClick={() => onScheduleOpenChange(true)}
+      onClick={() => schedule.onOpenChange(true)}
       data-testid="schedule-global"
       className="hidden md:inline-flex"
     >
@@ -232,45 +171,33 @@ export function GlobalEditorTopBar({
           <EntryPillView
             status={uiStatus}
             backendStatus={backendStatus}
-            scheduledAt={scheduledAt}
+            scheduledAt={entry?.scheduledAt}
             editedSinceReady={editedSinceReady}
             size="sm"
             testId="global-status"
           />
         </div>
 
-        {visualMode ? (
-          <VisualModeControl
-            active={visualMode.active}
-            canVisual={visualMode.canVisual}
-            disabledReason={visualMode.disabledReason}
-            onSetMode={visualMode.onSetMode}
-          />
-        ) : null}
+        {visualMode ? <VisualModeControl {...visualMode} /> : null}
 
         {/* Phones: this group is flattened (contents) so Ready and the ⋯ menu
             sit on the first line and the save status wraps below them. */}
-        <Popover open={scheduleOpen} onOpenChange={onScheduleOpenChange}>
+        <Popover open={schedule.open} onOpenChange={schedule.onOpenChange}>
           <div className="flex shrink-0 items-center gap-1 max-md:contents">
             <div className="order-last w-full min-w-0 md:order-none md:mr-1 md:w-auto">
-              <SaveIndicator
-                status={saveStatus}
-                conflict={conflict}
-                isNew={false}
-                lastSavedAt={lastSavedAt}
-                updatedAt={updatedAt}
-                errorCount={errorCount}
-                onRetry={onSave}
-              />
+              <EditorSaveIndicator editor={editor} />
             </div>
 
-            <Hint label={previewReason ?? ''} className="hidden md:inline-flex">
+            <Hint
+              label={preview.reason ?? ''}
+              className="hidden md:inline-flex"
+            >
               <Button
                 type="button"
                 variant="quiet"
                 size="sm"
-                disabled={!previewAvailable || !previewUrl}
-                onClick={onPreview}
+                disabled={!preview.available || !previewUrl}
+                onClick={preview.open}
                 data-testid="preview-global"
                 className="hidden md:inline-flex"
               >
@@ -296,7 +223,7 @@ export function GlobalEditorTopBar({
                 type="button"
                 variant="quiet"
                 size="sm"
-                disabled={!canDiscard || busy || discardPending}
+                disabled={!canDiscard || busy || editor.discardPending}
                 onClick={onDiscard}
                 data-testid="discard-draft"
                 className="hidden md:inline-flex"
@@ -312,7 +239,7 @@ export function GlobalEditorTopBar({
                   variant="quiet"
                   size="sm"
                   disabled={busy}
-                  onClick={onCancelSchedule}
+                  onClick={editor.cancelSchedule}
                   data-testid="cancel-schedule"
                   className="hidden md:inline-flex"
                 >
@@ -349,8 +276,8 @@ export function GlobalEditorTopBar({
                 variant={readyDone ? 'secondary' : 'primary'}
                 size="sm"
                 disabled={markDisabled}
-                loading={markReadyPending}
-                onClick={onMarkReady}
+                loading={editor.markReadyPending}
+                onClick={editor.markReady}
                 data-testid="mark-ready"
               >
                 {readyDone ? (
@@ -376,8 +303,8 @@ export function GlobalEditorTopBar({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
                 <DropdownMenuItem
-                  disabled={!previewAvailable || !previewUrl}
-                  onSelect={onPreview}
+                  disabled={!preview.available || !previewUrl}
+                  onSelect={preview.open}
                   data-testid="preview-global-menu"
                 >
                   <Eye />
@@ -391,7 +318,7 @@ export function GlobalEditorTopBar({
                   {m.globals_history()}
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  disabled={!canDiscard || busy || discardPending}
+                  disabled={!canDiscard || busy || editor.discardPending}
                   onSelect={onDiscard}
                   data-testid="discard-draft-menu"
                 >
@@ -401,23 +328,11 @@ export function GlobalEditorTopBar({
                 {copyAction ? (
                   <>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      disabled={
-                        copyAction.blockedReason !== null ||
-                        copyAction.pending ||
-                        busy
-                      }
-                      onSelect={copyAction.copy}
-                      data-testid="copy-to-production"
-                    >
-                      <UploadSimple />
-                      {m.dev_env_copy_menu()}
-                    </DropdownMenuItem>
-                    {copyAction.blockedReason ? (
-                      <DropdownMenuLabel className="max-w-64 pt-1 pb-1 text-caption font-normal tracking-normal whitespace-normal normal-case">
-                        {copyAction.blockedReason}
-                      </DropdownMenuLabel>
-                    ) : null}
+                    <CopyToProductionItem
+                      action={copyAction}
+                      disabled={busy}
+                      noteClassName="pt-1 pb-1"
+                    />
                   </>
                 ) : null}
                 {canManage && canSchedule ? (
@@ -426,7 +341,7 @@ export function GlobalEditorTopBar({
                     {scheduled ? (
                       <DropdownMenuItem
                         disabled={busy}
-                        onSelect={onCancelSchedule}
+                        onSelect={editor.cancelSchedule}
                         data-testid="cancel-schedule-menu"
                       >
                         <CalendarX />
@@ -435,7 +350,7 @@ export function GlobalEditorTopBar({
                     ) : (
                       <DropdownMenuItem
                         disabled={busy || !hasReady || readyBlock !== null}
-                        onSelect={() => onScheduleOpenChange(true)}
+                        onSelect={() => schedule.onOpenChange(true)}
                         data-testid="schedule-global-menu"
                       >
                         <CalendarDots />
@@ -477,11 +392,13 @@ export function GlobalEditorTopBar({
                 </p>
               </div>
               <ScheduleForm
-                initialAt={scheduleInitialAt}
-                initialTimeZone={scheduleInitialTimeZone}
-                pending={schedulePending}
-                onCancel={() => onScheduleOpenChange(false)}
-                onSubmit={onScheduleSubmit}
+                initialAt={
+                  entry?.scheduledAt ? new Date(entry.scheduledAt) : null
+                }
+                initialTimeZone={entry?.scheduleTimezone}
+                pending={editor.schedulePending}
+                onCancel={() => schedule.onOpenChange(false)}
+                onSubmit={schedule.onSubmit}
               />
             </PopoverContent>
           ) : null}

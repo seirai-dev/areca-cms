@@ -5,16 +5,23 @@ import * as React from 'react'
  * listener, installed by `<ShortcutsProvider>`, dispatches to whatever is
  * registered with `useShortcut`. Plain keys and `g x` sequences are ignored
  * while typing (inputs, textareas, selects, contentEditable); `mod` combos
- * (⌘/Ctrl) fire everywhere.
+ * (⌘/Ctrl) fire everywhere. A plain key registered with `whileTyping` fires
+ * in fields too.
  *
  *   useShortcut('mod+k', () => setOpen(true))
  *   useShortcut('g o', () => navigate(...))
  *   useShortcut('n', newEntry, { enabled: inCollection })
  *   useShortcut('/', focusSearch)
+ *   useShortcut('escape', clearSelection, { whileTyping: true })
  */
 
 type Handler = (event: KeyboardEvent) => void
-type Entry = { combo: string; handler: React.RefObject<Handler>; id: number }
+type Entry = {
+  combo: string
+  handler: React.RefObject<Handler>
+  id: number
+  whileTyping: boolean
+}
 
 const RegistryContext = React.createContext<{
   add: (entry: Entry) => void
@@ -70,12 +77,13 @@ export function ShortcutsProvider({ children }: { children: React.ReactNode }) {
   )
 
   React.useEffect(() => {
-    function run(combo: string, event: KeyboardEvent) {
+    function run(combo: string, event: KeyboardEvent, typing = false) {
       // Most recently registered wins (a page can override a shell default).
       for (let i = entries.current.length - 1; i >= 0; i--) {
         const entry = entries.current[i]
-        if (entry.combo === combo) {
-          event.preventDefault()
+        if (entry.combo === combo && (!typing || entry.whileTyping)) {
+          // In a field the key keeps its own effect (Escape clears a search box).
+          if (!typing) event.preventDefault()
           entry.handler.current(event)
           return true
         }
@@ -93,7 +101,10 @@ export function ShortcutsProvider({ children }: { children: React.ReactNode }) {
         return
       }
       if (event.altKey) return
-      if (isTypingTarget(event.target)) return
+      if (isTypingTarget(event.target)) {
+        run(key, event, true)
+        return
+      }
 
       if (pendingG.current !== null) {
         window.clearTimeout(pendingG.current)
@@ -126,7 +137,7 @@ export function ShortcutsProvider({ children }: { children: React.ReactNode }) {
 export function useShortcut(
   combo: string,
   handler: Handler,
-  options: { enabled?: boolean } = {},
+  options: { enabled?: boolean; whileTyping?: boolean } = {},
 ) {
   const registry = React.useContext(RegistryContext)
   const handlerRef = React.useRef<Handler>(handler)
@@ -134,14 +145,15 @@ export function useShortcut(
     handlerRef.current = handler
   })
   const enabled = options.enabled ?? true
+  const whileTyping = options.whileTyping ?? false
   const normalized = normalize(combo)
 
   React.useEffect(() => {
     if (!registry || !enabled) return
     const id = ++nextId
-    registry.add({ combo: normalized, handler: handlerRef, id })
+    registry.add({ combo: normalized, handler: handlerRef, id, whileTyping })
     return () => registry.remove(id)
-  }, [registry, enabled, normalized])
+  }, [registry, enabled, normalized, whileTyping])
 }
 
 /** Focus the page's search field (anything marked `data-shortcut-search`). */

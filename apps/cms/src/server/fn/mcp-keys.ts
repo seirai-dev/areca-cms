@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 import { createServerFn } from '@tanstack/react-start'
 import { eq } from 'drizzle-orm'
 import { z } from '#/lib/zod'
@@ -103,11 +102,13 @@ export const revokeMcpKeyFn = createServerFn({ method: 'POST', ...loose })
   .validator(z.object({ id: z.string().min(1).max(ID_MAX_LENGTH) }))
   .handler(async ({ data }) => {
     await requireUser()
-    const [key] = await db
-      .select({ siteId: mcpKey.siteId })
-      .from(mcpKey)
-      .where(eq(mcpKey.id, data.id))
-      .limit(1)
+    const key = (
+      await db
+        .select({ siteId: mcpKey.siteId })
+        .from(mcpKey)
+        .where(eq(mcpKey.id, data.id))
+        .limit(1)
+    ).at(0)
     // Agency keys have no site; they are revoked from the Agency page.
     if (!key?.siteId) throw new NotFoundError(m.server_mcp_key_not_found())
 

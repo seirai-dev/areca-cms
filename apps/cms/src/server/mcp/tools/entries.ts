@@ -6,14 +6,13 @@ import {
   richTextAssetsAuthorizedFrom,
   richTextAssetRefs,
 } from '#/server/assets/richtext-ownership'
-import { SEO_KEY } from '#/lib/seo'
 import { previewBaseUrl } from '#/lib/preview-url'
 import {
   ID_MAX_LENGTH,
   SEARCH_MAX_LENGTH,
   SLUG_MAX_LENGTH,
 } from '#/lib/content-limits'
-import type { EntryData, Field } from '#/lib/types'
+import type { EntryData, Field, SiteLanguages } from '#/lib/types'
 import {
   createEntry,
   getEntry,
@@ -22,16 +21,11 @@ import {
   updateDraft,
 } from '#/server/content/entries'
 import { attachSectionLinkers } from '#/server/content/section-link-updates'
-import { pickDeclaredFields } from '#/server/content/validation'
 import { ValidationError } from '#/server/content/errors'
 import { loadSiteLanguages } from '#/server/content/locale-validation'
 import { resolveMarkdownLinkTargets } from '#/server/content/link-targets'
 import { McpNotFoundError } from '../errors'
-import {
-  signPreviewToken,
-  buildPreviewUrl,
-  buildGlobalPreviewUrl,
-} from '#/server/content/preview-token'
+import { previewLinkFor } from '#/server/content/preview-token'
 import {
   applyLocaleWrite,
   localeView,
@@ -46,12 +40,11 @@ import type { LocaleTarget } from '../locales'
 import type { AssetLookup, LinkLookup } from '../entry-format'
 import {
   AGENT_STATUSES,
-  collectAssetIds,
+  collectAssetRefs,
   formatEntry,
   formatGlobal,
   formatSnapshotFields,
   ASSET_FILE_PREFIX,
-  mergeSeo,
   seoPatchFromInput,
   storedStatus,
   summarizeEntry,
@@ -88,22 +81,15 @@ export const expectedVersion = z
     'The "version" you last read with get_entry. If the entry changed since, the write is refused so you do not overwrite someone else. Omit to write against the current version.',
   )
 
-/** Stored `$seo` from agent input: clearing spellings become nulls, which mergeSeo removes. */
-function seoPatch(
-  seo: Record<string, unknown> | undefined,
-): Record<string, unknown> | undefined {
-  return seoPatchFromInput(seo)
-}
-
 export async function assetLookupFor(
   actor: McpActor,
   fields: Field[],
   inputs: Record<string, unknown>,
   seo: Record<string, unknown> | null | undefined,
 ): Promise<AssetLookup> {
-  const ids = collectAssetIds(fields, inputs, seo ?? undefined)
-  const lookup = await siteAssetLookup(actor.organizationId, actor.siteId)
-  const missing = ids.find((id) => !lookup.byId.has(id))
+  const refs = collectAssetRefs(fields, inputs, seo ?? undefined)
+  const lookup = await siteAssetLookup(actor.organizationId, actor.siteId, refs)
+  const missing = refs.ids.find((id) => !lookup.byId.has(id))
   if (missing)
     throw new ValidationError([
       {
@@ -191,27 +177,14 @@ async function previewUrlFor(
   slug: string,
   locale?: string,
 ): Promise<string | null> {
-  const siteRow = await loadSiteRow(actor)
-  const base = previewBaseUrl(siteRow)
-  if (!base) return null
-  if (source.kind === 'global') {
-    if (!source.previewPath) return null
-    const token = signPreviewToken({
-      siteId: siteRow.id,
-      global: source.key,
-      secret: siteRow.previewSecret,
-      locale,
-    })
-    return buildGlobalPreviewUrl(base, source.previewPath, token, locale)
-  }
-  const token = signPreviewToken({
-    siteId: siteRow.id,
-    collection: source.key,
-    slug,
-    secret: siteRow.previewSecret,
+  const link = previewLinkFor(
+    await loadSiteRow(actor),
+    source.kind === 'global'
+      ? { kind: 'global', key: source.key, previewPath: source.previewPath }
+      : { kind: 'collection', key: source.key, slug },
     locale,
-  })
-  return buildPreviewUrl(base, source.key, slug, token, locale)
+  )
+  return link?.url ?? null
 }
 
 /** The live version of an entry as the production site serves it now, if it is live. */
@@ -278,7 +251,9 @@ export async function formatStoredEntry(
     row.publishedData ?? {},
   ])
   const siteRow = await loadSiteRow(actor)
-  const release = await loadReleaseState(actor.siteId)
+  const release = await loadReleaseState(actor.siteId, {
+    liveSnapshot: options.includePublished,
+  })
   const source: PreviewSource = {
     kind: content.kind,
     key: content.key,
@@ -360,13 +335,89 @@ export function withImportWarnings<T extends object>(
 }
 
 /** Import warnings plus, for a non-main language, the shared fields it changed. */
-function withWriteNotes<T extends object>(
+export function withWriteNotes<T extends object>(
   result: T,
   warnings: string[],
   target: LocaleTarget | null,
   shared: string[],
 ) {
   return withSharedNote(withImportWarnings(result, warnings), target, shared)
+}
+
+/**
+ * The steps every MCP content write shares: resolve the assets and entry links
+ * the input uses, convert it to the stored shape, check its images, and merge
+ * it into `stored` in the target language (or as is, without languages).
+ * `seo` is the agent's SEO input. `warnings` are about the input.
+ */
+export async function prepareAgentWrite(
+  actor: McpActor,
+  fields: Field[],
+  input: {
+    inputs: Record<string, unknown>
+    seo: Record<string, unknown> | undefined
+    languages: SiteLanguages | null
+    target: LocaleTarget | null
+    stored: EntryData
+    seoEnabled?: boolean
+  },
+) {
+  const { inputs, target } = input
+  const seo = seoPatchFromInput(input.seo)
+  const assets = await assetLookupFor(actor, fields, inputs, seo)
+  const links = await richTextLinksFor(
+    actor,
+    fields,
+    inputs,
+    target?.locale ?? null,
+  )
+  const converted = toStoredFields(fields, inputs, assets, links)
+  assertSiteImages(fields, converted, assets)
+  const written = applyLocaleWrite({
+    fields,
+    languages: input.languages,
+    locale: target?.locale ?? null,
+    stored: input.stored,
+    converted,
+    seo,
+    seoEnabled: input.seoEnabled,
+  })
+  return {
+    data: written.data,
+    converted,
+    shared: written.sharedFieldsUpdated,
+    warnings: [
+      ...codeLanguageWarnings(fields, inputs),
+      ...linkWarnings(fields, inputs, links),
+    ],
+  }
+}
+
+/**
+ * Saves an MCP draft write. An MCP write is always explicit: it reports the
+ * sections it removed or renamed that links point to (decision 22). Returns
+ * those warnings, then the image import warnings.
+ */
+export async function saveAgentDraft(
+  actor: McpActor,
+  entryId: string,
+  data: EntryData,
+  version: number,
+): Promise<string[]> {
+  const updated = await updateDraft(
+    entryId,
+    data,
+    actor.userId,
+    version,
+    undefined,
+    { explicit: true },
+  )
+  const sectionChanges = await attachSectionLinkers(
+    entryId,
+    updated.sectionChanges,
+    { isOwner: actor.role === 'owner', isAgencyAdmin: false },
+  )
+  return [...sectionLinkWarnings(sectionChanges), ...updated.importWarnings]
 }
 
 export function registerEntryTools(registry: ToolCollector): void {
@@ -489,41 +540,20 @@ export function registerEntryTools(registry: ToolCollector): void {
       const languages = await loadSiteLanguages(actor.siteId)
       const target = resolveLocale(languages, input.locale)
       const inputs = withSlugInput(col.fields, input.fields ?? {}, input.slug)
-      const seo = seoPatch(input.seo)
-      const assets = await assetLookupFor(actor, col.fields, inputs, seo)
-      const links = await richTextLinksFor(
+      const { data, converted, shared, warnings } = await prepareAgentWrite(
         actor,
         col.fields,
-        inputs,
-        target?.locale ?? null,
+        { inputs, seo: input.seo, languages, target, stored: {} },
       )
-      const converted = toStoredFields(col.fields, inputs, assets, links)
-      assertSiteImages(col.fields, converted, assets)
-      let data = converted
-      let shared: string[] = []
-      if (languages && target) {
-        const written = applyLocaleWrite({
-          fields: col.fields,
-          languages,
-          locale: target.locale,
-          stored: {},
-          converted,
-          seo,
-        })
-        data = written.data
-        shared = written.sharedFieldsUpdated
-        // The entry needs a main slug to exist: a first language's slug is used for it.
-        const slugKey = slugFieldKey(col.fields)
-        if (
-          !target.isMain &&
-          slugKey &&
-          typeof converted[slugKey] === 'string'
-        ) {
-          data[slugKey] = converted[slugKey]
-        }
-      } else {
-        const merged = mergeSeo(undefined, seo)
-        if (merged) data[SEO_KEY] = merged
+      // The entry needs a main slug to exist: a first language's slug is used for it.
+      const slugKey = slugFieldKey(col.fields)
+      if (
+        target &&
+        !target.isMain &&
+        slugKey &&
+        typeof converted[slugKey] === 'string'
+      ) {
+        data[slugKey] = converted[slugKey]
       }
       const created = await createEntry({
         siteId: actor.siteId,
@@ -537,11 +567,7 @@ export function registerEntryTools(registry: ToolCollector): void {
           locale: target?.locale,
           translations: true,
         }),
-        [
-          ...codeLanguageWarnings(col.fields, inputs),
-          ...linkWarnings(col.fields, inputs, links),
-          ...created.importWarnings,
-        ],
+        [...warnings, ...created.importWarnings],
         target,
         shared,
       )
@@ -581,53 +607,22 @@ export function registerEntryTools(registry: ToolCollector): void {
       const languages = await loadSiteLanguages(actor.siteId)
       const target = resolveLocale(languages, input.locale)
       const inputs = withSlugInput(col.fields, input.fields ?? {}, input.slug)
-      const patch = seoPatch(input.seo)
-      const assets = await assetLookupFor(actor, col.fields, inputs, patch)
-      const links = await richTextLinksFor(
+      const { data, shared, warnings } = await prepareAgentWrite(
         actor,
         col.fields,
-        inputs,
-        target?.locale ?? null,
-      )
-      const converted = toStoredFields(col.fields, inputs, assets, links)
-      assertSiteImages(col.fields, converted, assets)
-      let data: EntryData
-      let shared: string[] = []
-      if (languages && target) {
-        const written = applyLocaleWrite({
-          fields: col.fields,
+        {
+          inputs,
+          seo: input.seo,
           languages,
-          locale: target.locale,
+          target,
           stored: entry.draftData,
-          converted,
-          seo: patch,
-        })
-        data = written.data
-        shared = written.sharedFieldsUpdated
-      } else {
-        data = pickDeclaredFields(col.fields, entry.draftData)
-        Object.assign(data, converted)
-        const seo = mergeSeo(
-          (data[SEO_KEY] as Record<string, unknown> | undefined) ?? undefined,
-          patch,
-        )
-        if (seo) data[SEO_KEY] = seo
-        else delete data[SEO_KEY]
-      }
-      // An MCP write is always explicit: it reports the sections it removed or
-      // renamed that links point to (decision 22).
-      const updated = await updateDraft(
+        },
+      )
+      const saveWarnings = await saveAgentDraft(
+        actor,
         entry.id,
         data,
-        actor.userId,
         input.expectedVersion ?? entry.draftVersion,
-        undefined,
-        { explicit: true },
-      )
-      const sectionChanges = await attachSectionLinkers(
-        entry.id,
-        updated.sectionChanges,
-        { isOwner: actor.role === 'owner', isAgencyAdmin: false },
       )
       return withWriteNotes(
         await formatStoredEntry(actor, entry.id, {
@@ -635,12 +630,7 @@ export function registerEntryTools(registry: ToolCollector): void {
           locale: target?.locale,
           translations: true,
         }),
-        [
-          ...codeLanguageWarnings(col.fields, inputs),
-          ...linkWarnings(col.fields, inputs, links),
-          ...sectionLinkWarnings(sectionChanges),
-          ...updated.importWarnings,
-        ],
+        [...warnings, ...saveWarnings],
         target,
         shared,
       )

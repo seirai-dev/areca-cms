@@ -1,93 +1,92 @@
-import {
-  richTextAssetRefs,
-  richTextAssetsAuthorized,
-  richTextAssetsAuthorizedFrom,
-} from '#/server/assets/richtext-ownership'
+import { richTextAssetsAuthorizedFrom } from '#/server/assets/richtext-ownership'
 import { createHash } from 'node:crypto'
-import { and, eq, or } from 'drizzle-orm'
+import { and, eq, inArray, or } from 'drizzle-orm'
 
 import { db } from '#/db'
-import { collection, entry, site } from '#/db/schema'
-import {
-  GLOBAL_ENTRY_SLUG,
-  globalPublicUrl,
-  globalsAsEntryLists,
-} from '#/lib/globals'
-import {
-  SLUG_KEY,
-  localeStatus,
-  normalizeBase,
-  readLocale,
-  resolveChain,
-} from '#/lib/content-locale'
-import { entryPublicUrl, readEntrySeo, withoutSeo } from '#/lib/seo'
+import type { DbReader } from '#/db'
+import { entry } from '#/db/schema'
+import { GLOBAL_ENTRY_SLUG, globalsAsEntryLists } from '#/lib/globals'
+import { normalizeBase } from '#/lib/content-locale'
+import { entryPublicUrl } from '#/lib/seo'
 import type {
   EntryData,
   Field,
   GlobalConfig,
-  ImageValue,
-  ReferenceValue,
-  SeoMeta,
   SiteLanguages,
   Snapshot,
   SnapshotEntry,
   SnapshotGlobal,
 } from '#/lib/types'
-import { m } from '#/paraglide/messages'
-import {
-  loadAssetLookup,
-  resolveAssetFromLookup,
-  resolveAssetValue,
-} from '#/server/assets'
+import { loadAssetLookup, resolveAssetFromLookup } from '#/server/assets'
 import type { AssetLookup } from '#/server/assets'
 import { snapshotAssets } from '#/server/assets/published-assets'
-import { convertRichText, validateRichText } from '#/server/richtext'
-import {
-  entryLinkTargets,
-  resolveEntryLinks,
-  richTextHeadingIds,
-} from '#/server/richtext/entry-links'
-import type {
-  EntryLinkIssue,
-  EntryLinkResolution,
-  EntryLinkTarget,
-} from '#/server/richtext/entry-links'
-import { entryTitle } from '#/lib/content/utils'
+import { entryLinkTargets } from '#/server/richtext/entry-links'
+import { stableStringify } from '#/lib/stable-json'
 
-import { getCollection, listCollections } from './collections.ts'
-import { getGlobalEntry, listGlobals } from './globals.ts'
-import { NotFoundError, ValidationError } from './errors.ts'
+import { listCollections } from './collections.ts'
+import { listGlobals } from './globals.ts'
 import {
   formatLanguageBlockers,
   languageBlockers,
   localeCtxFor,
 } from './locale-validation.ts'
-import {
-  entryLinkPath,
-  placeLinkTarget,
-  shippedLocales,
-  linkTargetSiteIds,
-  loadLinkTargets,
-  mapRichTextValues,
-} from './entry-links.ts'
+import { linkTargetSiteIds, loadLinkTargets } from './entry-links.ts'
 import type { LinkTargetRow } from './entry-links.ts'
-import { buildEntrySeo } from './seo.ts'
+import {
+  collectAssetRefs,
+  expandAcrossLanguages,
+  expandEntryView,
+  expandSectionView,
+  languageViews,
+  localeFields,
+} from './snapshot-expand.ts'
+import type { AssetRefs, ExpandContext } from './snapshot-expand.ts'
+import { createSnapshotLinks } from './snapshot-links.ts'
+import type { LinkWarning } from './snapshot-links.ts'
 import { buildSnapshotSchema } from './snapshot-schema.ts'
-import { pickDeclaredFields, validateEntryData } from './validation.ts'
+import { validateEntryData } from './validation.ts'
+import { getSiteOrThrow } from './site-core.ts'
+import type { SiteCore } from './site-core.ts'
 
+export type { LinkWarning } from './snapshot-links.ts'
+
+/** The entry columns a snapshot reads. Drafts and baselines are left out. */
+const snapshotEntryColumns = {
+  id: entry.id,
+  collectionId: entry.collectionId,
+  slug: entry.slug,
+  status: entry.status,
+  publishedData: entry.publishedData,
+  publishedSlug: entry.publishedSlug,
+  publishedAt: entry.publishedAt,
+  scheduledData: entry.scheduledData,
+  scheduledSlug: entry.scheduledSlug,
+  scheduledVersion: entry.scheduledVersion,
+  scheduledAt: entry.scheduledAt,
+}
+
+type SnapshotEntryRow = {
+  [K in keyof typeof snapshotEntryColumns]: (typeof entry.$inferSelect)[K]
+}
+
+type SnapshotCollection = Awaited<ReturnType<typeof listCollections>>[number]
+type SnapshotSection = Awaited<ReturnType<typeof listGlobals>>[number]
+
+/** An entry or section in the release, with its approved data. */
 type IncludedEntry = {
+  id: string
   collectionKey: string
+  /** Empty for a site content section. */
   routePattern: string
   /** Per-language route patterns. Collections only. */
   localizedRoutes?: Record<string, string> | null
-  /** Languages besides main that must be complete. */
-  requiredLanguages?: string[]
   fields: Field[]
-  row: typeof entry.$inferSelect
   data: EntryData
   slug: string
   publishedAt: Date | null
 }
+
+type EntryVersion = { entryId: string; scheduledVersion: string }
 
 export type SnapshotOptions = {
   /**
@@ -100,557 +99,93 @@ export type SnapshotOptions = {
 }
 
 /**
- * A link that will not work on the live site, or points at a section that is
- * gone. It never blocks a release: the link is published as plain text
- * (`not-live`, `missing`) or to the page (`missing-section`).
+ * The release: every approved entry and section, checked and expanded into
+ * the published snapshot. The hash covers the content only, so an unchanged
+ * site keeps its hash.
  */
-export type LinkWarning = {
-  sourceEntryId: string
-  sourceTitle: string
-  /** The source's collection key, or the section key for a site content section. */
-  sourceCollectionKey: string
-  /** True when the source is a site content section (it has no collection page). */
-  sourceGlobal: boolean
-  /** Language of the text. Null on a single-language site. */
-  locale: string | null
-  field: string
-  targetEntryId: string
-  targetTitle: string
-  anchor: string | null
-  reason: 'not-live' | 'missing' | 'missing-section'
-}
-
-/** Resolves the entry links of one rich text view, and collects their problems. */
-export type LinkResolver = {
-  resolve: (
-    target: EntryLinkTarget,
-    locale: string | null,
-  ) => Promise<EntryLinkResolution>
-  report: (
-    field: string,
-    locale: string | null,
-    issues: EntryLinkIssue[],
-  ) => void
-}
-
 export async function buildSnapshot(
   siteId: string,
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
   options: SnapshotOptions = {},
 ): Promise<
   | {
       ok: true
       snapshot: Snapshot
       hash: string
-      entryVersions: { entryId: string; scheduledVersion: string }[]
+      entryVersions: EntryVersion[]
       linkWarnings: LinkWarning[]
     }
   | { ok: false; errors: string[] }
 > {
-  const existingSite = (
-    await connection.select().from(site).where(eq(site.id, siteId)).limit(1)
-  ).at(0)
-  if (!existingSite) {
-    throw new NotFoundError(m.server_site_not_found())
-  }
-
-  const siteRow = existingSite
+  const site = await getSiteOrThrow(siteId, connection)
   const now = new Date()
   // Null on a single-language site: every language step below is skipped.
-  const languages: SiteLanguages | null = existingSite.languages ?? null
+  const languages: SiteLanguages | null = site.languages ?? null
   const enabled = await listCollections(
     siteId,
     { enabledOnly: true },
     connection,
   )
-  const errors: string[] = []
-  const entryVersions: { entryId: string; scheduledVersion: string }[] = []
-  const included: IncludedEntry[] = []
-
-  for (const col of enabled) {
-    const rows = await connection
-      .select()
-      .from(entry)
-      .where(
-        and(
-          eq(entry.siteId, siteId),
-          eq(entry.collectionId, col.id),
-          or(eq(entry.status, 'published'), eq(entry.status, 'scheduled')),
-        ),
-      )
-
-    for (const row of rows) {
-      const isScheduledDue =
-        row.status === 'scheduled' &&
-        row.scheduledAt != null &&
-        row.scheduledAt <= now
-      const data = isScheduledDue ? row.scheduledData : row.publishedData
-      const slug = isScheduledDue ? row.scheduledSlug : row.publishedSlug
-      if (!isScheduledDue && row.status === 'scheduled' && !data) continue
-      if (!slug) {
-        errors.push(`${col.key}/${row.id}: missing approved slug`)
-        continue
-      }
-      if (isScheduledDue && !row.scheduledVersion) {
-        errors.push(`${col.key}/${row.id}: missing scheduled version`)
-        continue
-      }
-      if (data == null) {
-        errors.push(`${col.key}/${row.slug}: missing published data`)
-        continue
-      }
-      const parsed = validateEntryData(col.fields, data)
-      if (!parsed.ok) {
-        for (const err of parsed.errors) {
-          errors.push(
-            `${col.key}/${row.slug}: ${err.path ? `${err.path}: ` : ''}${err.message}`,
-          )
-        }
-        continue
-      }
-      if (isScheduledDue)
-        entryVersions.push({
-          entryId: row.id,
-          scheduledVersion: row.scheduledVersion!,
-        })
-      const normalized = languages
-        ? normalizeBase(parsed.data, localeCtxFor(languages, col.fields))
-        : parsed.data
-      if (languages) {
-        const gaps = languageBlockers({
-          data: normalized,
-          fields: col.fields,
-          languages,
-          requiredLanguages: col.requiredLanguages,
-        })
-        if (gaps.length > 0) {
-          errors.push(`${col.key}/${row.slug}: ${formatLanguageBlockers(gaps)}`)
-        }
-      }
-      included.push({
-        slug,
-        collectionKey: col.key,
-        routePattern: col.routePattern,
-        localizedRoutes: col.localizedRoutes,
-        requiredLanguages: col.requiredLanguages,
-        fields: col.fields,
-        row,
-        data: normalized,
-        publishedAt: isScheduledDue ? row.scheduledAt : row.publishedAt,
-      })
-    }
-  }
-
-  // Site content sections: one `$global` entry each. A section with no ready
-  // data blocks go live only when it has required fields; otherwise it ships `{}`.
   const sections = await listGlobals(siteId, { enabledOnly: true }, connection)
+  const rowsByCollection = await loadEntryRows(
+    connection,
+    siteId,
+    enabled,
+    sections,
+  )
+
+  const approved = new Approval(now, languages)
+  const included = enabled.flatMap((col) =>
+    approved.collectionEntries(col, rowsByCollection.get(col.id) ?? []),
+  )
   const sectionItems = new Map<string, IncludedEntry>()
-  const unreadySections = new Map<string, string>()
   for (const section of sections) {
-    const row = (
-      await connection
-        .select()
-        .from(entry)
-        .where(
-          and(
-            eq(entry.siteId, siteId),
-            eq(entry.collectionId, section.id),
-            eq(entry.slug, GLOBAL_ENTRY_SLUG),
-          ),
-        )
-        .limit(1)
-    ).at(0)
-    if (!row) {
-      errors.push(`Site content "${section.label}": entry is missing`)
-      continue
-    }
-    const isScheduledDue =
-      row.status === 'scheduled' &&
-      row.scheduledAt != null &&
-      row.scheduledAt <= now
-    const data =
-      row.status === 'draft'
-        ? null
-        : isScheduledDue
-          ? row.scheduledData
-          : row.publishedData
-    if (data == null) {
-      if (section.fields.some((field) => field.required)) {
-        if (!options.allowNeverReadySections) {
-          errors.push(
-            `Site content "${section.label}" has required fields and has never been marked ready.`,
-          )
-        }
-      } else {
-        unreadySections.set(section.key, row.id)
-      }
-      continue
-    }
-    if (isScheduledDue) {
-      if (!row.scheduledVersion) {
-        errors.push(`${section.key}: missing scheduled version`)
-        continue
-      }
-      entryVersions.push({
-        entryId: row.id,
-        scheduledVersion: row.scheduledVersion,
-      })
-    }
-    const parsed = validateEntryData(section.fields, data)
-    if (!parsed.ok) {
-      for (const err of parsed.errors) {
-        errors.push(
-          `Site content "${section.label}": ${err.path ? `${err.path}: ` : ''}${err.message}`,
-        )
-      }
-      continue
-    }
-    const sectionData = languages
-      ? normalizeBase(parsed.data, localeCtxFor(languages, section.fields))
-      : parsed.data
-    if (languages) {
-      const gaps = languageBlockers({
-        data: sectionData,
-        fields: section.fields,
-        languages,
-        requiredLanguages: section.requiredLanguages,
-      })
-      if (gaps.length > 0) {
-        errors.push(
-          `Site content "${section.label}": ${formatLanguageBlockers(gaps)}`,
-        )
-      }
-    }
-    sectionItems.set(section.key, {
-      collectionKey: section.key,
-      routePattern: '',
-      requiredLanguages: section.requiredLanguages,
-      fields: section.fields,
-      row,
-      data: sectionData,
-      slug: GLOBAL_ENTRY_SLUG,
-      publishedAt: isScheduledDue ? row.scheduledAt : row.publishedAt,
-    })
+    const item = approved.section(
+      section,
+      rowsByCollection.get(section.id)?.at(0),
+      options,
+    )
+    if (item) sectionItems.set(section.key, item)
   }
+  const { errors, entryVersions, unreadySections } = approved
+  errors.push(...routeErrors(included, site.productionUrl))
+
   // Sections take part in reference and asset checks like any entry.
   const everything = [...included, ...sectionItems.values()]
-
-  const slugsByCollection = new Map<string, Set<string>>()
-  for (const item of included) {
-    let slugs = slugsByCollection.get(item.collectionKey)
-    if (!slugs) {
-      slugs = new Set()
-      slugsByCollection.set(item.collectionKey, slugs)
-    }
-    if (slugs.has(item.slug)) {
-      errors.push(`${item.collectionKey}: duplicate slug "${item.slug}"`)
-    }
-    slugs.add(item.slug)
-  }
-
-  const entriesByUrl = new Map<string, IncludedEntry>()
-  for (const item of included) {
-    const url = entryPublicUrl(
-      existingSite.productionUrl,
-      item.routePattern,
-      item.slug,
-    )
-    if (!url) continue
-    const owner = entriesByUrl.get(url)
-    if (owner) {
-      errors.push(
-        `Route collision: two pages use the same URL ${url}: "${owner.collectionKey}/${owner.slug}" and "${item.collectionKey}/${item.slug}". Change a page slug or content type route before publishing.`,
-      )
-    }
-    entriesByUrl.set(url, item)
-  }
-
-  const includedById = new Map<string, IncludedEntry>()
-  for (const item of everything) {
-    includedById.set(item.row.id, item)
-  }
-
-  // Every language view of an item is checked: a translation may point at an
-  // asset or entry the snapshot must still resolve. Single-language: the base.
-  const scopesOf = (item: IncludedEntry): EntryData[] =>
-    languages
-      ? languages.all.map((locale) =>
-          readLocale(item.data, locale, localeCtxFor(languages, item.fields)),
-        )
-      : [item.data]
-
-  // One batched lookup replaces a query per embedded/linked asset.
-  const assetIds = new Set<string>()
-  const assetKeys = new Set<string>()
-  for (const item of everything) {
-    for (const scope of scopesOf(item)) {
-      const ogImage = readEntrySeo(scope).ogImage
-      if (ogImage) assetIds.add(ogImage)
-      for (const field of item.fields) {
-        const value = scope[field.key]
-        if (field.type === 'richtext') {
-          for (const key of richTextAssetRefs(value).storageKeys)
-            assetKeys.add(key)
-        } else if (
-          field.type === 'image' &&
-          typeof value === 'string' &&
-          value !== ''
-        ) {
-          assetIds.add(value)
-        }
-      }
-    }
-  }
-  const assets = await loadAssetLookup(
-    existingSite.organizationId,
-    { ids: assetIds, storageKeys: assetKeys },
+  const includedById = new Map(everything.map((item) => [item.id, item]))
+  const { assets, linkTargets } = await loadReleaseLookups(
     connection,
+    site,
+    everything,
+    languages,
   )
-
-  // Entry links: every target any language view points at, looked up once.
-  // Targets that are not in the release are read here too, to tell apart a
-  // draft from an entry that does not exist.
-  const linkTargetIds = new Set<string>()
-  for (const item of everything) {
-    for (const scope of scopesOf(item)) {
-      for (const field of item.fields) {
-        if (field.type !== 'richtext') continue
-        for (const target of entryLinkTargets(scope[field.key])) {
-          linkTargetIds.add(target.entryId)
-        }
-      }
-    }
-  }
-  const linkTargets = await loadLinkTargets(
-    connection,
-    await linkTargetSiteIds(connection, siteId),
-    linkTargetIds,
-  )
-
-  for (const item of everything) {
-    for (const scope of scopesOf(item)) {
-      for (const field of item.fields) {
-        if (field.type !== 'reference') continue
-        const value = scope[field.key]
-        if (value == null || value === '') continue
-        if (typeof value !== 'string') {
-          errors.push(
-            `${item.collectionKey}/${item.slug}: ${field.key}: expected an entry id`,
-          )
-          continue
-        }
-        const target = includedById.get(value)
-        if (!target) {
-          errors.push(
-            `${item.collectionKey}/${item.slug}: ${field.key}: referenced entry is not in the snapshot`,
-          )
-          continue
-        }
-        if (field.collection && target.collectionKey !== field.collection) {
-          errors.push(
-            `${item.collectionKey}/${item.slug}: ${field.key}: referenced entry is not in "${field.collection}"`,
-          )
-        }
-      }
-
-      for (const field of item.fields) {
-        if (
-          field.type === 'richtext' &&
-          !richTextAssetsAuthorizedFrom(scope[field.key], assets)
-        ) {
-          errors.push(
-            `${item.collectionKey}/${item.slug}: ${field.key}: embedded asset not found in this organization`,
-          )
-        }
-        if (field.type !== 'image') continue
-        const value = scope[field.key]
-        if (value == null || value === '') continue
-        if (typeof value !== 'string') {
-          errors.push(
-            `${item.collectionKey}/${item.slug}: ${field.key}: expected an asset id`,
-          )
-          continue
-        }
-        if (!resolveAssetFromLookup(assets, value)) {
-          errors.push(
-            `${item.collectionKey}/${item.slug}: ${field.key}: asset not found`,
-          )
-        }
-      }
-    }
-  }
-
+  errors.push(...contentErrors(everything, includedById, assets, languages))
   if (errors.length > 0) {
     // Language views share their shared fields, so one problem can repeat.
     return { ok: false, errors: languages ? [...new Set(errors)] : errors }
   }
 
-  const linkWarnings = new Map<string, LinkWarning>()
-  const headingCache = new Map<string, Set<string>>()
-  /**
-   * The view a target shows in `locale`: its translation when that language
-   * ships, else the main language (the fallback chain). `language` is the
-   * language the view is in.
-   */
-  function linkTargetView(item: IncludedEntry, locale: string | null) {
-    return placeLinkTarget(item, languages, locale)
+  const links = createSnapshotLinks(includedById, linkTargets, languages)
+  const ctx: ExpandContext = {
+    site,
+    languages,
+    assets,
+    strict: true,
+    reference(id) {
+      const target = includedById.get(id)
+      return target
+        ? { collection: target.collectionKey, slug: target.slug, id: target.id }
+        : null
+    },
+    links: links.linksFor,
   }
-  function headingIdsOf(
-    item: IncludedEntry,
-    language: string | null,
-  ): Set<string> {
-    const key = `${item.row.id}|${language ?? ''}`
-    const cached = headingCache.get(key)
-    if (cached) return cached
-    const shown =
-      languages && language && language !== languages.main
-        ? readLocale(item.data, language, localeCtxFor(languages, item.fields))
-        : item.data
-    const ids = new Set<string>()
-    for (const field of item.fields) {
-      if (field.type !== 'richtext') continue
-      for (const id of richTextHeadingIds(shown[field.key])) ids.add(id)
-    }
-    headingCache.set(key, ids)
-    return ids
-  }
-  /** Resolves a link to the release: a live entry's path in that language, or why it cannot work. */
-  async function resolveSnapshotLink(
-    target: EntryLinkTarget,
-    locale: string | null,
-  ): Promise<EntryLinkResolution> {
-    const live = includedById.get(target.entryId)
-    if (live && live.routePattern !== '') {
-      const placed = linkTargetView(live, locale)
-      const targetTitle = entryTitle(placed.view, live.fields, placed.slug)
-      if (!target.anchor) {
-        return {
-          href: entryLinkPath(placed.route, placed.slug, null),
-          targetTitle,
-          locale: placed.language,
-        }
-      }
-      if (headingIdsOf(live, placed.language).has(target.anchor)) {
-        return {
-          href: entryLinkPath(placed.route, placed.slug, target.anchor),
-          targetTitle,
-          locale: placed.language,
-        }
-      }
-      return {
-        href: entryLinkPath(placed.route, placed.slug, null),
-        reason: 'missing-section',
-        targetTitle,
-        locale: placed.language,
-      }
-    }
-    const row = linkTargets.get(target.entryId)
-    if (!row || row.collectionKind === 'global' || row.routePattern === '') {
-      return { href: null, reason: 'missing', targetTitle: '' }
-    }
-    return {
-      href: null,
-      reason: 'not-live',
-      targetTitle: entryTitle(row.draftData, row.fields, row.slug),
-    }
-  }
-  /** The resolver for the text of one entry or section. */
-  function linksFrom(source: {
-    id: string
-    title: string
-    collectionKey: string
-    global: boolean
-  }): LinkResolver {
-    return {
-      resolve: (target, locale) => resolveSnapshotLink(target, locale),
-      report(field, locale, issues) {
-        for (const issue of issues) {
-          const sourceEntryId = source.id
-          const warning: LinkWarning = {
-            sourceEntryId,
-            sourceTitle: source.title,
-            sourceCollectionKey: source.collectionKey,
-            sourceGlobal: source.global,
-            locale,
-            field,
-            targetEntryId: issue.entryId,
-            targetTitle: issue.targetTitle,
-            anchor: issue.anchor,
-            reason: issue.reason,
-          }
-          linkWarnings.set(
-            [
-              sourceEntryId,
-              locale ?? '',
-              field,
-              issue.entryId,
-              issue.anchor ?? '',
-              issue.reason,
-            ].join('|'),
-            warning,
-          )
-        }
-      },
-    }
-  }
-
-  const collections: Record<string, SnapshotEntry[]> = {}
-  for (const key of enabled.map((col) => col.key).sort()) {
-    const items = included
-      .filter((item) => item.collectionKey === key)
-      .sort(compareSnapshotEntries)
-    const converted: SnapshotEntry[] = []
-    for (const item of items) {
-      const expanded = await expandAcrossLanguages(
-        languages,
-        item.fields,
-        item.data,
-        (view, locale) => expandEntry(item, view, locale),
-      )
-      converted.push({
-        id: item.row.id,
-        slug: expanded.top.slug,
-        publishedAt: item.publishedAt?.toISOString() ?? null,
-        data: expanded.top.data,
-        seo: expanded.top.seo,
-        ...localeFields(expanded),
-      })
-    }
-    collections[key] = converted
-  }
-
-  const globals: Record<string, SnapshotGlobal> = {}
-  const globalSchema: Record<string, GlobalConfig> = {}
-  for (const section of sections) {
-    const item = sectionItems.get(section.key)
-    const id = item?.row.id ?? unreadySections.get(section.key)
-    if (!id) continue
-    // A section with no ready data ships `{}` in the site's base language.
-    const expanded = item
-      ? await expandAcrossLanguages(
-          languages,
-          section.fields,
-          item.data,
-          (view, locale) => expandSection(section, item, view, locale),
-        )
-      : { top: await expandSection(section, undefined, {}, null) }
-    globals[section.key] = {
-      id,
-      publishedAt: item?.publishedAt?.toISOString() ?? null,
-      data: expanded.top.data,
-      ...(expanded.top.seo ? { seo: expanded.top.seo } : {}),
-      ...localeFields(expanded),
-    }
-    globalSchema[section.key] = {
-      label: section.label,
-      fields: structuredClone(section.fields),
-      seo: section.seoEnabled,
-      ...(section.previewPath ? { previewPath: section.previewPath } : {}),
-      ...(languages && section.requiredLanguages.length > 0
-        ? { requiredLanguages: [...section.requiredLanguages] }
-        : {}),
-    }
-  }
+  const collections = expandCollections(ctx, enabled, included)
+  const { globals, globalSchema } = expandGlobals(
+    ctx,
+    sections,
+    sectionItems,
+    unreadySections,
+  )
 
   // Sections are hashed only when there are some, so a site without them
   // keeps the collections hash it always had. Language sites also hash their
@@ -667,7 +202,7 @@ export async function buildSnapshot(
       : hashContent(collections)
   const snapshot: Snapshot = {
     publicationId: '',
-    siteKey: existingSite.slug,
+    siteKey: site.slug,
     createdAt: now.toISOString(),
     hash,
     // Absent on single-language sites. Outside the hash: `languages` is hashed above.
@@ -690,105 +225,10 @@ export async function buildSnapshot(
     ),
     // Outside the hash: it is derived from the content.
     assets: await snapshotAssets(
-      existingSite.organizationId,
+      site.organizationId,
       { ...collections, ...globalsAsEntryLists(globals) },
       connection,
     ),
-  }
-
-  /** One collection entry in one language (`locale` null on single-language sites). */
-  async function expandEntry(
-    item: IncludedEntry,
-    view: EntryData,
-    locale: string | null,
-  ): Promise<{ slug: string; data: Record<string, unknown>; seo: SeoMeta }> {
-    const isTranslation = Boolean(
-      languages && locale && locale !== languages.main,
-    )
-    const localSlug = isTranslation ? view[SLUG_KEY] : undefined
-    const slug =
-      typeof localSlug === 'string' && localSlug !== '' ? localSlug : item.slug
-    const shown: EntryData = { ...view }
-    const slugField = item.fields.find((field) => field.type === 'slug')
-    if (isTranslation && slugField) shown[slugField.key] = slug
-    const data = await convertFields(item.fields, shown, {
-      includedById,
-      connection,
-      assets,
-      siteId,
-      organizationId: siteRow.organizationId,
-      strict: true,
-      locale: locale ?? undefined,
-      links: linksFrom({
-        id: item.row.id,
-        title: entryTitle(shown, item.fields, slug),
-        collectionKey: item.collectionKey,
-        global: false,
-      }),
-    })
-    const ogImageId = readEntrySeo(shown).ogImage
-    const routePattern =
-      (isTranslation ? item.localizedRoutes?.[locale!] : undefined) ??
-      item.routePattern
-    return {
-      slug,
-      data,
-      seo: buildEntrySeo({
-        fields: item.fields,
-        data: shown,
-        converted: data,
-        slug,
-        routePattern,
-        site: siteRow,
-        // A missing OG image falls back to the hero image rather than
-        // blocking the whole publication.
-        ogImage: ogImageId
-          ? (resolveAssetFromLookup(assets, ogImageId, locale) ?? null)
-          : null,
-        publishedAt: item.publishedAt,
-      }),
-    }
-  }
-
-  /** One site content section in one language. `item` is null for an unready section. */
-  async function expandSection(
-    section: (typeof sections)[number],
-    item: IncludedEntry | undefined,
-    view: EntryData,
-    locale: string | null,
-  ): Promise<{ data: Record<string, unknown>; seo?: SeoMeta }> {
-    const data = item
-      ? await convertFields(section.fields, view, {
-          includedById,
-          connection,
-          assets,
-          siteId,
-          organizationId: siteRow.organizationId,
-          strict: true,
-          locale: locale ?? undefined,
-          links: linksFrom({
-            id: item.row.id,
-            title: section.label,
-            collectionKey: section.key,
-            global: true,
-          }),
-        })
-      : {}
-    const seo = section.seoEnabled
-      ? buildEntrySeo({
-          fields: section.fields,
-          data: view,
-          converted: data,
-          slug: GLOBAL_ENTRY_SLUG,
-          routePattern: '',
-          url: globalPublicUrl(siteRow.productionUrl, section.previewPath),
-          title: section.label,
-          site: siteRow,
-          ogImage: item ? resolveOgImage(view, assets) : null,
-          publishedAt: item?.publishedAt ?? null,
-        })
-      : undefined
-    return { data, ...(seo ? { seo } : {}) }
   }
 
   return {
@@ -796,363 +236,423 @@ export async function buildSnapshot(
     snapshot,
     hash,
     entryVersions,
-    linkWarnings: [...linkWarnings.values()],
+    linkWarnings: links.warnings(),
   }
 }
 
-export type PreviewLocaleStatus = { complete: boolean; missing: string[] }
+/** One read for every enabled collection and section, grouped by collection. */
+async function loadEntryRows(
+  connection: DbReader,
+  siteId: string,
+  enabled: { id: string }[],
+  sections: { id: string }[],
+): Promise<Map<string, SnapshotEntryRow[]>> {
+  const rowsByCollection = new Map<string, SnapshotEntryRow[]>()
+  if (enabled.length + sections.length === 0) return rowsByCollection
+  const rows = await connection
+    .select(snapshotEntryColumns)
+    .from(entry)
+    .where(
+      and(
+        eq(entry.siteId, siteId),
+        or(
+          enabled.length > 0
+            ? and(
+                inArray(
+                  entry.collectionId,
+                  enabled.map((col) => col.id),
+                ),
+                or(
+                  eq(entry.status, 'published'),
+                  eq(entry.status, 'scheduled'),
+                ),
+              )
+            : undefined,
+          sections.length > 0
+            ? and(
+                inArray(
+                  entry.collectionId,
+                  sections.map((section) => section.id),
+                ),
+                eq(entry.slug, GLOBAL_ENTRY_SLUG),
+              )
+            : undefined,
+        ),
+      ),
+    )
+  for (const row of rows) {
+    const list = rowsByCollection.get(row.collectionId)
+    if (list) list.push(row)
+    else rowsByCollection.set(row.collectionId, [row])
+  }
+  return rowsByCollection
+}
+
+/** The version a release ships: the scheduled one once it is due, else the published one. */
+function approvedVersionOf(row: SnapshotEntryRow, now: Date) {
+  const due =
+    row.status === 'scheduled' &&
+    row.scheduledAt != null &&
+    row.scheduledAt <= now
+  return {
+    due,
+    data: due ? row.scheduledData : row.publishedData,
+    slug: due ? row.scheduledSlug : row.publishedSlug,
+    publishedAt: due ? row.scheduledAt : row.publishedAt,
+  }
+}
 
 /**
- * Draft previews: an entry link goes to the target's current draft path in the
- * language of the text, live or not, so clicking through the preview works.
- * A target that no longer exists becomes plain text.
+ * Picks the approved version of each entry and section, and collects what
+ * blocks the release, the scheduled versions it ships, and the sections that
+ * ship `{}` because they were never marked ready.
  */
-function draftLinkResolver(
-  targets: Map<string, LinkTargetRow>,
-  languages: SiteLanguages | null,
-): LinkResolver {
-  return {
-    async resolve(target, locale) {
-      const row = targets.get(target.entryId)
-      if (!row || row.collectionKind === 'global' || row.routePattern === '') {
-        return { href: null, reason: 'missing', targetTitle: '' }
+class Approval {
+  readonly errors: string[] = []
+  readonly entryVersions: EntryVersion[] = []
+  /** Section key to entry id. */
+  readonly unreadySections = new Map<string, string>()
+
+  constructor(
+    private readonly now: Date,
+    private readonly languages: SiteLanguages | null,
+  ) {}
+
+  collectionEntries(
+    col: SnapshotCollection,
+    rows: SnapshotEntryRow[],
+  ): IncludedEntry[] {
+    const out: IncludedEntry[] = []
+    for (const row of rows) {
+      const version = approvedVersionOf(row, this.now)
+      const { due, data, slug } = version
+      if (!due && row.status === 'scheduled' && !data) continue
+      if (!slug) {
+        this.errors.push(`${col.key}/${row.id}: missing approved slug`)
+        continue
       }
-      const placed = placeLinkTarget(
-        { ...row, data: row.draftData },
-        languages,
-        locale,
+      if (due && !row.scheduledVersion) {
+        this.errors.push(`${col.key}/${row.id}: missing scheduled version`)
+        continue
+      }
+      if (data == null) {
+        this.errors.push(`${col.key}/${row.slug}: missing published data`)
+        continue
+      }
+      const checked = this.checked(col, data, `${col.key}/${row.slug}`)
+      if (!checked) continue
+      if (due)
+        this.entryVersions.push({
+          entryId: row.id,
+          scheduledVersion: row.scheduledVersion!,
+        })
+      out.push({
+        id: row.id,
+        slug,
+        collectionKey: col.key,
+        routePattern: col.routePattern,
+        localizedRoutes: col.localizedRoutes,
+        fields: col.fields,
+        data: checked,
+        publishedAt: version.publishedAt,
+      })
+    }
+    return out
+  }
+
+  /**
+   * A site content section: one `$global` entry. A section with no ready data
+   * blocks go live only when it has required fields; otherwise it ships `{}`.
+   */
+  section(
+    section: SnapshotSection,
+    row: SnapshotEntryRow | undefined,
+    options: SnapshotOptions,
+  ): IncludedEntry | null {
+    if (!row) {
+      this.errors.push(`Site content "${section.label}": entry is missing`)
+      return null
+    }
+    const version = approvedVersionOf(row, this.now)
+    const data = row.status === 'draft' ? null : version.data
+    if (data == null) {
+      if (section.fields.some((field) => field.required)) {
+        if (!options.allowNeverReadySections) {
+          this.errors.push(
+            `Site content "${section.label}" has required fields and has never been marked ready.`,
+          )
+        }
+      } else {
+        this.unreadySections.set(section.key, row.id)
+      }
+      return null
+    }
+    if (version.due) {
+      if (!row.scheduledVersion) {
+        this.errors.push(`${section.key}: missing scheduled version`)
+        return null
+      }
+      this.entryVersions.push({
+        entryId: row.id,
+        scheduledVersion: row.scheduledVersion,
+      })
+    }
+    const checked = this.checked(
+      section,
+      data,
+      `Site content "${section.label}"`,
+    )
+    if (!checked) return null
+    return {
+      id: row.id,
+      collectionKey: section.key,
+      routePattern: '',
+      fields: section.fields,
+      data: checked,
+      slug: GLOBAL_ENTRY_SLUG,
+      publishedAt: version.publishedAt,
+    }
+  }
+
+  /**
+   * `data` validated against `def` and, on a language site, normalized. Null
+   * when it is invalid. Missing translations are reported but keep the item.
+   */
+  private checked(
+    def: { fields: Field[]; requiredLanguages: string[] },
+    data: EntryData,
+    label: string,
+  ): EntryData | null {
+    const parsed = validateEntryData(def.fields, data)
+    if (!parsed.ok) {
+      for (const err of parsed.errors) {
+        this.errors.push(
+          `${label}: ${err.path ? `${err.path}: ` : ''}${err.message}`,
+        )
+      }
+      return null
+    }
+    const { languages } = this
+    if (!languages) return parsed.data
+    const normalized = normalizeBase(
+      parsed.data,
+      localeCtxFor(languages, def.fields),
+    )
+    const gaps = languageBlockers({
+      data: normalized,
+      fields: def.fields,
+      languages,
+      requiredLanguages: def.requiredLanguages,
+    })
+    if (gaps.length > 0) {
+      this.errors.push(`${label}: ${formatLanguageBlockers(gaps)}`)
+    }
+    return normalized
+  }
+}
+
+/** Two entries of a collection with one slug, or two pages on one URL. */
+function routeErrors(included: IncludedEntry[], productionUrl: string) {
+  const errors: string[] = []
+  const slugsByCollection = new Map<string, Set<string>>()
+  for (const item of included) {
+    let slugs = slugsByCollection.get(item.collectionKey)
+    if (!slugs) {
+      slugs = new Set()
+      slugsByCollection.set(item.collectionKey, slugs)
+    }
+    if (slugs.has(item.slug)) {
+      errors.push(`${item.collectionKey}: duplicate slug "${item.slug}"`)
+    }
+    slugs.add(item.slug)
+  }
+
+  const entriesByUrl = new Map<string, IncludedEntry>()
+  for (const item of included) {
+    const url = entryPublicUrl(productionUrl, item.routePattern, item.slug)
+    if (!url) continue
+    const owner = entriesByUrl.get(url)
+    if (owner) {
+      errors.push(
+        `Route collision: two pages use the same URL ${url}: "${owner.collectionKey}/${owner.slug}" and "${item.collectionKey}/${item.slug}". Change a page slug or content type route before publishing.`,
       )
-      return {
-        href: entryLinkPath(placed.route, placed.slug, target.anchor),
-        targetTitle: entryTitle(placed.view, row.fields, placed.slug),
-        locale: placed.language,
-      }
-    },
-    report() {},
+    }
+    entriesByUrl.set(url, item)
   }
-}
-
-/** The entries a draft's entry links point at, in any language slot. */
-async function draftLinkTargets(
-  siteId: string,
-  fields: Field[],
-  draft: EntryData,
-): Promise<Map<string, LinkTargetRow>> {
-  const ids = new Set<string>()
-  await mapRichTextValues(draft, fields, (json) => {
-    for (const target of entryLinkTargets(json)) ids.add(target.entryId)
-    return json
-  })
-  return loadLinkTargets(db, await linkTargetSiteIds(db, siteId), ids)
+  return errors
 }
 
 /**
- * Draft preview of an entry. `locales` has the snapshot shape (shipped
- * languages only); `localeStatus` lists every site language.
+ * The assets and entry link targets any language view uses, each read in one
+ * batch. Link targets outside the release are read too, to tell a draft from
+ * an entry that does not exist.
  */
-export type PreviewEntry = Omit<SnapshotEntry, 'locales'> & {
-  isFallback?: boolean
-  locales?: Record<
-    string,
-    { slug: string; data: Record<string, unknown>; seo?: SeoMeta }
-  >
-  localeStatus?: Record<string, PreviewLocaleStatus>
-}
-
-/** Draft preview of a site content section. Same rules as `PreviewEntry`. */
-export type PreviewGlobal = Omit<SnapshotGlobal, 'locales'> & {
-  isFallback?: boolean
-  locales?: Record<string, { data: Record<string, unknown>; seo?: SeoMeta }>
-  localeStatus?: Record<string, PreviewLocaleStatus>
-}
-
-function previewLocaleStatus(
-  data: EntryData,
-  languages: SiteLanguages,
-  fields: Field[],
-): Record<string, PreviewLocaleStatus> {
-  const ctx = localeCtxFor(languages, fields)
-  return Object.fromEntries(
-    languages.all.map((locale) => {
-      const status = localeStatus(data, locale, ctx)
-      return [locale, { complete: status.complete, missing: status.missing }]
-    }),
-  )
-}
-
-type PreviewSite = typeof site.$inferSelect
-type PreviewCollection = NonNullable<Awaited<ReturnType<typeof getCollection>>>
-type PreviewGlobalRow = NonNullable<
-  Awaited<ReturnType<typeof getGlobalEntry>>
->['global']
-
-/**
- * Draft preview of one section (`data` is the draft, not the ready version).
- * `locale` picks the language, with the snapshot's fallback chain.
- */
-export async function buildPreviewGlobal(
-  siteId: string,
-  key: string,
-  locale?: string | null,
-): Promise<PreviewGlobal | null> {
-  const found = await getGlobalEntry(siteId, key)
-  const existingSite = (
-    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
-  ).at(0)
-  if (!found || !existingSite) return null
-  return buildPreviewGlobalFromDraft({
-    site: existingSite,
-    global: found.global,
-    entryRow: found.entry,
-    draftData: found.entry.draftData,
-    locale,
-  })
-}
-
-/**
- * `buildPreviewGlobal` for a draft the caller supplies (the live preview's
- * unsaved values). Reads nothing and writes nothing; `entryRow` only supplies
- * the section entry's id and publish date. Null when the section is disabled.
- */
-export async function buildPreviewGlobalFromDraft(input: {
-  site: PreviewSite
-  global: PreviewGlobalRow
-  entryRow: { id: string; publishedAt: Date | null }
-  draftData: EntryData
-  locale?: string | null
-}): Promise<PreviewGlobal | null> {
-  const { global, draftData, locale } = input
-  const existingSite = input.site
-  const row = input.entryRow
-  if (!global.enabled) return null
-  const languages = existingSite.languages ?? null
-  const links = draftLinkResolver(
-    await draftLinkTargets(existingSite.id, global.fields, draftData),
-    languages,
-  )
-
-  const expanded = await expandAcrossLanguages(
-    languages,
-    global.fields,
-    draftData,
-    async (view, loc) => {
-      const data = await convertFields(global.fields, view, {
-        includedById: new Map(),
-        siteId: existingSite.id,
-        organizationId: existingSite.organizationId,
-        strict: false,
-        locale: loc ?? undefined,
-        links,
-      })
-      const seo = global.seoEnabled
-        ? buildEntrySeo({
-            fields: global.fields,
-            data: view,
-            converted: data,
-            slug: GLOBAL_ENTRY_SLUG,
-            routePattern: '',
-            url: globalPublicUrl(
-              existingSite.productionUrl,
-              global.previewPath,
-            ),
-            title: global.label,
-            site: existingSite,
-            ogImage: await resolveOgImageValue(
-              view,
-              existingSite.organizationId,
-            ),
-            publishedAt: row.publishedAt,
-          })
-        : undefined
-      return { data, ...(seo ? { seo } : {}) }
-    },
-    locale ?? null,
-  )
-
-  return {
-    id: row.id,
-    publishedAt: row.publishedAt?.toISOString() ?? null,
-    data: expanded.top.data,
-    ...(expanded.top.seo ? { seo: expanded.top.seo } : {}),
-    ...localeFields(expanded),
-    ...previewLanguageFields(expanded, languages, global.fields, draftData),
-  }
-}
-
-/**
- * Draft preview of one entry. `locale` picks the language, with the snapshot's
- * fallback chain; without it the main language is returned.
- */
-export async function buildPreviewEntry(
-  siteId: string,
-  collectionKey: string,
-  slug: string,
-  locale?: string | null,
-): Promise<PreviewEntry | null> {
-  const col = await getCollection(siteId, collectionKey)
-  const existingSite = (
-    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
-  ).at(0)
-  if (!col || !existingSite) return null
-
-  const row = (
-    await db
-      .select()
-      .from(entry)
-      .where(and(eq(entry.collectionId, col.id), eq(entry.slug, slug)))
-      .limit(1)
-  ).at(0)
-  if (!row) return null
-  return buildPreviewEntryFromDraft({
-    site: existingSite,
-    collection: col,
-    entryRow: row,
-    draftData: row.draftData,
-    locale,
-  })
-}
-
-/**
- * `buildPreviewEntry` for a draft the caller supplies (the live preview's
- * unsaved values). Reads nothing and writes nothing. `entryRow` gives the
- * entry's id, the slug to show (the caller decides it, e.g. an unsaved slug)
- * and its publish date.
- */
-export async function buildPreviewEntryFromDraft(input: {
-  site: PreviewSite
-  collection: PreviewCollection
-  entryRow: { id: string; slug: string; publishedAt: Date | null }
-  draftData: EntryData
-  locale?: string | null
-}): Promise<PreviewEntry> {
-  const { collection: col, draftData, locale } = input
-  const existingSite = input.site
-  const row = input.entryRow
-  const languages = existingSite.languages ?? null
-  const links = draftLinkResolver(
-    await draftLinkTargets(existingSite.id, col.fields, draftData),
-    languages,
-  )
-
-  const expanded = await expandAcrossLanguages(
-    languages,
-    col.fields,
-    draftData,
-    async (view, loc) => {
-      const isTranslation = Boolean(languages && loc && loc !== languages.main)
-      const localSlug = isTranslation ? view[SLUG_KEY] : undefined
-      const entrySlug =
-        typeof localSlug === 'string' && localSlug !== '' ? localSlug : row.slug
-      const shown: EntryData = { ...view }
-      const slugField = col.fields.find((field) => field.type === 'slug')
-      if (isTranslation && slugField) shown[slugField.key] = entrySlug
-      const data = await convertFields(col.fields, shown, {
-        includedById: new Map(),
-        siteId: existingSite.id,
-        organizationId: existingSite.organizationId,
-        strict: false,
-        locale: loc ?? undefined,
-        links,
-      })
-      const ogImageId = readEntrySeo(shown).ogImage
-      const ogImage: ImageValue | null = ogImageId
-        ? ((await resolveAssetValue(
-            ogImageId,
-            existingSite.organizationId,
-            db,
-            loc,
-          )) ?? null)
-        : null
-      const routePattern =
-        (isTranslation ? col.localizedRoutes?.[loc!] : undefined) ??
-        col.routePattern
-      return {
-        slug: entrySlug,
-        data,
-        seo: buildEntrySeo({
-          fields: col.fields,
-          data: shown,
-          converted: data,
-          slug: entrySlug,
-          routePattern,
-          site: existingSite,
-          ogImage,
-          publishedAt: row.publishedAt,
-        }),
-      }
-    },
-    locale ?? null,
-  )
-
-  return {
-    id: row.id,
-    slug: expanded.top.slug,
-    publishedAt: row.publishedAt?.toISOString() ?? null,
-    data: expanded.top.data,
-    seo: expanded.top.seo,
-    ...localeFields(expanded),
-    ...previewLanguageFields(expanded, languages, col.fields, draftData),
-  }
-}
-
-/** `isFallback` and `localeStatus` for a language site; nothing otherwise. */
-function previewLanguageFields(
-  expanded: { locale?: string; isFallback?: boolean },
+async function loadReleaseLookups(
+  connection: DbReader,
+  site: SiteCore,
+  everything: IncludedEntry[],
   languages: SiteLanguages | null,
-  fields: Field[],
-  draft: EntryData,
-): {
-  isFallback?: boolean
-  localeStatus?: Record<string, PreviewLocaleStatus>
-} {
-  if (!languages || expanded.locale === undefined) return {}
-  return {
-    isFallback: expanded.isFallback ?? false,
-    localeStatus: previewLocaleStatus(draft, languages, fields),
+): Promise<{ assets: AssetLookup; linkTargets: Map<string, LinkTargetRow> }> {
+  const assetRefs: AssetRefs = { ids: new Set(), storageKeys: new Set() }
+  const linkTargetIds = new Set<string>()
+  for (const item of everything) {
+    const views = languageViews(languages, item.fields, item.data)
+    collectAssetRefs(item.fields, views, assetRefs)
+    for (const view of views) {
+      for (const field of item.fields) {
+        if (field.type !== 'richtext') continue
+        for (const target of entryLinkTargets(view[field.key])) {
+          linkTargetIds.add(target.entryId)
+        }
+      }
+    }
   }
+  const assets = await loadAssetLookup(
+    site.organizationId,
+    assetRefs,
+    connection,
+  )
+  const linkTargets = await loadLinkTargets(
+    connection,
+    await linkTargetSiteIds(connection, site.id),
+    linkTargetIds,
+  )
+  return { assets, linkTargets }
 }
 
 /**
- * Runs `expand` once per shipped language and picks the top-level value: the
- * main language when it ships, else the first shipped language in site order
- * (the fallback chain). Single-language sites expand the base only.
+ * References and assets every language view must resolve: a translation may
+ * point at an asset or entry the snapshot does not have.
  */
-async function expandAcrossLanguages<T>(
+function contentErrors(
+  everything: IncludedEntry[],
+  includedById: Map<string, IncludedEntry>,
+  assets: AssetLookup,
   languages: SiteLanguages | null,
-  fields: Field[],
-  data: EntryData,
-  expand: (view: EntryData, locale: string | null) => Promise<T>,
-  requested: string | null = null,
-): Promise<{
-  top: T
-  locale?: string
-  locales?: Record<string, T>
-  isFallback?: boolean
-}> {
-  if (!languages) return { top: await expand(data, null) }
-  const ctx = localeCtxFor(languages, fields)
-  const shipped = shippedLocales(data, ctx)
-  const resolved = resolveChain(requested, shipped, ctx)
-  const top = resolved?.locale ?? ctx.main
-  const locales: Record<string, T> = {}
-  for (const locale of shipped) {
-    locales[locale] = await expand(readLocale(data, locale, ctx), locale)
+) {
+  const errors: string[] = []
+  for (const item of everything) {
+    const label = `${item.collectionKey}/${item.slug}`
+    for (const view of languageViews(languages, item.fields, item.data)) {
+      for (const field of item.fields) {
+        if (field.type !== 'reference') continue
+        const value = view[field.key]
+        if (value == null || value === '') continue
+        if (typeof value !== 'string') {
+          errors.push(`${label}: ${field.key}: expected an entry id`)
+          continue
+        }
+        const target = includedById.get(value)
+        if (!target) {
+          errors.push(
+            `${label}: ${field.key}: referenced entry is not in the snapshot`,
+          )
+          continue
+        }
+        if (field.collection && target.collectionKey !== field.collection) {
+          errors.push(
+            `${label}: ${field.key}: referenced entry is not in "${field.collection}"`,
+          )
+        }
+      }
+
+      for (const field of item.fields) {
+        if (
+          field.type === 'richtext' &&
+          !richTextAssetsAuthorizedFrom(view[field.key], assets)
+        ) {
+          errors.push(
+            `${label}: ${field.key}: embedded asset not found in this organization`,
+          )
+        }
+        if (field.type !== 'image') continue
+        const value = view[field.key]
+        if (value == null || value === '') continue
+        if (typeof value !== 'string') {
+          errors.push(`${label}: ${field.key}: expected an asset id`)
+          continue
+        }
+        if (!resolveAssetFromLookup(assets, value)) {
+          errors.push(`${label}: ${field.key}: asset not found`)
+        }
+      }
+    }
   }
-  const topValue =
-    locales[top] ?? (await expand(readLocale(data, top, ctx), top))
-  const isFallback =
-    resolved?.isFallback ?? (requested != null && requested !== ctx.main)
-  return { top: topValue, locale: top, locales, isFallback }
+  return errors
 }
 
-/** `locale` and `locales` for a language site; nothing on a single-language one. */
-function localeFields<T>(expanded: {
-  locale?: string
-  locales?: Record<string, T>
-}): { locale?: string; locales?: Record<string, T> } {
-  return expanded.locale === undefined
-    ? {}
-    : { locale: expanded.locale, locales: expanded.locales }
+/** Every enabled collection by key, its entries newest first. */
+function expandCollections(
+  ctx: ExpandContext,
+  enabled: SnapshotCollection[],
+  included: IncludedEntry[],
+): Record<string, SnapshotEntry[]> {
+  const collections: Record<string, SnapshotEntry[]> = {}
+  for (const key of enabled.map((col) => col.key).sort()) {
+    collections[key] = included
+      .filter((item) => item.collectionKey === key)
+      .sort(compareSnapshotEntries)
+      .map((item) => {
+        const expanded = expandAcrossLanguages(
+          ctx.languages,
+          item.fields,
+          item.data,
+          (view, locale) => expandEntryView(ctx, item, view, locale),
+        )
+        return {
+          id: item.id,
+          slug: expanded.top.slug,
+          publishedAt: item.publishedAt?.toISOString() ?? null,
+          data: expanded.top.data,
+          seo: expanded.top.seo,
+          ...localeFields(expanded),
+        }
+      })
+  }
+  return collections
+}
+
+/** Every enabled section with an entry, and the schema the snapshot embeds for it. */
+function expandGlobals(
+  ctx: ExpandContext,
+  sections: SnapshotSection[],
+  sectionItems: Map<string, IncludedEntry>,
+  unreadySections: Map<string, string>,
+) {
+  const { languages } = ctx
+  const globals: Record<string, SnapshotGlobal> = {}
+  const globalSchema: Record<string, GlobalConfig> = {}
+  for (const section of sections) {
+    const item = sectionItems.get(section.key)
+    const id = item?.id ?? unreadySections.get(section.key)
+    if (!id) continue
+    // A section with no ready data ships `{}` in the site's base language.
+    const expanded = item
+      ? expandAcrossLanguages(
+          languages,
+          section.fields,
+          item.data,
+          (view, locale) => expandSectionView(ctx, section, item, view, locale),
+        )
+      : { top: expandSectionView(ctx, section, null, {}, null) }
+    globals[section.key] = {
+      id,
+      publishedAt: item?.publishedAt?.toISOString() ?? null,
+      data: expanded.top.data,
+      ...(expanded.top.seo ? { seo: expanded.top.seo } : {}),
+      ...localeFields(expanded),
+    }
+    globalSchema[section.key] = {
+      label: section.label,
+      fields: structuredClone(section.fields),
+      seo: section.seoEnabled,
+      ...(section.previewPath ? { previewPath: section.previewPath } : {}),
+      ...(languages && section.requiredLanguages.length > 0
+        ? { requiredLanguages: [...section.requiredLanguages] }
+        : {}),
+    }
+  }
+  return { globals, globalSchema }
 }
 
 function compareSnapshotEntries(a: IncludedEntry, b: IncludedEntry) {
@@ -1162,179 +662,6 @@ function compareSnapshotEntries(a: IncludedEntry, b: IncludedEntry) {
   return a.slug.localeCompare(b.slug)
 }
 
-async function convertFields(
-  fields: Field[],
-  data: EntryData,
-  options: {
-    includedById: Map<string, IncludedEntry>
-    siteId: string
-    connection?: Pick<typeof db, 'select'>
-    /** Preloaded assets (snapshot builds); otherwise each asset is queried. */
-    assets?: AssetLookup
-    organizationId: string
-    strict: boolean
-    /** Language of the view: image alt text follows it. */
-    locale?: string
-    /** Entry links in rich text resolve through this. Absent: links are kept as stored. */
-    links?: LinkResolver
-  },
-): Promise<Record<string, unknown>> {
-  const out: Record<string, unknown> = withoutSeo(
-    pickDeclaredFields(fields, data),
-  )
-
-  for (const field of fields) {
-    const value = data[field.key]
-    if (field.type === 'richtext') {
-      const authorized = options.assets
-        ? richTextAssetsAuthorizedFrom(value, options.assets)
-        : await richTextAssetsAuthorized(
-            value,
-            options.organizationId,
-            options.connection,
-          )
-      if (!authorized) {
-        if (options.strict)
-          throw new ValidationError([
-            {
-              path: field.key,
-              message: 'Embedded asset not found in this organization',
-            },
-          ])
-        out[field.key] = null
-        continue
-      }
-      if (value == null || value === '') {
-        out[field.key] = value
-        continue
-      }
-      // Entry links take the path of their target in this language. A link
-      // that cannot work becomes plain text (see resolveEntryLinks).
-      let source = value
-      if (options.links) {
-        const linked = await resolveEntryLinks(value, (target) =>
-          options.links!.resolve(target, options.locale ?? null),
-        )
-        options.links.report(field.key, options.locale ?? null, linked.issues)
-        source = linked.json
-      }
-      try {
-        if (options.strict || validateRichText(source).length === 0) {
-          out[field.key] = convertRichText(source)
-        }
-      } catch {
-        // best-effort preview keeps the original value
-      }
-      continue
-    }
-
-    if (field.type === 'image') {
-      if (typeof value !== 'string' || value.length === 0) {
-        out[field.key] = value ?? null
-        continue
-      }
-      const resolved = options.assets
-        ? resolveAssetFromLookup(options.assets, value, options.locale)
-        : await resolveAssetValue(
-            value,
-            options.organizationId,
-            options.connection,
-            options.locale,
-          )
-      if (resolved) {
-        out[field.key] = resolved
-      } else if (options.strict) {
-        throw new ValidationError([
-          { path: field.key, message: `asset not found: ${value}` },
-        ])
-      } else {
-        out[field.key] = null
-      }
-      continue
-    }
-
-    if (field.type === 'reference') {
-      if (typeof value !== 'string' || value.length === 0) {
-        out[field.key] = value ?? null
-        continue
-      }
-      const target = options.includedById.get(value)
-      if (target) {
-        const ref: ReferenceValue = {
-          collection: target.collectionKey,
-          slug: target.slug,
-          id: target.row.id,
-        }
-        out[field.key] = ref
-        continue
-      }
-      out[field.key] = null
-      if (!options.strict && field.collection) {
-        const refRow = (
-          await db
-            .select({
-              id: entry.id,
-              slug: entry.slug,
-              collectionKey: collection.key,
-            })
-            .from(entry)
-            .innerJoin(collection, eq(entry.collectionId, collection.id))
-            .where(
-              and(
-                eq(entry.id, value),
-                eq(entry.siteId, options.siteId),
-                ...(field.collection
-                  ? [eq(collection.key, field.collection)]
-                  : []),
-              ),
-            )
-            .limit(1)
-        ).at(0)
-        if (refRow) {
-          out[field.key] = {
-            collection: refRow.collectionKey,
-            slug: refRow.slug,
-            id: refRow.id,
-          } satisfies ReferenceValue
-        }
-      }
-    }
-  }
-
-  return out
-}
-
 function hashContent(value: unknown) {
-  return createHash('sha256')
-    .update(JSON.stringify(sortValue(value)))
-    .digest('hex')
-}
-
-function resolveOgImage(
-  data: EntryData,
-  assets: AssetLookup,
-): ImageValue | null {
-  const id = readEntrySeo(data).ogImage
-  return id ? resolveAssetFromLookup(assets, id) : null
-}
-
-async function resolveOgImageValue(
-  data: EntryData,
-  organizationId: string,
-): Promise<ImageValue | null> {
-  const id = readEntrySeo(data).ogImage
-  return id ? await resolveAssetValue(id, organizationId) : null
-}
-
-function sortValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortValue)
-  if (value && typeof value === 'object') {
-    const obj = value as Record<string, unknown>
-    const out: Record<string, unknown> = {}
-    for (const key of Object.keys(obj).sort()) {
-      out[key] = sortValue(obj[key])
-    }
-    return out
-  }
-  return value
+  return createHash('sha256').update(stableStringify(value)).digest('hex')
 }

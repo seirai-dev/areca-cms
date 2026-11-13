@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 
+import { queryKeys } from '#/lib/query-keys'
 import { useStepUp } from '#/features/security/step-up'
 import {
   createMcpKeyFn,
@@ -14,10 +15,6 @@ export type McpKeyInput = {
   allowGoLive: boolean
 }
 
-export function mcpKeysQueryKey(siteId: string) {
-  return ['connect-ai', 'keys', siteId] as const
-}
-
 /** The site's AI keys plus the mutations behind the Connect AI page. */
 export function useMcpKeys(siteId: string) {
   const queryClient = useQueryClient()
@@ -27,12 +24,12 @@ export function useMcpKeys(siteId: string) {
   const stepUp = useStepUp()
 
   const keys = useQuery({
-    queryKey: mcpKeysQueryKey(siteId),
+    queryKey: queryKeys.mcpKeys(siteId),
     queryFn: () => listKeys({ data: { siteId } }),
   })
 
   const refresh = () =>
-    queryClient.invalidateQueries({ queryKey: mcpKeysQueryKey(siteId) })
+    queryClient.invalidateQueries({ queryKey: queryKeys.mcpKeys(siteId) })
 
   // Agency admins may need a fresh second factor, so creation goes through
   // the step-up dialog (the same flow the other privileged screens use).

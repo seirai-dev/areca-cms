@@ -1,5 +1,5 @@
 import { I18N_KEY, LOCALE_KEY } from '#/lib/content-locale'
-import { SEO_KEY } from '#/lib/seo'
+import { SEO_KEY } from '#/lib/seo-key'
 import type { EntryData, Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 
@@ -64,6 +64,41 @@ export function shortId(id: string, length = 8) {
 
 export function assetFileUrl(storageKey: string) {
   return `/api/assets/file/${storageKey}`
+}
+
+/** Widths the file route resizes images to (`?w=`); others are refused. */
+export const THUMBNAIL_WIDTHS = [160, 320, 640, 1280] as const
+
+/**
+ * `src`, `srcSet` and `sizes` for an image shown `sizes` wide: the browser
+ * picks a resized copy instead of the original upload. Only copies narrower
+ * than the image are offered, plus the original at its real width: a `w`
+ * descriptor larger than the file would make the browser shrink its natural
+ * size (a 1 px upload listed as 640w reports a natural width of 0).
+ */
+export function assetThumbnail(
+  asset: { storageKey: string; width?: number | null },
+  sizes: string,
+) {
+  const url = assetFileUrl(asset.storageKey)
+  const { width } = asset
+  if (width == null) {
+    return {
+      src: `${url}?w=640`,
+      srcSet: THUMBNAIL_WIDTHS.map((w) => `${url}?w=${w} ${w}w`).join(', '),
+      sizes,
+    }
+  }
+  const smaller = THUMBNAIL_WIDTHS.filter((w) => w < width)
+  if (smaller.length === 0) return { src: url }
+  const largest = THUMBNAIL_WIDTHS[THUMBNAIL_WIDTHS.length - 1]
+  const candidates = smaller.map((w) => `${url}?w=${w} ${w}w`)
+  if (width <= largest) candidates.push(`${url} ${width}w`)
+  return {
+    src: width <= 640 ? url : `${url}?w=640`,
+    srcSet: candidates.join(', '),
+    sizes,
+  }
 }
 
 export function emptyRichText() {
@@ -149,18 +184,6 @@ export function fieldErrorsFromUnknown(error: unknown): {
     formError: fieldErrors[''] || undefined,
     fieldErrors,
   }
-}
-
-export function errorMessage(
-  error: unknown,
-  fallback = m.editor_something_went_wrong(),
-) {
-  if (error instanceof Error && error.message) return error.message
-  if (error && typeof error === 'object' && 'message' in error) {
-    const message = (error as { message?: unknown }).message
-    if (typeof message === 'string' && message) return message
-  }
-  return fallback
 }
 
 export function browserTimezone() {

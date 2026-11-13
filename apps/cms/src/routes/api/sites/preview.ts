@@ -1,17 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router'
 import '@tanstack/react-start'
-import { eq } from 'drizzle-orm'
 
-import { db } from '#/db'
-import { site } from '#/db/schema'
 import {
   buildPreviewEntry,
   buildPreviewGlobal,
-} from '#/server/content/snapshot'
+} from '#/server/content/snapshot-preview'
 import {
   decodePreviewToken,
   verifyPreviewToken,
 } from '#/server/content/preview-token'
+import { findSite } from '#/server/content/site-core'
 
 // Preview payloads are draft content behind a signed, expiring token: never let
 // a browser, proxy or CDN store any response from this route (401/404 included).
@@ -35,9 +33,7 @@ export async function getSitesPreview(request: Request) {
     return previewJson({ error: 'Unauthorized' }, 401)
   }
 
-  const found = (
-    await db.select().from(site).where(eq(site.id, decoded.siteId)).limit(1)
-  ).at(0)
+  const found = await findSite(decoded.siteId)
   if (!found) {
     return previewJson({ error: 'Unauthorized' }, 401)
   }

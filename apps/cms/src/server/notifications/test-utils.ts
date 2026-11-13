@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 /**
  * Seeds for notification DB tests. Users, organizations and sites are created
  * per test and removed with their owners, so parallel test files never share
@@ -29,17 +28,19 @@ export async function makeUser(
   } = {},
 ) {
   const id = crypto.randomUUID()
-  const [row] = await db
-    .insert(user)
-    .values({
-      id,
-      name: input.name ?? 'Notify Person',
-      email: `notify-${id}@test.local`,
-      emailVerified: input.verified ?? true,
-      isAgencyAdmin: input.agencyAdmin ?? false,
-      locale: input.locale ?? null,
-    })
-    .returning()
+  const row = (
+    await db
+      .insert(user)
+      .values({
+        id,
+        name: input.name ?? 'Notify Person',
+        email: `notify-${id}@test.local`,
+        emailVerified: input.verified ?? true,
+        isAgencyAdmin: input.agencyAdmin ?? false,
+        locale: input.locale ?? null,
+      })
+      .returning()
+  ).at(0)
   if (!row) throw new Error('Failed to create user')
   return row
 }
@@ -83,22 +84,24 @@ export async function insertPublication(input: {
     hash: randomBytes(8).toString('hex'),
     collections: entries.length ? { [collectionKey]: entries } : {},
   }
-  const [row] = await db
-    .insert(publication)
-    .values({
-      id,
-      siteId: input.siteId,
-      snapshot,
-      snapshotHash: snapshot.hash,
-      entryVersions: [],
-      requestedBy: input.requestedBy ?? null,
-      status: input.status ?? 'live',
-      origin: input.origin ?? 'manual',
-      scheduledBy: input.scheduledBy ?? [],
-      wasLive: (input.status ?? 'live') === 'live',
-      createdAt: input.createdAt ?? new Date(),
-    })
-    .returning()
+  const row = (
+    await db
+      .insert(publication)
+      .values({
+        id,
+        siteId: input.siteId,
+        snapshot,
+        snapshotHash: snapshot.hash,
+        entryVersions: [],
+        requestedBy: input.requestedBy ?? null,
+        status: input.status ?? 'live',
+        origin: input.origin ?? 'manual',
+        scheduledBy: input.scheduledBy ?? [],
+        wasLive: (input.status ?? 'live') === 'live',
+        createdAt: input.createdAt ?? new Date(),
+      })
+      .returning()
+  ).at(0)
   if (!row) throw new Error('Failed to create publication')
   return row
 }

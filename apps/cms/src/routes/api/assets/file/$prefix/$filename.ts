@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import '@tanstack/react-start'
 
 import { storageKeyFromRequest, streamAssetFile } from '#/server/assets'
+import { streamAssetThumbnail } from '#/server/assets/thumbnail'
 
 type FileParams = {
   prefix?: string
@@ -27,6 +28,14 @@ export async function GET({
     storageKeyFromRequest(request) ?? storageKeyFromParams(params)
   if (!storageKey) {
     return new Response('Not found', { status: 404 })
+  }
+  const width = new URL(request.url).searchParams.get('w')
+  if (width !== null) {
+    return streamAssetThumbnail(
+      storageKey,
+      width,
+      request.headers.get('accept'),
+    )
   }
   return streamAssetFile(storageKey)
 }

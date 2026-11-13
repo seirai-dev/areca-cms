@@ -4,6 +4,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { db } from '#/db'
 import { account, emailOutbox, session, user, verification } from '#/db/schema'
 import { auth } from '#/lib/auth'
+import { recordLocalMfaForToken } from '#/server/security/local-mfa'
 
 import { waitForMail } from './mailpit.test-utils.ts'
 
@@ -144,6 +145,13 @@ describe.skipIf(!hasDb)('account auth flows', () => {
       .update(user)
       .set({ twoFactorEnabled: true })
       .where(eq(user.id, person.id))
+    // As if the code had been entered in this session (turning two-factor on
+    // through verify-totp records this).
+    for (const row of await db
+      .select({ token: session.token })
+      .from(session)
+      .where(eq(session.userId, person.id)))
+      await recordLocalMfaForToken(row.token)
 
     const first = await auth.api.disableTwoFactor({
       body: { password: 'mfa-password-12345' },

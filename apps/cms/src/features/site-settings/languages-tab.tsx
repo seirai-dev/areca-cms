@@ -4,7 +4,7 @@ import { Plus, Trash, DotsSixVertical, Translate } from '@phosphor-icons/react'
 import { Reorder, useDragControls, useReducedMotion } from 'motion/react'
 import { toast } from 'sonner'
 
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { MAX_SITE_LANGUAGES } from '#/lib/content-limits'
 import {
   SITE_LANGUAGE_CATALOG,

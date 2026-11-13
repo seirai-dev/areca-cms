@@ -10,7 +10,8 @@ import {
   SEARCH_MAX_LENGTH,
 } from '#/lib/content-limits'
 
-import { canonicalLocale, localeTagSchema } from '#/lib/content-locale'
+import { canonicalLocale } from '#/lib/content-locale'
+import { localeTagSchema } from '#/lib/locale-tag-schema'
 import {
   requireOrgMember,
   requireOrgMemberOrNotFound,
@@ -158,6 +159,7 @@ export const updateAssetFn = createServerFn({ method: 'POST' })
       data.id,
       { altText: data.altText, locale, mainLocale },
       existing.organizationId,
+      { actorId: session.user.id, siteId: data.siteId ?? null },
     )
     return forCaller(row, await isAgencyAdminWithMfa(session))
   })
@@ -169,12 +171,14 @@ export const deleteAssetFn = createServerFn({ method: 'POST' })
     }),
   )
   .handler(async ({ data }) => {
-    await requireUser()
+    const session = await requireUser()
     const existing = await authorizedAsset(data.id, 'owner')
     if (!existing) {
       throw new NotFoundError(m.server_asset_not_found())
     }
-    await deleteAsset(data.id, existing.organizationId)
+    await deleteAsset(data.id, existing.organizationId, {
+      actorId: session.user.id,
+    })
     return { ok: true as const }
   })
 

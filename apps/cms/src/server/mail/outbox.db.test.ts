@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import type * as MailConfig from '#/server/mail/config'
 import type * as MailTransport from '#/server/mail/transport'
 
@@ -13,11 +12,11 @@ import { getBranding } from '#/server/admin/branding'
 import {
   cleanupOutbox,
   enqueueEmail,
-  listRecentEmails,
   processOutbox,
   sendNow,
   sendTestEmail,
 } from './outbox.ts'
+import { listRecentEmails } from './outbox-views.ts'
 
 // `override` undefined: the environment's SMTP (Mailpit). null: not configured.
 // An object: that host and port (port 1 refuses connections).
@@ -81,11 +80,9 @@ beforeEach(() => {
 })
 
 async function rowOf(id: string) {
-  const [row] = await db
-    .select()
-    .from(emailOutbox)
-    .where(eq(emailOutbox.id, id))
-    .limit(1)
+  const row = (
+    await db.select().from(emailOutbox).where(eq(emailOutbox.id, id)).limit(1)
+  ).at(0)
   if (!row) throw new Error(`outbox row ${id} missing`)
   return row
 }
@@ -173,6 +170,27 @@ describe.skipIf(!hasDb)('email outbox', () => {
       status: 'sent',
       attempts: 2,
     })
+  })
+
+  it('lets the worker send a new row at once when the app clock runs ahead of the database', async () => {
+    // The claim compares against the database clock, so the due time must
+    // come from it too. A Docker or remote Postgres can lag the app by a few ms.
+    vi.useFakeTimers({ now: Date.now() + 5_000, toFake: ['Date'] })
+    let id: string
+    try {
+      ;({ id } = await enqueueEmail({
+        kind: 'test',
+        template: 'test',
+        to: `skew-${crypto.randomUUID()}@areca.local`,
+        params: { host: 'mailpit', sentBy: 'admin@areca.local' },
+        locale: 'en',
+      }))
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(await processOutbox({ only: [id] })).toBe(1)
+    expect(await rowOf(id)).toMatchObject({ status: 'sent', attempts: 1 })
   })
 
   it('ignores the outcome of a sender whose lease was taken over mid-send', async () => {
@@ -390,15 +408,17 @@ describe.skipIf(!hasDb)('email outbox', () => {
   })
 
   it('records a test send with its final status and never retries it', async () => {
-    const [sender] = await db
-      .insert(user)
-      .values({
-        id: crypto.randomUUID(),
-        name: 'Mail admin',
-        email: `mail-admin-${crypto.randomUUID()}@test.local`,
-        emailVerified: true,
-      })
-      .returning()
+    const sender = (
+      await db
+        .insert(user)
+        .values({
+          id: crypto.randomUUID(),
+          name: 'Mail admin',
+          email: `mail-admin-${crypto.randomUUID()}@test.local`,
+          emailVerified: true,
+        })
+        .returning()
+    ).at(0)
     if (!sender) throw new Error('fixture failed')
     const to = `test-${crypto.randomUUID()}@areca.local`
     try {
@@ -453,6 +473,13 @@ describe.skipIf(!hasDb)('email outbox', () => {
         status: 'failed',
         attempts: 1,
       })
+
+      // Unsaved settings say nothing about live sending: no attempt records.
+      const attempts = await db
+        .select({ id: emailDeliveryAttempt.id })
+        .from(emailDeliveryAttempt)
+        .where(inArray(emailDeliveryAttempt.outboxId, [sent.id, failed.id]))
+      expect(attempts).toEqual([])
     } finally {
       await db.delete(user).where(inArray(user.id, [sender.id]))
     }

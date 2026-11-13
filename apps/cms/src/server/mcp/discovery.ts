@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .select() are checked defensively */
 import { eq } from 'drizzle-orm'
 import { DPOP_SIGNING_ALGORITHMS } from 'better-auth/oauth2'
 
@@ -123,7 +122,7 @@ async function resourceDocument(path: string): Promise<Response> {
   // so the document is served only at the URL the client derives from it.
   const exact =
     slug !== null && new URL(mcpResourceUrl(slug)).pathname === resourcePath
-  const [found] =
+  const found = (
     exact && slug
       ? await db
           .select({
@@ -135,6 +134,7 @@ async function resourceDocument(path: string): Promise<Response> {
           .where(eq(site.slug, slug))
           .limit(1)
       : []
+  ).at(0)
   if (!found) return notFound()
   const issuer = (await auth.api.getOAuthServerConfig()).issuer
   const devEnv = isDevSite(found)

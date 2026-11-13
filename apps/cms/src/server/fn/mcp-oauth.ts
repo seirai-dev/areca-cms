@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .select() are checked defensively */
 import { createServerFn } from '@tanstack/react-start'
 import { eq } from 'drizzle-orm'
 import { z } from '#/lib/zod'
@@ -6,7 +5,11 @@ import { z } from '#/lib/zod'
 import { db } from '#/db'
 import { mcpConnection } from '#/db/schema'
 import { ID_MAX_LENGTH } from '#/lib/content-limits'
-import { requireAgencyAdmin, requireUser } from '#/lib/session.server'
+import {
+  requireAgencyAdmin,
+  requireSignedIn,
+  requireUser,
+} from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { NotFoundError } from '#/server/content/errors'
 import {
@@ -76,7 +79,7 @@ export const approveAgencyOAuthConsentFn = createServerFn({
 export const denyOAuthConsentFn = createServerFn({ method: 'POST', ...loose })
   .validator(z.object({ query: queryField }))
   .handler(async ({ data }) => {
-    await requireUser()
+    await requireSignedIn()
     return denyConsentRequest(data.query)
   })
 
@@ -116,11 +119,13 @@ export const revokeMcpConnectionFn = createServerFn({
   .validator(z.object({ id: z.string().min(1).max(ID_MAX_LENGTH) }))
   .handler(async ({ data }) => {
     await requireUser()
-    const [connection] = await db
-      .select({ siteId: mcpConnection.siteId })
-      .from(mcpConnection)
-      .where(eq(mcpConnection.id, data.id))
-      .limit(1)
+    const connection = (
+      await db
+        .select({ siteId: mcpConnection.siteId })
+        .from(mcpConnection)
+        .where(eq(mcpConnection.id, data.id))
+        .limit(1)
+    ).at(0)
     // Agency connections have no site; they are revoked from the Agency page.
     if (!connection?.siteId)
       throw new NotFoundError(m.server_mcp_connection_not_found())

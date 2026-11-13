@@ -9,6 +9,7 @@
  */
 import { I18N_KEY, SLUG_KEY } from '#/lib/content-locale'
 import type { EntryData } from '#/lib/types'
+import { isPlainObject } from '#/lib/is-plain-object'
 
 /** An entry as far as its URLs go. */
 export type SlugOwner = {
@@ -29,10 +30,6 @@ export type SlugCollision = {
 }
 
 type Candidate = { locale?: string; slug: string }
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
 
 /** The localized slug an entry holds in one language, or undefined. */
 function localizedSlug(data: EntryData, locale: string): string | undefined {

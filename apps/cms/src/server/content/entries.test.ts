@@ -405,6 +405,93 @@ describe.skipIf(!hasDb)('revision history', () => {
     })
   })
 
+  it('counts autosaves in one audit row per person and entry', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+      const other = await makeUser({ name: 'Second Editor' })
+      try {
+        const created = await createEntry({
+          siteId: ctx.site.id,
+          collectionKey: 'articles',
+          data: {
+            title: 'Audited',
+            slug: `audited-${ctx.suffix}`,
+            body: sampleRichText,
+          },
+          actorId: ctx.actor.id,
+        })
+        let version = created.draftVersion
+        const save = async (
+          title: string,
+          actorId: string,
+          options: { explicit?: boolean } = {},
+        ) => {
+          const saved = await updateDraft(
+            created.id,
+            { ...created.draftData, title },
+            actorId,
+            version,
+            undefined,
+            options,
+          )
+          version = saved.draftVersion
+        }
+        const updates = () =>
+          db
+            .select()
+            .from(auditLog)
+            .where(
+              and(
+                eq(auditLog.targetId, created.id),
+                eq(auditLog.action, 'entry.update'),
+              ),
+            )
+            .orderBy(auditLog.createdAt)
+
+        await save('One', ctx.actor.id)
+        const [started] = await updates()
+        await save('Two', ctx.actor.id)
+        await save('Three', ctx.actor.id)
+        const first = await updates()
+        expect(first).toHaveLength(1)
+        expect(first[0]?.actorId).toBe(ctx.actor.id)
+        expect(first[0]?.meta).toMatchObject({ saves: 3 })
+        expect(typeof first[0]?.meta?.firstSavedAt).toBe('string')
+        // The row stays where its first save put it, so the log's order and
+        // its offset pages do not shift; the newest save is in the meta.
+        expect(first[0]?.createdAt).toEqual(started.createdAt)
+        const lastSaved = first[0]?.meta?.lastSavedAt
+        expect(typeof lastSaved).toBe('string')
+        expect(new Date(String(lastSaved)).getTime()).toBeGreaterThanOrEqual(
+          started.createdAt.getTime(),
+        )
+
+        // An explicit save, another person and a save after the window each
+        // start their own row.
+        await save('Explicit', ctx.actor.id, { explicit: true })
+        await save('After explicit', ctx.actor.id)
+        await save('Theirs', other.id)
+        const rows = await updates()
+        expect(rows.map((row) => row.meta?.saves ?? null)).toEqual([
+          3,
+          null,
+          1,
+          1,
+        ])
+
+        const theirs = rows.at(-1)!
+        await db
+          .update(auditLog)
+          .set({ createdAt: new Date(Date.now() - 16 * 60 * 1000) })
+          .where(eq(auditLog.id, theirs.id))
+        await save('Late', other.id)
+        expect(await updates()).toHaveLength(5)
+      } finally {
+        await removeUsers([other.id])
+      }
+    })
+  })
+
   it('pages the history newest first, without revision data', async () => {
     await withTestSite(async (ctx) => {
       await createTestCollection(ctx.site.id)

@@ -26,7 +26,7 @@ Library files are served from a URL that needs no sign-in. Anyone who has the UR
 
 </Callout>
 
-- **Social and single sign-on skip the sign-in authenticator prompt.** Signing in with GitHub, Google, Discord, or Microsoft does not ask for a code at sign-in. When `ADMIN_MFA_REQUIRED` is on, agency admins still need two-factor enabled and must verify a local TOTP or backup code in that session before using admin functions.
+- **Social and single sign-on still ask for the authenticator code.** After signing in with GitHub, Google, Discord, or Microsoft, anyone with two-factor on enters a code before using the CMS. A provider links to an existing account only when that account's email address is verified. When `ADMIN_MFA_REQUIRED` is on, agency admins also need two-factor enabled.
 - **Your instance, your keys.** You generate and keep the secrets that protect sessions and stored keys. Losing an encryption key means re-entering the keys it protected. See [secrets and encryption](/docs/security/secrets).
 - **Backups are your responsibility.** Areca does not schedule backups. A backup contains the encrypted keys and the database, so protect it as you would the live system. See [backup and recovery](/docs/self-hosting/backup-and-recovery).
 - **Rate limits use Redis when available.** If Redis is unavailable, request limits continue with the same budgets in memory on each CMS instance, but counters are no longer shared across instances. Sign-in and two-factor limits are also kept in memory per instance. See [rate limits](/docs/security/rate-limits#redis-outages) for details.

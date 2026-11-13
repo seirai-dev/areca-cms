@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -17,8 +16,8 @@ import { hashToken } from '#/server/security/token-hash'
 import { writeRule } from './preferences.ts'
 import {
   notifyInviteAccepted,
-  notifyPublicationFailed,
-  notifyPublicationLive,
+  deliverPublicationFailed,
+  deliverPublicationLive,
   deliverScheduleFailed,
   scheduleFailedSubject,
 } from './triggers.ts'
@@ -67,11 +66,11 @@ async function setup() {
 }
 
 async function rowFor(event: EventKey, subjectId: string, userId: string) {
-  const [row] = await db
+  const rows = await db
     .select()
     .from(notification)
     .where(eq(notification.dedupeKey, `${event}:${subjectId}:${userId}`))
-  return row
+  return rows.at(0)
 }
 
 async function setOrgRule(
@@ -109,7 +108,7 @@ describe('publication went live', () => {
       entries: [{ slug: 'hello', title: 'Hello world' }],
     })
 
-    await notifyPublicationLive(pub.id)
+    await deliverPublicationLive(pub.id)
 
     const row = await rowFor('release.live', pub.id, requester.id)
     expect(row?.payload).toMatchObject({
@@ -132,7 +131,7 @@ describe('publication went live', () => {
       requestedBy: requester.id,
     })
 
-    await notifyPublicationLive(pub.id)
+    await deliverPublicationLive(pub.id)
 
     expect(
       await rowFor('release.live.others', pub.id, ownerTwo.id),
@@ -151,7 +150,7 @@ describe('publication went live', () => {
       scheduledBy: [editor.id],
     })
 
-    await notifyPublicationLive(pub.id)
+    await deliverPublicationLive(pub.id)
 
     expect(await rowFor('schedule.published', pub.id, editor.id)).toBeDefined()
     expect(await rowFor('release.live', pub.id, requester.id)).toBeUndefined()
@@ -165,7 +164,7 @@ describe('publication went live', () => {
       requestedBy: requester.id,
     })
 
-    await notifyPublicationLive(pub.id)
+    await deliverPublicationLive(pub.id)
     expect(await rowFor('rollback.live', pub.id, ownerTwo.id)).toBeUndefined()
     expect(await rowFor('release.live', pub.id, requester.id)).toBeDefined()
 
@@ -175,7 +174,7 @@ describe('publication went live', () => {
       origin: 'rollback',
       requestedBy: requester.id,
     })
-    await notifyPublicationLive(second.id)
+    await deliverPublicationLive(second.id)
     expect(await rowFor('rollback.live', second.id, ownerTwo.id)).toBeDefined()
     // The requester hears once, through release.live.
     expect(
@@ -191,7 +190,7 @@ describe('publication went live', () => {
       requestedBy: requester.id,
     })
 
-    await notifyPublicationLive(pub.id)
+    await deliverPublicationLive(pub.id)
 
     expect(await rowFor('release.live', pub.id, requester.id)).toBeUndefined()
   })
@@ -206,14 +205,14 @@ describe('publication failed or stuck', () => {
       requestedBy: requester.id,
     })
 
-    await notifyPublicationFailed(pub.id, { stuck: false })
+    await deliverPublicationFailed(pub.id, { stuck: false })
 
     expect(await rowFor('release.failed', pub.id, requester.id)).toBeDefined()
     expect(await rowFor('release.failed', pub.id, ownerTwo.id)).toBeDefined()
     // An editor who did not request the release is not told.
     expect(await rowFor('release.failed', pub.id, editor.id)).toBeUndefined()
 
-    await notifyPublicationFailed(pub.id, { stuck: true })
+    await deliverPublicationFailed(pub.id, { stuck: true })
     expect(await rowFor('release.stuck', pub.id, requester.id)).toBeDefined()
     expect(await rowFor('release.stuck', pub.id, ownerTwo.id)).toBeDefined()
   })
@@ -230,8 +229,8 @@ describe('publication failed or stuck', () => {
       requestedBy: requester.id,
     })
 
-    await notifyPublicationFailed(pub.id, { stuck: false })
-    await notifyPublicationFailed(pub.id, { stuck: false })
+    await deliverPublicationFailed(pub.id, { stuck: false })
+    await deliverPublicationFailed(pub.id, { stuck: false })
 
     const alert = await rowFor('agency.release.failed', pub.id, agencyAdmin.id)
     expect(alert).toMatchObject({
@@ -323,6 +322,23 @@ describe('invitation accepted', () => {
     expect(row?.payload).toMatchObject({ recipientRole: 'agency' })
   })
 
+  it('tells an agency admin who is also a member under their membership role', async () => {
+    const { org } = await setup()
+    const memberAdmin = await makeUser({
+      name: 'Mia Member',
+      agencyAdmin: true,
+    })
+    const invitee = await makeUser({ name: 'Ivo Invitee' })
+    cleanups.push(() => removeUsers([memberAdmin.id, invitee.id]))
+    await addMember(memberAdmin.id, org.id, 'owner')
+    const invite = await createInvitation(org.id, memberAdmin.id)
+
+    await notifyInviteAccepted(invite.id, invitee.id)
+
+    const row = await rowFor('invite.accepted', invite.id, memberAdmin.id)
+    expect(row?.payload).toMatchObject({ recipientRole: 'owner' })
+  })
+
   it('does nothing when the invitation has no recorded sender', async () => {
     const { org } = await setup()
     const invitee = await makeUser({ name: 'Otto Orphan' })
@@ -348,10 +364,10 @@ describe('invitation accepted', () => {
 describe('never fails the caller', () => {
   it('resolves for publications and invitations that do not exist', async () => {
     await expect(
-      notifyPublicationLive(crypto.randomUUID()),
+      deliverPublicationLive(crypto.randomUUID()),
     ).resolves.toBeUndefined()
     await expect(
-      notifyPublicationFailed(crypto.randomUUID(), { stuck: true }),
+      deliverPublicationFailed(crypto.randomUUID(), { stuck: true }),
     ).resolves.toBeUndefined()
     await expect(
       notifyInviteAccepted(crypto.randomUUID(), crypto.randomUUID()),
@@ -372,17 +388,19 @@ describe('never fails the caller', () => {
 
 /** An accepted invitation, with its send recorded in the audit log the way `inviteMember` writes it. */
 async function createInvitation(orgId: string, senderId: string | null) {
-  const [row] = await db
-    .insert(invitation)
-    .values({
-      email: `invitee-${crypto.randomUUID()}@test.local`,
-      organizationId: orgId,
-      role: 'editor',
-      tokenHash: hashToken(crypto.randomUUID()),
-      expiresAt: new Date(Date.now() + 86_400_000),
-      acceptedAt: new Date(),
-    })
-    .returning()
+  const row = (
+    await db
+      .insert(invitation)
+      .values({
+        email: `invitee-${crypto.randomUUID()}@test.local`,
+        organizationId: orgId,
+        role: 'editor',
+        tokenHash: hashToken(crypto.randomUUID()),
+        expiresAt: new Date(Date.now() + 86_400_000),
+        acceptedAt: new Date(),
+      })
+      .returning()
+  ).at(0)
   if (!row) throw new Error('Failed to create invitation')
   if (senderId) {
     await db.insert(auditLog).values({

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 /**
  * Send-time check for notification emails. The row and its email were written
  * when the event happened. Access and preferences can change before the email
@@ -29,41 +28,49 @@ import {
 export async function notificationStillEligible(
   notificationId: string,
 ): Promise<boolean> {
-  const [row] = await db
-    .select()
-    .from(notification)
-    .where(eq(notification.id, notificationId))
-    .limit(1)
+  const row = (
+    await db
+      .select()
+      .from(notification)
+      .where(eq(notification.id, notificationId))
+      .limit(1)
+  ).at(0)
   if (!row) return false
   const role = row.payload.recipientRole
   const organizationId = row.organizationId
   if (!role) return false
-  const [recipient] = await db
-    .select({ blockedAt: user.blockedAt })
-    .from(user)
-    .where(eq(user.id, row.userId))
-    .limit(1)
-  if (!recipient || recipient.blockedAt) return false
-
-  if (role === 'agency') {
-    const [person] = await db
-      .select({ isAgencyAdmin: user.isAgencyAdmin })
+  const recipient = (
+    await db
+      .select({ blockedAt: user.blockedAt })
       .from(user)
       .where(eq(user.id, row.userId))
       .limit(1)
+  ).at(0)
+  if (!recipient || recipient.blockedAt) return false
+
+  if (role === 'agency') {
+    const person = (
+      await db
+        .select({ isAgencyAdmin: user.isAgencyAdmin })
+        .from(user)
+        .where(eq(user.id, row.userId))
+        .limit(1)
+    ).at(0)
     if (!person?.isAgencyAdmin) return false
   } else {
     if (!organizationId) return false
-    const [member] = await db
-      .select({ id: membership.id })
-      .from(membership)
-      .where(
-        and(
-          eq(membership.userId, row.userId),
-          eq(membership.organizationId, organizationId),
-        ),
-      )
-      .limit(1)
+    const member = (
+      await db
+        .select({ id: membership.id })
+        .from(membership)
+        .where(
+          and(
+            eq(membership.userId, row.userId),
+            eq(membership.organizationId, organizationId),
+          ),
+        )
+        .limit(1)
+    ).at(0)
     if (!member) return false
   }
 

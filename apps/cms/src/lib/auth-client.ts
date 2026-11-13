@@ -9,6 +9,9 @@ import { createAuthClient } from 'better-auth/react'
 import type { auth } from './auth.ts'
 
 export const authClient = createAuthClient({
+  // The app reads the user from `me` (lib/me-query.ts); `useSession` callers
+  // only need it once per mount, not again on every tab focus.
+  sessionOptions: { refetchOnWindowFocus: false },
   plugins: [
     inferAdditionalFields<typeof auth>(),
     ssoClient(),

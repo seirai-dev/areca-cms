@@ -299,14 +299,6 @@ export function singularLabel(label: string): string | null {
   return null
 }
 
-/** "New article", or "New entry" when no singular can be derived. */
-export function newEntryLabel(collectionLabel: string) {
-  const singular = singularLabel(collectionLabel)
-  return singular
-    ? m.shell_new_singular({ name: singular.toLowerCase() })
-    : m.shell_new_entry()
-}
-
 /* -------------------------------------------------------------------------
    Paths (for code outside route components)
 ------------------------------------------------------------------------- */

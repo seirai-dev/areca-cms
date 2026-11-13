@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 /**
  * Account emails: password reset, verification, security notices and
  * membership changes. They always send (no preference), go to the address on
@@ -9,6 +8,7 @@ import { randomInt } from 'node:crypto'
 import { and, eq, inArray } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbExecutor } from '#/db'
 import { account, user, verification } from '#/db/schema'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
@@ -44,9 +44,6 @@ export type AccountEmailKind =
 
 export type QueuedEmail = { status: 'queued'; id: string }
 
-/** The database, or the transaction an email is queued in. */
-type Connection = Pick<typeof db, 'select' | 'insert'>
-
 /** Better Auth's reset token lifetime, mirrored for the admin-triggered reset. */
 const RESET_TTL_MS = 60 * 60 * 1000
 const RESET_TOKEN_LENGTH = 24
@@ -74,7 +71,7 @@ export async function sendAccountEmail(input: {
   params?: Record<string, unknown>
   renderParams?: Record<string, unknown>
   immediate?: boolean
-  connection?: Connection
+  connection?: DbExecutor
 }): Promise<SendResult | QueuedEmail | null> {
   const queued = await queueAccountEmail({
     ...input,
@@ -100,7 +97,7 @@ async function queueAccountEmail(input: {
   params?: Record<string, unknown>
   renderParams?: Record<string, unknown>
   immediate?: boolean
-  connection?: Connection
+  connection?: DbExecutor
 }): Promise<EnqueuedEmail | null> {
   if (!(await isMailConfigured())) {
     log.info('account email skipped: mail is not configured', {
@@ -109,12 +106,14 @@ async function queueAccountEmail(input: {
     })
     return null
   }
-  const reader: Pick<typeof db, 'select'> = input.connection ?? db
-  const [recipient] = await reader
-    .select({ email: user.email, locale: user.locale })
-    .from(user)
-    .where(eq(user.id, input.userId))
-    .limit(1)
+  const reader = input.connection ?? db
+  const recipient = (
+    await reader
+      .select({ email: user.email, locale: user.locale })
+      .from(user)
+      .where(eq(user.id, input.userId))
+      .limit(1)
+  ).at(0)
   if (!recipient) return null
   return enqueueEmail(
     {
@@ -153,11 +152,13 @@ export async function sendPasswordResetLink(
   userId: string,
   actorId: string,
 ): Promise<{ sso: boolean; result: SendResult } | null> {
-  const [target] = await db
-    .select({ id: user.id })
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1)
+  const target = (
+    await db
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1)
+  ).at(0)
   if (!target) throw new NotFoundError(m.server_user_not_found())
   if (!(await isMailConfigured())) return null
 
@@ -188,11 +189,13 @@ export async function sendPasswordResetLink(
 export async function sendVerificationEmail(
   userId: string,
 ): Promise<SendResult | null> {
-  const [row] = await db
-    .select({ emailVerified: user.emailVerified })
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1)
+  const row = (
+    await db
+      .select({ emailVerified: user.emailVerified })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1)
+  ).at(0)
   if (!row || row.emailVerified) return null
   const queued = await queueAccountEmail({
     kind: 'verify_email',
@@ -224,11 +227,13 @@ async function deliverReset(
   userId: string,
   token: string,
 ): Promise<{ sso: boolean; result: SendResult } | null> {
-  const [person] = await db
-    .select({ blockedAt: user.blockedAt })
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1)
+  const person = (
+    await db
+      .select({ blockedAt: user.blockedAt })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1)
+  ).at(0)
   // A blocked person gets no mail, and the answer is the same as for an
   // unknown address. Their sign-in is refused anyway (see auth.ts).
   if (person?.blockedAt) {

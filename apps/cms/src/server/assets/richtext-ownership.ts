@@ -1,5 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 import { db } from '#/db'
+import type { DbReader } from '#/db'
 import { asset } from '#/db/schema'
 import { RICHTEXT_MAX_NODES } from '#/lib/content-limits'
 
@@ -7,7 +8,7 @@ import { RICHTEXT_MAX_NODES } from '#/lib/content-limits'
 export async function richTextAssetsAuthorized(
   value: unknown,
   organizationId: string,
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ): Promise<boolean> {
   // Iterative and bounded: the document is untrusted and may be nested deeply.
   const stack: unknown[] = [value]

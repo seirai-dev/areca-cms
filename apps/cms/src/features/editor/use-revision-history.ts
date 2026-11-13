@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 
-import { queryKeys } from '#/lib/content/query-keys'
+import { queryKeys } from '#/lib/query-keys'
 import { listRevisionsFn } from '#/server/fn/content'
 
 /**
@@ -15,5 +15,7 @@ export function useRevisionHistory(entryId: string | undefined) {
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.nextCursor,
     enabled: Boolean(entryId),
+    // Saves and restores invalidate it; a focus refetch reloads every page.
+    refetchOnWindowFocus: false,
   })
 }

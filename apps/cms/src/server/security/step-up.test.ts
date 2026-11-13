@@ -6,7 +6,9 @@ import { verification } from '#/db/schema'
 import { securityErrorCode } from '#/lib/security-errors'
 
 import {
+  activeFactorLockouts,
   assertFreshSession,
+  clearFactorLockout,
   clearStepUpFailures,
   isStepUpLocked,
   recordStepUp,
@@ -104,6 +106,17 @@ describe.skipIf(!hasDb)('step-up', () => {
     await recordStepUpFailure(userId)
     expect(await isStepUpLocked(userId)).toBe(true)
     await clearStepUpFailures(userId)
+    expect(await isStepUpLocked(userId)).toBe(false)
+  })
+
+  it('lists only locked users with their lock end, and clears one lockout', async () => {
+    for (let i = 0; i < 4; i++) await recordStepUpFailure(userId)
+    expect((await activeFactorLockouts()).has(userId)).toBe(false)
+    await recordStepUpFailure(userId)
+    const until = (await activeFactorLockouts()).get(userId)
+    expect(until?.getTime()).toBeGreaterThan(Date.now())
+    await db.transaction((tx) => clearFactorLockout(tx, userId))
+    expect((await activeFactorLockouts()).has(userId)).toBe(false)
     expect(await isStepUpLocked(userId)).toBe(false)
   })
 

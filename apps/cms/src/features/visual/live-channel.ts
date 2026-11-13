@@ -15,7 +15,10 @@
 
 export const PING_INTERVAL_MS = 250
 export const HANDSHAKE_TIMEOUT_MS = 3000
-export const DEBOUNCE_MS = 150
+/** A changed value is sent when typing pauses this long. */
+export const DEBOUNCE_MS = 400
+/** While typing goes on, a change is still sent this long after it was made. */
+export const DEBOUNCE_MAX_WAIT_MS = 1000
 export const RETRY_MS = 2000
 
 export type Tier = 'connecting' | 'on-save' | 'live'
@@ -108,6 +111,16 @@ export function channelReducer(
       }
     }
   }
+}
+
+/**
+ * Milliseconds until a changed value should be sent. `firstChangeAt` is when the
+ * first change not yet sent was made. Each change restarts the pause, but the
+ * send never waits longer than `DEBOUNCE_MAX_WAIT_MS` after that first change.
+ */
+export function sendDelay(now: number, firstChangeAt: number): number {
+  const untilMaxWait = firstChangeAt + DEBOUNCE_MAX_WAIT_MS - now
+  return Math.max(0, Math.min(DEBOUNCE_MS, untilMaxWait))
 }
 
 export function requestStatus(state: ChannelState): RequestStatus {

@@ -129,7 +129,9 @@ export function useVisualMode({
       shouldEnterVisualOnMount({
         hasViewParam,
         lastMode,
-        available,
+        // Read the screen itself: an editor mounted while the page hydrates
+        // still holds the server's `false` here.
+        available: window.matchMedia(VISUAL_AVAILABLE_QUERY).matches,
         autoEnter: autoEnter && supported,
       })
     ) {

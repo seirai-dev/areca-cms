@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  createDraftWriter,
   persistDraft,
   readRecoveredDraft,
   shouldKeepEditorOpen,
@@ -60,6 +61,31 @@ describe('draft recovery and navigation', () => {
       await vi.advanceTimersByTimeAsync(2000)
       expect(await pendingSave).toBe('failed')
       expect(readRecoveredDraft(storage, 'user:site:entry')).toEqual(data)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+  it('writes the browser copy once typing pauses, or at once on flush', () => {
+    vi.useFakeTimers()
+    try {
+      const write = vi.fn()
+      const writer = createDraftWriter(write, 500)
+      writer.flush()
+      expect(write).not.toHaveBeenCalled()
+      for (let key = 0; key < 5; key++) {
+        writer.schedule()
+        vi.advanceTimersByTime(200)
+      }
+      expect(write).not.toHaveBeenCalled()
+      vi.advanceTimersByTime(300)
+      expect(write).toHaveBeenCalledTimes(1)
+
+      writer.schedule()
+      writer.flush()
+      expect(write).toHaveBeenCalledTimes(2)
+      vi.advanceTimersByTime(1000)
+      writer.flush()
+      expect(write).toHaveBeenCalledTimes(2)
     } finally {
       vi.useRealTimers()
     }

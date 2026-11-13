@@ -6,10 +6,7 @@
  */
 import { I18N_KEY } from '#/lib/content-locale'
 import type { EntryData } from '#/lib/types'
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
+import { isPlainObject } from '#/lib/is-plain-object'
 
 /** A value that is not content: null, empty text, an empty list or object. */
 export function isBlankFieldValue(value: unknown): boolean {

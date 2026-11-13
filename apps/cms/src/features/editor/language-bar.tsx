@@ -1,5 +1,6 @@
 import * as React from 'react'
-import { motion, useReducedMotion } from 'motion/react'
+import { useReducedMotion } from 'motion/react'
+import * as motion from 'motion/react-m'
 
 import { KbdCombo } from '#/components/ui/kbd'
 import { Hint } from '#/components/ui/tooltip'

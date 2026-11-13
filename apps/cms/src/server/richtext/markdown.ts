@@ -20,9 +20,8 @@ function escapeText(value: string): string {
   return value
     .replace(/[\\`*_[\]<>~#-]/g, '\\$&')
     .replace(
-      /^(\s*)(\+|\d+[.)])(?=\s)/gm,
-      (_match, space: string, marker: string) =>
-        `${space}${marker.replace(/([+.)])$/, '\\$1')}`,
+      /(?=[+\d])(?<=(?:^|[\n\r\u2028\u2029])\s*)(\+|\d+[.)])(?=\s)/g,
+      (_match, marker: string) => marker.replace(/([+.)])$/, '\\$1'),
     )
 }
 
@@ -187,7 +186,9 @@ function serializeTableCell(node: PMNode | undefined): string {
   const value = (node.content ?? [])
     .map((child) => serializeBlock(child))
     .join(' ')
-  return value.replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ')
+  return value
+    .replace(/\|/g, '\\|')
+    .replace(/\s+/g, (run) => (run.includes('\n') ? ' ' : run))
 }
 
 function serializeTable(node: PMNode): string {
@@ -308,34 +309,4 @@ export function serializeMarkdownWithEntryLinks(json: unknown): {
   entryLinks: EntryLinkMarker[]
 } {
   return serialize(json, true)
-}
-
-const BLOCK_JOIN = new Set([
-  'doc',
-  'blockquote',
-  'bulletList',
-  'orderedList',
-  'listItem',
-  'table',
-  'tableRow',
-])
-
-function extractPlain(node: PMNode): string {
-  if (node.type === 'text') return node.text ?? ''
-  if (node.type === 'hardBreak') return '\n'
-  if (node.type === 'image')
-    return typeof node.attrs?.alt === 'string' ? node.attrs.alt : ''
-  if (node.type === 'horizontalRule') return ''
-  // Code blocks are not prose; they would fill descriptions with source code.
-  if (node.type === 'codeBlock') return ''
-  const parts = (node.content ?? []).map(extractPlain)
-  if (BLOCK_JOIN.has(node.type)) {
-    return parts.filter((part) => part.length > 0).join('\n')
-  }
-  return parts.join('')
-}
-
-export function richTextPlainText(json: unknown): string {
-  if (typeof json !== 'object' || json === null) return ''
-  return extractPlain(asNode(json)).trim()
 }

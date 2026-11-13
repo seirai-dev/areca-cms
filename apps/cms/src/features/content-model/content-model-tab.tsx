@@ -6,9 +6,9 @@ import { CaretRight, Globe, Plus, Stack } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 import { invalidateDevSync } from '#/features/dev-env/invalidate'
-import { globalsQueryKey, useSiteGlobals } from '#/features/globals/use-globals'
-import { errorMessage } from '#/lib/admin/helpers'
-import { queryKeys } from '#/lib/content/query-keys'
+import { useSiteGlobals } from '#/features/globals/use-globals'
+import { errorMessage } from '#/lib/errors'
+import { queryKeys } from '#/lib/query-keys'
 import { Tag } from '#/components/ui/tag'
 import { Button } from '#/components/ui/button'
 import { EmptyState } from '#/components/ui/empty-state'
@@ -88,12 +88,7 @@ export function ContentModelTab({ siteId }: { siteId: string }) {
         }
       >
         {query.isError ? (
-          <QueryError
-            title={m.sites_collections_load_error()}
-            error={query.error}
-            onRetry={() => void query.refetch()}
-            retrying={query.isFetching}
-          />
+          <QueryError title={m.sites_collections_load_error()} query={query} />
         ) : query.isLoading ? (
           <div className="overflow-hidden surface-card" aria-busy="true">
             {Array.from({ length: 3 }, (_, index) => (
@@ -151,12 +146,7 @@ export function ContentModelTab({ siteId }: { siteId: string }) {
         }
       >
         {globalsQuery.isError ? (
-          <QueryError
-            title={m.globals_load_error()}
-            error={globalsQuery.error}
-            onRetry={() => void globalsQuery.refetch()}
-            retrying={globalsQuery.isFetching}
-          />
+          <QueryError title={m.globals_load_error()} query={globalsQuery} />
         ) : globalsQuery.isLoading ? (
           <div className="overflow-hidden surface-card" aria-busy="true">
             <div className="flex items-center gap-3 px-4 py-3">
@@ -243,7 +233,7 @@ function SectionRow({
     mutationFn: (enabled: boolean) =>
       setEnabledFn({ data: { siteId, key: section.key, enabled } }),
     onMutate: async (enabled) => {
-      const key = globalsQueryKey(siteId)
+      const key = queryKeys.globals(siteId)
       await queryClient.cancelQueries({ queryKey: key })
       const previous = queryClient.getQueryData<SiteSection[]>(key)
       queryClient.setQueryData<SiteSection[]>(key, (list) =>
@@ -261,13 +251,13 @@ function SectionRow({
       ),
     onError: (error, _enabled, context) => {
       if (context?.previous) {
-        queryClient.setQueryData(globalsQueryKey(siteId), context.previous)
+        queryClient.setQueryData(queryKeys.globals(siteId), context.previous)
       }
       toast.error(errorMessage(error))
     },
     onSettled: () =>
       Promise.all([
-        queryClient.invalidateQueries({ queryKey: globalsQueryKey(siteId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.globals(siteId) }),
         invalidateDevSync(queryClient, siteId),
       ]),
   })

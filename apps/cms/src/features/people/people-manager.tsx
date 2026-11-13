@@ -11,7 +11,7 @@ import {
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { useShell } from '#/components/shell/shell-context'
 import { UserAvatar } from '#/components/ui/avatar'
 import { Tag } from '#/components/ui/tag'
@@ -165,12 +165,7 @@ export function PeopleManager({
         data-testid="people-members"
       >
         {people.members.isError ? (
-          <QueryError
-            title={m.people_load_error()}
-            error={people.members.error}
-            onRetry={() => void people.members.refetch()}
-            retrying={people.members.isFetching}
-          />
+          <QueryError title={m.people_load_error()} query={people.members} />
         ) : people.members.isPending ? (
           <MembersSkeleton />
         ) : memberCount === 0 ? (
@@ -420,9 +415,7 @@ function Invitations({
       >
         <QueryError
           title={m.people_invitations_load_error()}
-          error={people.invitations.error}
-          onRetry={() => void people.invitations.refetch()}
-          retrying={people.invitations.isFetching}
+          query={people.invitations}
         />
       </InsetGroup>
     )

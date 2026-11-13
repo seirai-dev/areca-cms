@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { AnimatePresence, useReducedMotion } from 'motion/react'
+import * as motion from 'motion/react-m'
 import {
   Globe,
   Lock,
@@ -9,7 +10,7 @@ import {
   Trash,
 } from '@phosphor-icons/react'
 
-import { queryKeys } from '#/lib/content/query-keys'
+import { queryKeys } from '#/lib/query-keys'
 import {
   AlertDialog,
   AlertDialogAction,

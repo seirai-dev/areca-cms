@@ -44,3 +44,35 @@ export function pulseField(node: HTMLElement) {
   node.setAttribute('data-pulse', '')
   window.setTimeout(() => node.removeAttribute('data-pulse'), FIELD_PULSE_MS)
 }
+
+const FOCUSABLE = 'input, textarea, [contenteditable="true"], button'
+
+/**
+ * Scrolls to and focuses a field (`[data-field]`), retrying briefly while it
+ * mounts. `beforeReveal` opens a panel that hides it; a collapsed SEO group
+ * opens itself on `announceReveal`. `pulse` makes the field glow briefly, for
+ * a click in the visual preview.
+ */
+export function revealField(
+  key: string,
+  options: { pulse?: boolean; beforeReveal?: (key: string) => void } = {},
+) {
+  options.beforeReveal?.(key)
+  announceReveal(key)
+  const attempt = (tries: number) => {
+    const node = document.querySelector<HTMLElement>(
+      `[data-field="${CSS.escape(key)}"]`,
+    )
+    if (!node) {
+      if (tries > 0) window.setTimeout(() => attempt(tries - 1), 120)
+      return
+    }
+    node.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    const focusable = node.matches(FOCUSABLE)
+      ? node
+      : node.querySelector<HTMLElement>(FOCUSABLE)
+    focusable?.focus({ preventScroll: true })
+    if (options.pulse) pulseField(node)
+  }
+  requestAnimationFrame(() => attempt(5))
+}

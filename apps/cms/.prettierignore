@@ -2,6 +2,7 @@ package-lock.json
 pnpm-lock.yaml
 yarn.lock
 src/paraglide
+src/lib/cn-tables.gen.ts
 drizzle/meta
 project.inlang
 .cta.json
@@ -12,3 +13,5 @@ playwright-report
 benchmarks/.local
 benchmarks/results/**/*.html
 benchmarks/results/**/*.json
+# Byte-exact file snapshots (toMatchFileSnapshot).
+src/server/content/__fixtures__

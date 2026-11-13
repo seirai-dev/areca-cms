@@ -78,24 +78,6 @@ export function previewAddress({
   return slug ? entryPublicUrl(productionUrl, routePattern, slug) : null
 }
 
-/** Text of a TipTap document, for the description fallback preview. Code
- *  blocks are skipped, matching the server's fallback description. */
-export function plainTextOf(doc: unknown): string {
-  const parts: string[] = []
-  const visit = (node: unknown) => {
-    if (!node || typeof node !== 'object') return
-    const item = node as { type?: string; text?: unknown; content?: unknown }
-    if (item.type === 'codeBlock') return
-    if (typeof item.text === 'string') parts.push(item.text)
-    if (Array.isArray(item.content)) {
-      for (const child of item.content) visit(child)
-      if (item.type !== 'doc') parts.push(' ')
-    }
-  }
-  visit(doc)
-  return parts.join('').replace(/\s+/g, ' ').trim()
-}
-
 const isEmpty = (value: unknown) =>
   value == null ||
   value === '' ||

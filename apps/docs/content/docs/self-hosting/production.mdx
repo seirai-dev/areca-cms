@@ -63,6 +63,8 @@ server {
 }
 ```
 
+The CMS serves its scripts and stylesheets already compressed (Brotli or gzip, whichever the browser accepts), so the proxy does not need to compress them. Pages and API responses are sent uncompressed; to compress those too, turn on compression in the proxy (`encode zstd gzip` in Caddy, `gzip on;` plus `gzip_types application/json;` in nginx, which compresses HTML by default).
+
 Once the proxy is in front of the CMS, set `RATE_LIMIT_TRUST_PROXY=true` so rate limits apply per visitor. Without it, the CMS sees only the proxy's address, and all anonymous visitors share one rate-limit bucket. The stock Compose file does not pass this variable, so add it as described in [only listed variables reach the container](#only-listed-variables-reach-the-container). For the limits themselves, see [rate limits](/docs/security/rate-limits).
 
 ## Set the public URLs

@@ -11,7 +11,6 @@ import {
   schedulerBackoff,
   site,
 } from '#/db/schema'
-import { createMockDeploymentAdapter } from '#/adapters/deployment/mock'
 import { deleteSite } from '#/server/admin/sites'
 import {
   removeDokployCredentials,
@@ -25,14 +24,10 @@ import {
 } from '#/server/content/test-utils'
 import { createEntry, scheduleEntry } from '#/server/content/entries'
 import { requestPublication } from './publications'
-import {
-  CLAIM_SQL,
-  resourceBlockerSql,
-  processJob,
-  recoverStaleJobs,
-} from './worker'
+import { CLAIM_SQL, resourceBlockerSql } from './job-claim'
+import { processJob, recoverStaleJobs } from './job-run'
 import { runSchedulerTick } from './scheduler'
-import { jobOf } from './test-helpers'
+import { createMockDeploymentAdapter, jobOf } from './test-helpers'
 
 const fakeFetch: typeof fetch = async () =>
   Response.json({ items: [], total: 0 })
@@ -209,6 +204,7 @@ describe('audit publishing regressions', () => {
         saveDokployCredentials({
           organizationId: ctx.org.id,
           url: 'https://other-dokploy.example.com',
+          apiKey: 'other-key',
           actorId: ctx.actor.id,
           fetch: fakeFetch,
         }),

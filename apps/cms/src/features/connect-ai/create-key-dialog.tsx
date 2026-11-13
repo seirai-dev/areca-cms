@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from '#/components/ui/select'
 import { Switch } from '#/components/ui/switch'
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { connectServerName } from '#/lib/mcp-install'
 import type { ConnectTarget, McpInstallInput } from '#/lib/mcp-install'
 import { m } from '#/paraglide/messages'

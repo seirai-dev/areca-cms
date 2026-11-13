@@ -194,9 +194,9 @@ describe('entry link targets and resolution', () => {
     expect(entryLinkTargets(linkDoc({ href: '/x' }))).toEqual([])
   })
 
-  it('replaces the href and keeps the mark when the target resolves', async () => {
+  it('replaces the href and keeps the mark when the target resolves', () => {
     const source = linkDoc({ entryId: ENTRY_ID, anchor: 'faq' })
-    const { json, issues } = await resolveEntryLinks(source, async () => ({
+    const { json, issues } = resolveEntryLinks(source, () => ({
       href: '/nl/vragen#faq',
       targetTitle: 'Vragen',
     }))
@@ -213,7 +213,7 @@ describe('entry link targets and resolution', () => {
     )
   })
 
-  it('drops the mark of a link that cannot work, keeps the text, and reports it once', async () => {
+  it('drops the mark of a link that cannot work, keeps the text, and reports it once', () => {
     const doc = {
       type: 'doc',
       content: [
@@ -239,7 +239,7 @@ describe('entry link targets and resolution', () => {
         },
       ],
     }
-    const { json, issues } = await resolveEntryLinks(doc, async () => ({
+    const { json, issues } = resolveEntryLinks(doc, () => ({
       href: null,
       reason: 'not-live',
       targetTitle: 'Concept',
@@ -257,6 +257,41 @@ describe('entry link targets and resolution', () => {
         targetTitle: 'Concept',
       },
     ])
+  })
+
+  it('resolves each distinct target once and keeps other marks', () => {
+    const link = (anchor: string | null) => ({
+      type: 'link',
+      attrs: { href: '/x', entryId: ENTRY_ID, anchor },
+    })
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'a', marks: [{ type: 'bold' }, link(null)] },
+            { type: 'text', text: 'b', marks: [link(null)] },
+            { type: 'text', text: 'c', marks: [link('faq')] },
+          ],
+        },
+      ],
+    }
+    const calls: (string | null)[] = []
+    const { json } = resolveEntryLinks(doc, (target) => {
+      calls.push(target.anchor)
+      return { href: `/p#${target.anchor ?? ''}`, targetTitle: 'P' }
+    })
+    expect(calls.sort()).toEqual(['faq', null].sort())
+    const nodes = (
+      json as {
+        content: {
+          content: { marks: { type: string; attrs?: { href: string } }[] }[]
+        }[]
+      }
+    ).content[0].content
+    expect(nodes[0].marks.map((mark) => mark.type)).toEqual(['bold', 'link'])
+    expect(nodes[2].marks[0].attrs?.href).toBe('/p#faq')
   })
 
   it('remaps entry ids and clears those with no target', () => {

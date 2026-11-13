@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 /**
  * Preference and rule services behind the notification server functions.
  * Guards live in the functions; these functions trust their arguments and
@@ -61,14 +60,16 @@ type RuleRequest =
 export async function getMyNotifications(
   userId: string,
 ): Promise<MyNotifications> {
-  const [person] = await db
-    .select({
-      emailVerified: user.emailVerified,
-      isAgencyAdmin: user.isAgencyAdmin,
-    })
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1)
+  const person = (
+    await db
+      .select({
+        emailVerified: user.emailVerified,
+        isAgencyAdmin: user.isAgencyAdmin,
+      })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1)
+  ).at(0)
   if (!person) throw new NotFoundError(m.server_user_not_found())
 
   const [agencyRules, choices, memberships, branding, mailReady] =
@@ -234,32 +235,38 @@ async function ownRoleFor(
   organizationId: string | null,
 ): Promise<NotificationRole | null> {
   if (!organizationId) {
-    const [person] = await db
-      .select({ isAgencyAdmin: user.isAgencyAdmin })
-      .from(user)
-      .where(eq(user.id, userId))
-      .limit(1)
+    const person = (
+      await db
+        .select({ isAgencyAdmin: user.isAgencyAdmin })
+        .from(user)
+        .where(eq(user.id, userId))
+        .limit(1)
+    ).at(0)
     return person?.isAgencyAdmin ? 'agency' : null
   }
-  const [member] = await db
-    .select({ role: membership.role })
-    .from(membership)
-    .where(
-      and(
-        eq(membership.userId, userId),
-        eq(membership.organizationId, organizationId),
-      ),
-    )
-    .limit(1)
+  const member = (
+    await db
+      .select({ role: membership.role })
+      .from(membership)
+      .where(
+        and(
+          eq(membership.userId, userId),
+          eq(membership.organizationId, organizationId),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   return member?.role ?? null
 }
 
 async function organizationName(organizationId: string) {
-  const [row] = await db
-    .select({ name: organization.name })
-    .from(organization)
-    .where(eq(organization.id, organizationId))
-    .limit(1)
+  const row = (
+    await db
+      .select({ name: organization.name })
+      .from(organization)
+      .where(eq(organization.id, organizationId))
+      .limit(1)
+  ).at(0)
   return row?.name ?? ''
 }
 

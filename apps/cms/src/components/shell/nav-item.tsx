@@ -1,7 +1,8 @@
 import * as React from 'react'
 import { Link } from '@tanstack/react-router'
 import type { LinkOptions } from '@tanstack/react-router'
-import { motion, useReducedMotion } from 'motion/react'
+import { useReducedMotion } from 'motion/react'
+import * as motion from 'motion/react-m'
 import type { Icon } from '@phosphor-icons/react'
 
 import { Hint } from '#/components/ui/tooltip'

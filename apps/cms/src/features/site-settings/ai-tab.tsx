@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { FormField } from '#/components/ui/form-field'
 import { SettingsSection } from '#/components/ui/settings-section'
 import { Textarea } from '#/components/ui/textarea'

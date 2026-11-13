@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import { errorMessage } from '#/lib/admin/helpers'
 import {
   BRAND_COLOR_KEYS,
   DEFAULT_APP_NAME,
@@ -19,6 +18,8 @@ import type {
   FontKey,
   LoginTaglineLocale,
 } from '#/lib/branding'
+import { errorMessage } from '#/lib/errors'
+import { queryKeys } from '#/lib/query-keys'
 import { m } from '#/paraglide/messages'
 import {
   clearBrandingImageFn,
@@ -26,8 +27,6 @@ import {
   resetBrandingFn,
   updateBrandingFn,
 } from '#/server/fn/branding'
-
-const brandingQueryKey = ['branding'] as const
 
 export type ImageKind = 'logo' | 'favicon'
 
@@ -64,60 +63,69 @@ async function uploadBrandingImage(kind: ImageKind, file: File) {
   return view
 }
 
+/** The fields edited as a draft and saved together. */
+type BrandingDraft = {
+  appName: string
+  emailFromName: string
+  loginTagline: Record<LoginTaglineLocale, string>
+  accent: string
+  font: FontKey
+  advancedEnabled: boolean
+  advancedColors: AdvancedBrandColors
+}
+
+function draftFrom(view: BrandingView): BrandingDraft {
+  return {
+    appName: view.appName === DEFAULT_APP_NAME ? '' : view.appName,
+    emailFromName: view.emailFromName ?? '',
+    loginTagline: {
+      en: view.loginTagline.en ?? '',
+      nl: view.loginTagline.nl ?? '',
+      tr: view.loginTagline.tr ?? '',
+    },
+    accent: view.accentColor ?? '',
+    font: isFontKey(view.font) ? view.font : DEFAULT_FONT,
+    advancedEnabled: view.advancedColorsEnabled,
+    advancedColors: cloneAdvancedColors(view.advancedColors),
+  }
+}
+
+export function useBrandingQuery() {
+  return useQuery({
+    queryKey: queryKeys.branding(),
+    queryFn: () => getBrandingFn(),
+  })
+}
+
 /**
  * Branding form state (brief §3.11, §4.1): name, sender, accent, font and
  * the legacy per-colour overrides are edited as a draft and saved together;
  * logo and favicon upload and remove immediately. Every save re-runs the
  * root loader so the whole app (and the tab title) picks the change up.
  */
-export function useBrandingForm() {
+export function useBrandingForm(saved: BrandingView) {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const query = useQuery({
-    queryKey: brandingQueryKey,
-    queryFn: () => getBrandingFn(),
-  })
-  const saved = query.data
 
-  const [appName, setAppName] = React.useState('')
-  const [emailFromName, setEmailFromName] = React.useState('')
-  const [loginTagline, setLoginTagline] = React.useState<
-    Record<LoginTaglineLocale, string>
-  >({ en: '', nl: '', tr: '' })
-  const [accent, setAccent] = React.useState('')
-  const [font, setFont] = React.useState<FontKey>(DEFAULT_FONT)
-  const [advancedEnabled, setAdvancedEnabled] = React.useState(false)
-  const [advancedColors, setAdvancedColors] =
-    React.useState<AdvancedBrandColors>({
-      light: {},
-      dark: {},
-    })
-
-  const seed = React.useCallback((view: BrandingView) => {
-    setAppName(view.appName === DEFAULT_APP_NAME ? '' : view.appName)
-    setEmailFromName(view.emailFromName ?? '')
-    setLoginTagline({
-      en: view.loginTagline.en ?? '',
-      nl: view.loginTagline.nl ?? '',
-      tr: view.loginTagline.tr ?? '',
-    })
-    setAccent(view.accentColor ?? '')
-    setFont(isFontKey(view.font) ? view.font : DEFAULT_FONT)
-    setAdvancedEnabled(view.advancedColorsEnabled)
-    setAdvancedColors(cloneAdvancedColors(view.advancedColors))
-  }, [])
-
-  // Independent image/key changes must not overwrite the metadata draft.
-  const seeded = React.useRef(false)
-  React.useEffect(() => {
-    if (saved && !seeded.current) {
-      seeded.current = true
-      seed(saved)
-    }
-  }, [saved, seed])
+  // Starts from the branding loaded when the form mounts. Image uploads change
+  // `saved` but must not overwrite the draft, so only save, reset and discard
+  // start it again.
+  const [draft, setDraft] = React.useState(() => draftFrom(saved))
+  const seed = (view: BrandingView) => setDraft(draftFrom(view))
+  const patch = (next: Partial<BrandingDraft>) =>
+    setDraft((current) => ({ ...current, ...next }))
+  const {
+    appName,
+    emailFromName,
+    loginTagline,
+    accent,
+    font,
+    advancedEnabled,
+    advancedColors,
+  } = draft
 
   async function applySaved(next: BrandingView) {
-    queryClient.setQueryData(brandingQueryKey, next)
+    queryClient.setQueryData(queryKeys.branding(), next)
     await router.invalidate()
   }
 
@@ -176,7 +184,7 @@ export function useBrandingForm() {
       toast.success(m.admin_branding_toast_reset())
       await applySaved(next)
     },
-    onError: (err) => toast.error(errorMessage(err)),
+    // Only the reset dialog runs it; the dialog shows the error.
   })
 
   const accentHex = accent.trim() ? normalizeHex(accent) : null
@@ -190,29 +198,26 @@ export function useBrandingForm() {
   const normalizedAdvanced = normalizedPalette(advancedColors)
   const normalizedLoginTagline = normalizeLoginTaglines(loginTagline)
 
-  const dirty = saved
-    ? (appName.trim() || DEFAULT_APP_NAME) !== saved.appName ||
-      (emailFromName.trim() || null) !== saved.emailFromName ||
-      JSON.stringify(normalizedLoginTagline) !==
-        JSON.stringify(saved.loginTagline) ||
-      (accentHex ?? null) !== saved.accentColor ||
-      advancedEnabled !== saved.advancedColorsEnabled ||
-      JSON.stringify(normalizedAdvanced) !==
-        JSON.stringify(normalizedPalette(saved.advancedColors)) ||
-      font !== saved.font
-    : false
+  const dirty =
+    (appName.trim() || DEFAULT_APP_NAME) !== saved.appName ||
+    (emailFromName.trim() || null) !== saved.emailFromName ||
+    JSON.stringify(normalizedLoginTagline) !==
+      JSON.stringify(saved.loginTagline) ||
+    (accentHex ?? null) !== saved.accentColor ||
+    advancedEnabled !== saved.advancedColorsEnabled ||
+    JSON.stringify(normalizedAdvanced) !==
+      JSON.stringify(normalizedPalette(saved.advancedColors)) ||
+    font !== saved.font
 
-  const preview: BrandingView | null = saved
-    ? {
-        ...saved,
-        appName: appName.trim() || DEFAULT_APP_NAME,
-        accentColor: accentHex,
-        advancedColorsEnabled: advancedEnabled,
-        advancedColors: normalizedAdvanced,
-        font,
-        loginTagline: normalizedLoginTagline,
-      }
-    : null
+  const preview: BrandingView = {
+    ...saved,
+    appName: appName.trim() || DEFAULT_APP_NAME,
+    accentColor: accentHex,
+    advancedColorsEnabled: advancedEnabled,
+    advancedColors: normalizedAdvanced,
+    font,
+    loginTagline: normalizedLoginTagline,
+  }
 
   function submit() {
     if (accentInvalid || advancedInvalid) {
@@ -223,7 +228,6 @@ export function useBrandingForm() {
   }
 
   return {
-    query,
     saved,
     preview,
     fields: {
@@ -235,12 +239,15 @@ export function useBrandingForm() {
       advancedEnabled,
     },
     set: {
-      setAppName,
-      setEmailFromName,
+      setAppName: (value: string) => patch({ appName: value }),
+      setEmailFromName: (value: string) => patch({ emailFromName: value }),
       setLoginTagline: (locale: LoginTaglineLocale, value: string) =>
-        setLoginTagline((draft) => ({ ...draft, [locale]: value })),
-      setAccent,
-      setFont,
+        setDraft((current) => ({
+          ...current,
+          loginTagline: { ...current.loginTagline, [locale]: value },
+        })),
+      setAccent: (value: string) => patch({ accent: value }),
+      setFont: (value: FontKey) => patch({ font: value }),
     },
     accentHex,
     accentInvalid,
@@ -253,13 +260,14 @@ export function useBrandingForm() {
       reset.isPending,
     save,
     submit,
-    discard: () => saved && seed(saved),
+    discard: () => seed(saved),
     upload,
     clearImage,
     reset,
-    removeLegacyColors: () => {
-      setAdvancedEnabled(false)
-      setAdvancedColors({ light: {}, dark: {} })
-    },
+    removeLegacyColors: () =>
+      patch({
+        advancedEnabled: false,
+        advancedColors: { light: {}, dark: {} },
+      }),
   }
 }

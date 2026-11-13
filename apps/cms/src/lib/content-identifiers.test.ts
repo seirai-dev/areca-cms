@@ -1,9 +1,27 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  RESERVED_CONTENT_KEYS,
+  RESERVED_IDENTIFIERS as SDK_RESERVED_IDENTIFIERS,
+} from '../../../../packages/site-sdk/src/identifiers'
+
+import {
+  RESERVED_COLLECTION_KEYS,
+  RESERVED_IDENTIFIERS,
   isReservedCollectionKey,
   isSafeIdentifier,
 } from './content-identifiers'
+
+describe('reserved names', () => {
+  it('match the SDK lists', () => {
+    expect([...RESERVED_IDENTIFIERS].sort()).toEqual(
+      [...SDK_RESERVED_IDENTIFIERS].sort(),
+    )
+    expect([...RESERVED_COLLECTION_KEYS].sort()).toEqual(
+      RESERVED_CONTENT_KEYS.map((key) => key.toLowerCase()).sort(),
+    )
+  })
+})
 
 describe('isSafeIdentifier', () => {
   it.each(['title', 'blog-posts', 'cover_image', 'preview', 'href', 'resolve'])(

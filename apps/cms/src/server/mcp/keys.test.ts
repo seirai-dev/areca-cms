@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 import { eq, inArray } from 'drizzle-orm'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -16,10 +15,14 @@ import {
   createMcpKey,
   listMcpKeys,
   MCP_KEY_PREFIX,
-  resolveMcpActor,
   resolveMcpActorResult,
   revokeMcpKey,
 } from './keys'
+
+async function resolveMcpActor(token: string, now?: Date) {
+  const result = await resolveMcpActorResult(token, now)
+  return result.ok ? result.actor : null
+}
 
 // Must run before `#/env` is first imported: resolution reads ADMIN_MFA_REQUIRED.
 vi.hoisted(() => {
@@ -129,14 +132,15 @@ describe.skipIf(!hasDb)('MCP keys', () => {
       expect(key).not.toHaveProperty('tokenHash')
       expect(JSON.stringify(key)).not.toContain(token.slice(14))
 
-      const [row] = await db.select().from(mcpKey).where(eq(mcpKey.id, key.id))
+      const row = (
+        await db.select().from(mcpKey).where(eq(mcpKey.id, key.id))
+      ).at(0)
       expect(row?.tokenHash).toMatch(/^[0-9a-f]{64}$/)
       expect(row?.tokenHash).not.toBe(token)
 
-      const [entry] = await db
-        .select()
-        .from(auditLog)
-        .where(eq(auditLog.targetId, key.id))
+      const entry = (
+        await db.select().from(auditLog).where(eq(auditLog.targetId, key.id))
+      ).at(0)
       expect(entry?.action).toBe('mcp_key.create')
       expect(entry?.targetType).toBe('mcp_key')
       expect(entry?.meta).toMatchObject({
@@ -283,28 +287,34 @@ describe.skipIf(!hasDb)('MCP keys', () => {
 
       const t0 = new Date(Date.now() + 1000)
       await resolveMcpActor(token, t0)
-      const [first] = await listMcpKeys({
-        siteId: w.site.id,
-        userId: w.owner,
-        includeAllUsers: true,
-      })
+      const first = (
+        await listMcpKeys({
+          siteId: w.site.id,
+          userId: w.owner,
+          includeAllUsers: true,
+        })
+      ).at(0)
       expect(first?.lastUsedAt?.getTime()).toBe(t0.getTime())
 
       await resolveMcpActor(token, new Date(t0.getTime() + 10_000))
-      const [second] = await listMcpKeys({
-        siteId: w.site.id,
-        userId: w.owner,
-        includeAllUsers: true,
-      })
+      const second = (
+        await listMcpKeys({
+          siteId: w.site.id,
+          userId: w.owner,
+          includeAllUsers: true,
+        })
+      ).at(0)
       expect(second?.lastUsedAt?.getTime()).toBe(t0.getTime())
 
       const t1 = new Date(t0.getTime() + 61_000)
       await resolveMcpActor(token, t1)
-      const [third] = await listMcpKeys({
-        siteId: w.site.id,
-        userId: w.owner,
-        includeAllUsers: true,
-      })
+      const third = (
+        await listMcpKeys({
+          siteId: w.site.id,
+          userId: w.owner,
+          includeAllUsers: true,
+        })
+      ).at(0)
       expect(third?.lastUsedAt?.getTime()).toBe(t1.getTime())
     })
   })

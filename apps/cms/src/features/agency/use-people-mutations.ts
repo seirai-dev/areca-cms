@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
-import { adminQueryKeys } from '#/lib/admin/helpers'
+import { queryKeys } from '#/lib/query-keys'
 import { useStepUp } from '#/features/security/step-up'
 import { sendPasswordResetLinkFn } from '#/server/fn/account'
 import {
@@ -38,15 +38,15 @@ export function usePeopleMutations() {
 
   async function refreshPeople(userId?: string) {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: adminQueryKeys.users }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.users() }),
       queryClient.invalidateQueries({
-        queryKey: adminQueryKeys.pendingInvitations,
+        queryKey: queryKeys.pendingInvitations(),
       }),
-      queryClient.invalidateQueries({ queryKey: ['invitations'] }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.allInvitations() }),
       ...(userId
         ? [
             queryClient.invalidateQueries({
-              queryKey: adminQueryKeys.person(userId),
+              queryKey: queryKeys.person(userId),
             }),
           ]
         : []),

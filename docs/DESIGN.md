@@ -25,7 +25,7 @@ Language is human. **Go live**, not "Publish site". **Library**, not "Media asse
 
 Everything visual comes from CSS custom properties in [`apps/cms/src/styles.css`](../apps/cms/src/styles.css). Components use the Tailwind utilities those tokens generate (`bg-background-surface`, `text-text-secondary`, `border-border-default`, `rounded-card`, `shadow-float`…). **No hard-coded colours in components**: branding can only reach what goes through tokens.
 
-Tokens are declared light-first in `@theme` (so Tailwind generates utilities), overridden for dark in `html.dark, .dark`, and repeated in `:root, .light` so a `.light` subtree inside the dark app (the Branding preview) can opt back in. Theme is a class on `<html>` set by `ThemeProvider` (`components/theme.tsx`, next-themes, `defaultTheme="system"`, storage key `areca.theme`); the account menu offers Light · Dark · Auto.
+Colour tokens are plain custom properties, declared once per theme: light in `:root, .light` (so a `.light` subtree inside the dark app, the Branding preview, can opt back in) and dark in `html.dark, .dark`. An `@theme inline reference` block only maps their names, so Tailwind generates utilities that read the variables at runtime. Theme is a class on `<html>` set by `ThemeProvider` (`components/theme.tsx`, next-themes, `defaultTheme="system"`, storage key `areca.theme`); the account menu offers Light · Dark · Auto.
 
 | Group | Tokens (`--color-…`) | Use |
 | --- | --- | --- |
@@ -55,7 +55,7 @@ Instance branding ([`lib/branding.ts`](../apps/cms/src/lib/branding.ts), edited 
 
 ## 3. Type
 
-Inter Variable everywhere (optical sizing on, `cv11` + `ss03`), IBM Plex Mono for code-like text, tabular figures (`tnum`) for counts and times. The scale is a set of `@utility` classes that carry family, size, line height, weight and tracking together; `cn()` in `lib/utils.ts` knows them, so they merge correctly with `text-*` colours.
+Inter Variable everywhere (optical sizing on, `cv11` + `ss03`), IBM Plex Mono for code-like text, tabular figures (`tnum`) for counts and times. The scale is a set of `@utility` classes that carry family, size, line height, weight and tracking together; `cn()` knows them through `lib/cn.config.ts` (compiled into `lib/cn-tables.gen.ts` with `pnpm cn:tables`), so they merge correctly with `text-*` colours.
 
 | Class | Size/line, weight, tracking | Use |
 | --- | --- | --- |

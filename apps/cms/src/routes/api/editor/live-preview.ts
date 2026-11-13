@@ -2,21 +2,21 @@ import { createFileRoute } from '@tanstack/react-router'
 import '@tanstack/react-start'
 
 import { ID_MAX_LENGTH, ENTRY_DATA_MAX_BYTES } from '#/lib/content-limits'
-import { localeTagSchema } from '#/lib/content-locale'
+import { withRequiredSlugField } from '#/lib/collection-fields'
+import { localeTagSchema } from '#/lib/locale-tag-schema'
 import { SLUG_PATTERN } from '#/lib/slug'
 import { z } from '#/lib/zod'
-import { securityErrorCode } from '#/lib/security-errors'
+import { guardErrorResponse } from '#/server/http/guard-response'
 import { getSession } from '#/lib/session.server'
 import {
   requireEntryAccess,
   requireGlobalAccess,
 } from '#/server/content/access'
-import { getCollection } from '#/server/content/collections'
 import { normalizeEntryData } from '#/server/content/entries'
 import {
   buildPreviewEntryFromDraft,
   buildPreviewGlobalFromDraft,
-} from '#/server/content/snapshot'
+} from '#/server/content/snapshot-preview'
 import { NotFoundError } from '#/server/content/errors'
 import { entryDataSchema, validateEntryData } from '#/server/content/validation'
 
@@ -73,8 +73,14 @@ function notFound() {
   return json({ error: 'Not found' }, 404)
 }
 
-/** The request body as text, or null when it passes the cap (chunked or not). */
-async function readCappedText(request: Request): Promise<string | null> {
+/**
+ * The request body as text, `null` when it passes the cap (chunked or not), or
+ * `undefined` when the stream fails because the editor aborted the request
+ * before it was read (a newer value, or the page closing).
+ */
+async function readCappedText(
+  request: Request,
+): Promise<string | null | undefined> {
   const declared = request.headers.get('content-length')
   if (declared && Number(declared) > MAX_BODY_BYTES) return null
   if (!request.body) return ''
@@ -84,7 +90,9 @@ async function readCappedText(request: Request): Promise<string | null> {
   let text = ''
   try {
     for (;;) {
-      const { done, value } = await reader.read()
+      const chunk = await reader.read().catch(() => undefined)
+      if (!chunk) return undefined
+      const { done, value } = chunk
       if (done) return text + decoder.decode()
       bytes += value.byteLength
       if (bytes > MAX_BODY_BYTES) {
@@ -105,12 +113,20 @@ async function readCappedText(request: Request): Promise<string | null> {
  */
 async function previewUnsaved(body: LiveBody) {
   if (body.entryId !== undefined) {
-    const { site, entry: existing } = await requireEntryAccess(body.entryId)
+    const {
+      site,
+      entry: existing,
+      collection: entryCollection,
+    } = await requireEntryAccess(body.entryId)
     // Same answer for an entry of another site as for a missing one.
     if (existing.siteId !== body.siteId) throw new NotFoundError()
     if (existing.collectionKey !== body.collection) throw new NotFoundError()
-    const col = await getCollection(site.id, existing.collectionKey)
-    if (!col) throw new NotFoundError()
+    // A section entry is not previewed as a collection entry.
+    if (entryCollection.kind !== 'collection') throw new NotFoundError()
+    const col = {
+      ...entryCollection,
+      fields: withRequiredSlugField(entryCollection.fields),
+    }
 
     const slugField = col.fields.find((field) => field.type === 'slug')
     let data = normalizeEntryData({ site, collection: col }, body.data)
@@ -192,6 +208,7 @@ export async function postLivePreview(request: Request): Promise<Response> {
 
   const text = await readCappedText(request)
   if (text === null) return json({ error: 'Payload too large' }, 413)
+  if (text === undefined) return json({ error: 'Invalid request' }, 400)
 
   let raw: unknown
   try {
@@ -206,11 +223,8 @@ export async function postLivePreview(request: Request): Promise<Response> {
     return await previewUnsaved(parsed.data)
   } catch (error) {
     if (error instanceof NotFoundError) return notFound()
-    if (error instanceof Response) return error
-    // Agency admin without two-factor, or a stale step-up: the same 403 codes
-    // the upload routes send.
-    const code = securityErrorCode(error)
-    if (code) return new Response(code, { status: 403, headers: NO_STORE })
+    const refused = guardErrorResponse(error, NO_STORE)
+    if (refused) return refused
     throw error
   }
 }

@@ -7,7 +7,7 @@ import { Input } from '#/components/ui/input'
 import { SettingsSection } from '#/components/ui/settings-section'
 import { usePeopleMutations } from '#/features/agency/use-people-mutations'
 import type { PersonDetail } from '#/features/agency/queries'
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { m } from '#/paraglide/messages'
 
 /** The display name. Saved explicitly; no e-mail is sent. */

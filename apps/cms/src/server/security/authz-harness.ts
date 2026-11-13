@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 /**
  * Shared harness for the direct-call authorization suites
  * (`authz-matrix.test.ts`, `authz-routes.test.ts`).
@@ -39,92 +38,9 @@ import {
 import { hashToken } from '#/server/security/token-hash'
 import { startInstance } from '#/start'
 
+import type { ActorName, Expected } from './authz-policies'
 import { setCurrentSession } from './authz-state'
 import type { TestSession } from './authz-state'
-
-export type ActorName =
-  | 'anonymous'
-  | 'editorX'
-  | 'ownerX'
-  | 'ownerY'
-  | 'adminNoMfa'
-  | 'adminMfa'
-  | 'adminStale'
-
-export const ACTORS: ActorName[] = [
-  'anonymous',
-  'editorX',
-  'ownerX',
-  'ownerY',
-  'adminNoMfa',
-  'adminMfa',
-  'adminStale',
-]
-
-/** What a caller is expected to get back. */
-export type Expected =
-  'allowed' | 'login' | 'forbidden' | 'not-found' | 'mfa' | 'reauth'
-
-export type Policy =
-  'public' | 'user' | 'org-editor' | 'org-owner' | 'agency' | 'agency-fresh'
-
-const ALL = (value: Expected): Record<ActorName, Expected> => ({
-  anonymous: value,
-  editorX: value,
-  ownerX: value,
-  ownerY: value,
-  adminNoMfa: value,
-  adminMfa: value,
-  adminStale: value,
-})
-
-/**
- * Expected result per policy. "X" is the organization whose data the call
- * targets; "Y" is an unrelated tenant.
- */
-export const POLICY_EXPECTATIONS: Record<
-  Policy,
-  Record<ActorName, Expected>
-> = {
-  public: ALL('allowed'),
-  user: { ...ALL('allowed'), anonymous: 'login' },
-  'org-editor': {
-    anonymous: 'login',
-    editorX: 'allowed',
-    ownerX: 'allowed',
-    ownerY: 'forbidden',
-    adminNoMfa: 'mfa',
-    adminMfa: 'allowed',
-    adminStale: 'allowed',
-  },
-  'org-owner': {
-    anonymous: 'login',
-    editorX: 'forbidden',
-    ownerX: 'allowed',
-    ownerY: 'forbidden',
-    adminNoMfa: 'mfa',
-    adminMfa: 'allowed',
-    adminStale: 'allowed',
-  },
-  agency: {
-    anonymous: 'login',
-    editorX: 'forbidden',
-    ownerX: 'forbidden',
-    ownerY: 'forbidden',
-    adminNoMfa: 'mfa',
-    adminMfa: 'allowed',
-    adminStale: 'allowed',
-  },
-  'agency-fresh': {
-    anonymous: 'login',
-    editorX: 'forbidden',
-    ownerX: 'forbidden',
-    ownerY: 'forbidden',
-    adminNoMfa: 'mfa',
-    adminMfa: 'allowed',
-    adminStale: 'reauth',
-  },
-}
 
 // ---------------------------------------------------------------- seeding
 
@@ -147,17 +63,19 @@ export async function seedWorld() {
     flags: { admin?: boolean; twoFactor?: boolean } = {},
   ) {
     const id = crypto.randomUUID()
-    const [row] = await db
-      .insert(user)
-      .values({
-        id,
-        name: `${label} ${run}`,
-        email: `${label}-${run}-${id.slice(0, 6)}@authz.test`,
-        emailVerified: true,
-        isAgencyAdmin: Boolean(flags.admin),
-        twoFactorEnabled: Boolean(flags.twoFactor),
-      })
-      .returning()
+    const row = (
+      await db
+        .insert(user)
+        .values({
+          id,
+          name: `${label} ${run}`,
+          email: `${label}-${run}-${id.slice(0, 6)}@authz.test`,
+          emailVerified: true,
+          isAgencyAdmin: Boolean(flags.admin),
+          twoFactorEnabled: Boolean(flags.twoFactor),
+        })
+        .returning()
+    ).at(0)
     if (!row) throw new Error('user insert failed')
     userIds.push(row.id)
     if (flags.twoFactor) {
@@ -190,13 +108,15 @@ export async function seedWorld() {
 
   async function freshOrg(label = 'org') {
     const suffix = crypto.randomUUID().slice(0, 8)
-    const [row] = await db
-      .insert(organization)
-      .values({
-        name: `Fresh ${label} ${suffix}`,
-        slug: `authz-${run}-${suffix}`,
-      })
-      .returning()
+    const row = (
+      await db
+        .insert(organization)
+        .values({
+          name: `Fresh ${label} ${suffix}`,
+          slug: `authz-${run}-${suffix}`,
+        })
+        .returning()
+    ).at(0)
     if (!row) throw new Error('org insert failed')
     orgIds.push(row.id)
     return row
@@ -205,19 +125,21 @@ export async function seedWorld() {
   async function freshSite(side: Side = 'X') {
     const { ctx } = sides[side]
     const suffix = crypto.randomUUID().slice(0, 8)
-    const [row] = await db
-      .insert(site)
-      .values({
-        organizationId: ctx.org.id,
-        name: `Fresh site ${suffix}`,
-        slug: `authz-${run}-${suffix}`,
-        tokenHash: `h-${crypto.randomUUID()}`,
-        schemaTokenHash: `s-${crypto.randomUUID()}`,
-        productionUrl: 'http://localhost:3999',
-        previewSecret: crypto.randomUUID(),
-        publishingMode: 'demo',
-      })
-      .returning()
+    const row = (
+      await db
+        .insert(site)
+        .values({
+          organizationId: ctx.org.id,
+          name: `Fresh site ${suffix}`,
+          slug: `authz-${run}-${suffix}`,
+          tokenHash: `h-${crypto.randomUUID()}`,
+          schemaTokenHash: `s-${crypto.randomUUID()}`,
+          productionUrl: 'http://localhost:3999',
+          previewSecret: crypto.randomUUID(),
+          publishingMode: 'demo',
+        })
+        .returning()
+    ).at(0)
     if (!row) throw new Error('site insert failed')
     return row
   }
@@ -239,17 +161,19 @@ export async function seedWorld() {
 
   async function freshAsset(side: Side = 'X') {
     const { ctx } = sides[side]
-    const [row] = await db
-      .insert(asset)
-      .values({
-        organizationId: ctx.org.id,
-        storageKey: `authz/${run}/${crypto.randomUUID()}.png`,
-        originalFilename: 'pic.png',
-        mimeType: 'image/png',
-        size: 10,
-        altText: 'original alt',
-      })
-      .returning()
+    const row = (
+      await db
+        .insert(asset)
+        .values({
+          organizationId: ctx.org.id,
+          storageKey: `authz/${run}/${crypto.randomUUID()}.png`,
+          originalFilename: 'pic.png',
+          mimeType: 'image/png',
+          size: 10,
+          altText: 'original alt',
+        })
+        .returning()
+    ).at(0)
     if (!row) throw new Error('asset insert failed')
     return row
   }
@@ -259,32 +183,34 @@ export async function seedWorld() {
     marker: string,
     status: 'live' | 'superseded' = 'live',
   ) {
-    const [row] = await db
-      .insert(publication)
-      .values({
-        siteId,
-        snapshot: {
-          publicationId: '',
-          siteKey: marker,
-          createdAt: new Date().toISOString(),
-          hash: `hash-${marker}`,
-          collections: {
-            articles: [
-              {
-                id: crypto.randomUUID(),
-                slug: `slug-${marker}`,
-                publishedAt: null,
-                data: { title: marker },
-              },
-            ],
+    const row = (
+      await db
+        .insert(publication)
+        .values({
+          siteId,
+          snapshot: {
+            publicationId: '',
+            siteKey: marker,
+            createdAt: new Date().toISOString(),
+            hash: `hash-${marker}`,
+            collections: {
+              articles: [
+                {
+                  id: crypto.randomUUID(),
+                  slug: `slug-${marker}`,
+                  publishedAt: null,
+                  data: { title: marker },
+                },
+              ],
+            },
           },
-        },
-        snapshotHash: `hash-${marker}-${crypto.randomUUID()}`,
-        status,
-        wasLive: true,
-        publishingMode: 'production',
-      })
-      .returning()
+          snapshotHash: `hash-${marker}-${crypto.randomUUID()}`,
+          status,
+          wasLive: true,
+          publishingMode: 'production',
+        })
+        .returning()
+    ).at(0)
     if (!row) throw new Error('publication insert failed')
     return row
   }
@@ -294,24 +220,28 @@ export async function seedWorld() {
     publicationId: string,
     status: 'queued' | 'succeeded' = 'queued',
   ) {
-    const [row] = await db
-      .insert(buildJob)
-      .values({ siteId, publicationId, status })
-      .returning()
+    const row = (
+      await db
+        .insert(buildJob)
+        .values({ siteId, publicationId, status })
+        .returning()
+    ).at(0)
     if (!row) throw new Error('job insert failed')
     return row
   }
 
   async function freshMembership(side: Side, role: 'owner' | 'editor') {
     const member = await makeUser(`member-${role}`)
-    const [row] = await db
-      .insert(membership)
-      .values({
-        userId: member.id,
-        organizationId: sides[side].ctx.org.id,
-        role,
-      })
-      .returning()
+    const row = (
+      await db
+        .insert(membership)
+        .values({
+          userId: member.id,
+          organizationId: sides[side].ctx.org.id,
+          role,
+        })
+        .returning()
+    ).at(0)
     if (!row) throw new Error('membership insert failed')
     return { user: member, membership: row }
   }
@@ -327,17 +257,19 @@ export async function seedWorld() {
   ) {
     // The raw token is returned for the test to use; only its hash is stored.
     const token = crypto.randomUUID() + crypto.randomUUID()
-    const [row] = await db
-      .insert(invitation)
-      .values({
-        email: opts.email ?? `invitee-${crypto.randomUUID()}@authz.test`,
-        organizationId: sides[side].ctx.org.id,
-        role: opts.role ?? 'editor',
-        tokenHash: hashToken(token),
-        expiresAt: opts.expiresAt ?? new Date(Date.now() + 86_400_000),
-        acceptedAt: opts.acceptedAt ?? null,
-      })
-      .returning()
+    const row = (
+      await db
+        .insert(invitation)
+        .values({
+          email: opts.email ?? `invitee-${crypto.randomUUID()}@authz.test`,
+          organizationId: sides[side].ctx.org.id,
+          role: opts.role ?? 'editor',
+          tokenHash: hashToken(token),
+          expiresAt: opts.expiresAt ?? new Date(Date.now() + 86_400_000),
+          acceptedAt: opts.acceptedAt ?? null,
+        })
+        .returning()
+    ).at(0)
     if (!row) throw new Error('invitation insert failed')
     return { ...row, token }
   }
@@ -532,9 +464,9 @@ export async function callServerFn(
   session: TestSession,
 ) {
   setCurrentSession(session)
-  const store = (globalThis as Record<symbol, AsyncLocalStorage<unknown>>)[
-    START_STORE
-  ]
+  const store = (
+    globalThis as Record<symbol, AsyncLocalStorage<unknown> | undefined>
+  )[START_STORE]
   if (!store) throw new Error('Start storage context is not initialised')
   const startOptions = await startInstance.getOptions()
   const outcome = await store.run(

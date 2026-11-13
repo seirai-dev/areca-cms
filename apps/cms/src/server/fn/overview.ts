@@ -1,8 +1,9 @@
 import { createServerFn } from '@tanstack/react-start'
-import { and, desc, eq, inArray, max, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, max, ne, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import {
+  buildJob,
   collection,
   entry,
   membership,
@@ -11,9 +12,8 @@ import {
   site,
 } from '#/db/schema'
 import { requireUser } from '#/lib/session.server'
-import { NotFoundError } from '#/server/content/errors'
 import { requireAdminLocalMfa } from '#/server/security/local-mfa'
-import { diffApprovedRelease } from '#/server/publishing/release-diff'
+import { approvedReleaseDiffs } from '#/server/publishing/release-diff'
 
 const loose = { strict: { output: false } as const }
 
@@ -33,7 +33,8 @@ async function accessibleOrgIds(userId: string, isAgencyAdmin: boolean) {
 
 /**
  * Per-site figures for the dashboard and the Sites page: collection and entry
- * counts, the newest entry change, and whether a publication is live.
+ * counts, the newest entry change, whether a publication is live, and
+ * whether the newest build (cancelled ones aside) failed.
  * Scoped to the organizations the caller belongs to (all for agency admins).
  */
 export const getSitesOverviewFn = createServerFn({
@@ -129,23 +130,28 @@ export const getSitesOverviewFn = createServerFn({
     if (!liveSince.has(row.siteId)) liveSince.set(row.siteId, row.createdAt)
   }
 
-  // A site deleted after the list above is simply gone: `null` marks it and it
-  // is left out, rather than failing the whole overview.
-  const pendingPairs = await Promise.all(
-    siteIds.map(async (siteId) => {
-      try {
-        const diff = await diffApprovedRelease(siteId)
-        return [siteId, diff.pendingCount] as const
-      } catch (error) {
-        if (error instanceof NotFoundError) return [siteId, null] as const
-        throw error
-      }
-    }),
+  const latestJobs = await db
+    .selectDistinctOn([buildJob.siteId], {
+      siteId: buildJob.siteId,
+      status: buildJob.status,
+    })
+    .from(buildJob)
+    .where(
+      and(inArray(buildJob.siteId, siteIds), ne(buildJob.status, 'cancelled')),
+    )
+    .orderBy(buildJob.siteId, desc(buildJob.createdAt))
+  const failed = new Set(
+    latestJobs
+      .filter((row) => row.status === 'failed')
+      .map((row) => row.siteId),
   )
+
+  // A site deleted after the list above has no diff and is left out, rather
+  // than failing the whole overview. Unchanged sites come from the cache.
+  const diffs = await approvedReleaseDiffs(siteIds)
 
   const byCollection = new Map(collectionCounts.map((r) => [r.siteId, r]))
   const byEntry = new Map(entryCounts.map((r) => [r.siteId, r]))
-  const byPending = new Map(pendingPairs)
   const live = new Set(liveSince.keys())
 
   const organizations = orgIds
@@ -159,7 +165,7 @@ export const getSitesOverviewFn = createServerFn({
       )
 
   const rows = sites
-    .filter((row) => byPending.get(row.id) !== null)
+    .filter((row) => diffs.has(row.id))
     .map((row) => ({
       ...row,
       collections: byCollection.get(row.id)?.count ?? 0,
@@ -167,7 +173,8 @@ export const getSitesOverviewFn = createServerFn({
       lastUpdated: byEntry.get(row.id)?.lastUpdated ?? row.updatedAt,
       live: live.has(row.id),
       liveSince: liveSince.get(row.id) ?? null,
-      pendingEntries: byPending.get(row.id) ?? 0,
+      pendingEntries: diffs.get(row.id)?.pendingCount ?? 0,
+      lastBuildFailed: failed.has(row.id),
     }))
 
   return {

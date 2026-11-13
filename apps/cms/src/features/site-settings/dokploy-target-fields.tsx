@@ -1,4 +1,4 @@
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { FormField } from '#/components/ui/form-field'
 import { Input } from '#/components/ui/input'
 import { Tag } from '#/components/ui/tag'

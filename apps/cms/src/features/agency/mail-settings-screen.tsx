@@ -55,9 +55,13 @@ import type {
   TimelineStep,
 } from './mail-settings-logic'
 import { PausedJobsSection } from './paused-jobs-section'
-import { useMailSettings, useRecentEmails } from './use-mail-settings'
+import {
+  useMailSettings,
+  useMailSettingsQuery,
+  useRecentEmails,
+} from './use-mail-settings'
 import type { MailActionFailure, MailStatus } from './use-mail-settings'
-import type { RecentEmail } from '#/server/mail/outbox'
+import type { RecentEmail } from '#/server/mail/outbox-views'
 
 function secureLabel(secure: MailSecure) {
   if (secure === 'starttls') return m.agency_mail_secure_starttls()
@@ -78,8 +82,48 @@ const MAIL_FIELD_IDS: Record<MailFieldKey, string> = {
  * form is a draft that Verify and Send test email run on as typed.
  */
 export function MailSettingsScreen() {
-  const form = useMailSettings()
-  const { saved, fields, update } = form
+  const query = useMailSettingsQuery()
+  if (!query.data) {
+    return (
+      <div
+        className="grid gap-8 pb-24"
+        data-testid="mail-settings-page"
+        data-ready="false"
+      >
+        <PageHeader
+          title={m.agency_mail_title()}
+          description={m.agency_mail_description()}
+        />
+        {query.isError ? (
+          <MailLoadError query={query} />
+        ) : (
+          <div className="grid gap-4" aria-busy="true">
+            <Skeleton className="h-48 rounded-card" />
+            <Skeleton className="h-64 rounded-card" />
+          </div>
+        )}
+      </div>
+    )
+  }
+  return <MailSettingsEditor query={query} saved={query.data} />
+}
+
+type MailSettingsQuery = ReturnType<typeof useMailSettingsQuery>
+
+function MailLoadError({ query }: { query: MailSettingsQuery }) {
+  return <QueryError title={m.agency_mail_load_error()} query={query} />
+}
+
+/** The form, mounted once the settings have loaded; the draft starts from them. */
+function MailSettingsEditor({
+  query,
+  saved,
+}: {
+  query: MailSettingsQuery
+  saved: MailStatus
+}) {
+  const form = useMailSettings(saved)
+  const { fields, update } = form
   const [envConfirmOpen, setEnvConfirmOpen] = React.useState(false)
   const busy =
     form.verify.isPending ||
@@ -96,7 +140,7 @@ export function MailSettingsScreen() {
   function barText() {
     if (missing === 1) return m.agency_mail_fix_one()
     if (missing > 1) return m.agency_mail_fix_many({ count: String(missing) })
-    if (form.saved?.source === 'env') return m.agency_mail_save_to_use()
+    if (saved.source === 'env') return m.agency_mail_save_to_use()
     return m.shared_unsaved_changes()
   }
 
@@ -113,25 +157,15 @@ export function MailSettingsScreen() {
     <div
       className={cn('grid gap-8 pb-24', barOpen && 'max-md:pb-40')}
       data-testid="mail-settings-page"
-      data-ready={saved ? 'true' : 'false'}
+      data-ready="true"
     >
       <PageHeader
         title={m.agency_mail_title()}
         description={m.agency_mail_description()}
       />
 
-      {form.query.isError ? (
-        <QueryError
-          title={m.agency_mail_load_error()}
-          error={form.query.error}
-          onRetry={() => void form.query.refetch()}
-          retrying={form.query.isFetching}
-        />
-      ) : !saved ? (
-        <div className="grid gap-4" aria-busy="true">
-          <Skeleton className="h-48 rounded-card" />
-          <Skeleton className="h-64 rounded-card" />
-        </div>
+      {query.isError ? (
+        <MailLoadError query={query} />
       ) : (
         <form
           noValidate
@@ -496,12 +530,12 @@ export function MailSettingsScreen() {
         </form>
       )}
 
-      {saved ? <AgencyClientDefaultsSection /> : null}
-      {saved ? <AgencyAlertsSection /> : null}
+      <AgencyClientDefaultsSection />
+      <AgencyAlertsSection />
 
-      {saved ? <RecentEmailsSection /> : null}
+      <RecentEmailsSection />
 
-      {saved ? <PausedJobsSection /> : null}
+      <PausedJobsSection />
 
       <ConfirmDialog
         open={envConfirmOpen}
@@ -704,12 +738,7 @@ function RecentEmailsSection() {
         </div>
 
         {recent.isError ? (
-          <QueryError
-            title={m.agency_mail_recent_error()}
-            error={recent.error}
-            onRetry={() => void recent.refetch()}
-            retrying={recent.isFetching}
-          />
+          <QueryError title={m.agency_mail_recent_error()} query={recent} />
         ) : recent.isPending ? (
           <div className="grid gap-2" aria-busy="true">
             <Skeleton className="h-16 rounded-control" />

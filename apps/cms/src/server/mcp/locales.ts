@@ -1,7 +1,8 @@
 /**
  * Content languages for the MCP tools. Pure functions: the tools load the site
- * languages and the stored draft, then call these. A site without languages
- * never reaches this module (the tools keep their single-language path).
+ * languages and the stored draft, then call these. `applyLocaleWrite` also
+ * takes the write of a site without languages, which merges into the stored
+ * fields as they are.
  *
  * Partial writes follow the rule in docs/design/content-languages.md: read the
  * language's flat view, merge what the agent sent, then write the whole view
@@ -22,6 +23,7 @@ import type { LocaleCtx } from '#/lib/content-locale'
 import { SEO_KEY } from '#/lib/seo'
 import type { EntryData, Field, SiteLanguages } from '#/lib/types'
 import { ValidationError } from '#/server/content/errors'
+import { pickDeclaredFields } from '#/server/content/validation'
 
 import { mergeSeo } from './entry-format'
 
@@ -135,17 +137,31 @@ export function translationStatuses(
  *   fields are written to the shared value and listed in `sharedFieldsUpdated`.
  * - `seo` is a patch (see seoPatchFromInput). It merges into the language's
  *   own `$seo`. `seoEnabled: false` drops SEO altogether (sections without SEO).
+ * - Without languages (`locale` null), the declared stored fields take the
+ *   converted values and the SEO patch.
  */
 export function applyLocaleWrite(input: {
   fields: Field[]
-  languages: SiteLanguages
-  locale: string
+  languages: SiteLanguages | null
+  locale: string | null
   stored: EntryData
   converted: EntryData
   seo?: Record<string, unknown>
   seoEnabled?: boolean
 }): { data: EntryData; sharedFieldsUpdated: string[] } {
   const { fields, languages, locale, converted } = input
+  if (!languages || locale === null) {
+    const data = pickDeclaredFields(fields, input.stored)
+    if (input.seoEnabled === false) delete data[SEO_KEY]
+    Object.assign(data, converted)
+    const seo = mergeSeo(
+      data[SEO_KEY] as Record<string, unknown> | undefined,
+      input.seo,
+    )
+    if (seo) data[SEO_KEY] = seo
+    else delete data[SEO_KEY]
+    return { data, sharedFieldsUpdated: [] }
+  }
   const ctx = localeCtxFor(languages, fields)
   const isMain = locale === languages.main
   const slugKey = slugFieldKey(fields)

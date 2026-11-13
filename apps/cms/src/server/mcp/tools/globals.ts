@@ -8,7 +8,6 @@ import {
 } from '#/lib/content-limits'
 import { GLOBAL_PREVIEW_PATH_MAX_LENGTH } from '#/lib/globals'
 import { SEO_KEY } from '#/lib/seo'
-import type { EntryData } from '#/lib/types'
 import { loadSiteLanguages } from '#/server/content/locale-validation'
 import {
   assertSectionSeo,
@@ -17,29 +16,19 @@ import {
   getGlobalEntry,
   upsertGlobal,
 } from '#/server/content/globals'
-import { updateDraft } from '#/server/content/entries'
-import { pickDeclaredFields } from '#/server/content/validation'
 import { ValidationError } from '#/server/content/errors'
 
-import {
-  describeGlobal,
-  mergeSeo,
-  seoPatchFromInput,
-  codeLanguageWarnings,
-  linkWarnings,
-  toStoredFields,
-} from '../entry-format'
+import { describeGlobal } from '../entry-format'
 import { McpNotFoundError } from '../errors'
 import type { McpActor } from '../keys'
-import { applyLocaleWrite, resolveLocale, withSharedNote } from '../locales'
+import { resolveLocale } from '../locales'
 import {
-  assertSiteImages,
-  assetLookupFor,
   expectedVersion,
   formatStoredEntry,
   localeInput,
-  richTextLinksFor,
-  withImportWarnings,
+  prepareAgentWrite,
+  saveAgentDraft,
+  withWriteNotes,
 } from './entries'
 import { loadGlobalInSite } from '../scope'
 import { fieldsInputSchema, seoInputSchema } from '../schemas'
@@ -125,61 +114,31 @@ export function registerGlobalTools(registry: ToolCollector): void {
       if (input.seo !== undefined) {
         assertSectionSeo(global, { [SEO_KEY]: input.seo })
       }
-      const inputs = input.fields ?? {}
-      const patch = seoPatchFromInput(input.seo)
-      const assets = await assetLookupFor(actor, global.fields, inputs, patch)
-      const links = await richTextLinksFor(
+      const { data, shared, warnings } = await prepareAgentWrite(
         actor,
         global.fields,
-        inputs,
-        target?.locale ?? null,
-      )
-      const converted = toStoredFields(global.fields, inputs, assets, links)
-      assertSiteImages(global.fields, converted, assets)
-      let data: EntryData
-      let shared: string[] = []
-      if (languages && target) {
-        const written = applyLocaleWrite({
-          fields: global.fields,
+        {
+          inputs: input.fields ?? {},
+          seo: input.seo,
           languages,
-          locale: target.locale,
+          target,
           stored: entry.draftData,
-          converted,
-          seo: patch,
           seoEnabled: global.seoEnabled,
-        })
-        data = written.data
-        shared = written.sharedFieldsUpdated
-      } else {
-        data = pickDeclaredFields(global.fields, entry.draftData)
-        if (!global.seoEnabled) delete data[SEO_KEY]
-        Object.assign(data, converted)
-        const seo = mergeSeo(
-          (data[SEO_KEY] as Record<string, unknown> | undefined) ?? undefined,
-          patch,
-        )
-        if (seo) data[SEO_KEY] = seo
-        else delete data[SEO_KEY]
-      }
-      const updated = await updateDraft(
+        },
+      )
+      const saveWarnings = await saveAgentDraft(
+        actor,
         entry.id,
         data,
-        actor.userId,
         input.expectedVersion ?? entry.draftVersion,
       )
-      return withSharedNote(
-        withImportWarnings(
-          await formatStoredEntry(actor, entry.id, {
-            withPreview: true,
-            locale: target?.locale,
-            translations: true,
-          }),
-          [
-            ...codeLanguageWarnings(global.fields, inputs),
-            ...linkWarnings(global.fields, inputs, links),
-            ...updated.importWarnings,
-          ],
-        ),
+      return withWriteNotes(
+        await formatStoredEntry(actor, entry.id, {
+          withPreview: true,
+          locale: target?.locale,
+          translations: true,
+        }),
+        [...warnings, ...saveWarnings],
         target,
         shared,
       )

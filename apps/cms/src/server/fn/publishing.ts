@@ -1,21 +1,14 @@
 import { createServerFn } from '@tanstack/react-start'
-import { eq } from 'drizzle-orm'
 import { z } from '#/lib/zod'
 
-import { db } from '#/db'
-import { site } from '#/db/schema'
-import {
-  requireAgencyAdmin,
-  requireOrgMemberOrNotFound,
-  requireUser,
-} from '#/lib/session.server'
+import { requireAgencyAdmin, requireUser } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import {
   reconcileDeploymentJob,
   resolveUncertainDeploymentJob,
-} from '#/server/publishing/worker'
+} from '#/server/publishing/job-run'
+import { requireSiteAccess } from '#/server/content/access'
 import { NotFoundError } from '#/server/content/errors'
-import { assertSiteVisibleTo } from '#/server/security/site-visibility'
 import { AppError } from '#/server/http/app-error'
 import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
 import {
@@ -30,43 +23,6 @@ import {
 import { listPendingRelease } from '#/server/publishing/release-diff'
 
 const loose = { strict: { output: false } as const }
-
-async function requireSiteAccess(
-  siteId: string,
-  role?: 'owner',
-  notFoundMessage: () => ReturnType<
-    typeof m.server_site_not_found
-  > = m.server_site_not_found,
-) {
-  // Authenticate first; a missing site and a site the caller cannot access
-  // look identical (NotFound), so other tenants' ids cannot be probed.
-  await requireUser()
-  const found = (
-    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
-  ).at(0)
-  if (!found) {
-    throw new NotFoundError(notFoundMessage())
-  }
-  const member = await requireOrgMemberOrNotFound(
-    found.organizationId,
-    undefined,
-    () => new NotFoundError(notFoundMessage()),
-  )
-  // Before the role check: a dev env is NotFound for an editor as for an owner.
-  await assertSiteVisibleTo(
-    member,
-    found,
-    () => new NotFoundError(notFoundMessage()),
-  )
-  const session = role
-    ? await requireOrgMemberOrNotFound(
-        found.organizationId,
-        role,
-        () => new NotFoundError(notFoundMessage()),
-      )
-    : member
-  return { session, site: found }
-}
 
 async function requireJobAccess(jobId: string, role?: 'owner') {
   await requireUser()
@@ -87,8 +43,10 @@ export const requestPublicationFn = createServerFn({ method: 'POST', ...loose })
     z.object({
       siteId: z.string().min(1),
       requestKey: z.string().uuid(),
-      priority: z.number().int().optional(),
-      note: z.string().optional(),
+      // The UI sends 0 or 100 (urgent); the build queue is shared by every
+      // client, so other values are refused.
+      priority: z.union([z.literal(0), z.literal(100)]).optional(),
+      note: z.string().max(500).optional(),
     }),
   )
   .handler(async ({ data }) => {

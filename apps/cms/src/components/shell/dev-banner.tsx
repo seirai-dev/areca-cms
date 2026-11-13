@@ -7,7 +7,6 @@ import { Tag } from '#/components/ui/tag'
 import { ResetDevEnvConfirm } from '#/features/dev-env/reset-confirm'
 import { useDevSyncStatus } from '#/features/dev-env/use-push'
 import { useDevEnvironment } from '#/features/site-settings/use-dev-environment'
-import { errorMessage } from '#/lib/admin/helpers'
 import { findSite } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
@@ -74,12 +73,8 @@ export function DevBanner({ me, site }: { me: Me; site: MeSite }) {
             devSiteId={site.id}
             testId="dev-env-banner-reset-dialog"
             onConfirm={async () => {
-              try {
-                await dev.reset.mutateAsync(site.id)
-                toast.success(m.dev_env_reset_done())
-              } catch (error) {
-                toast.error(errorMessage(error))
-              }
+              await dev.reset.mutateAsync(site.id)
+              toast.success(m.dev_env_reset_done())
             }}
           >
             <Button

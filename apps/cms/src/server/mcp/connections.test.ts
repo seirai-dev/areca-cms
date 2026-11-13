@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups are checked defensively */
 import { and, eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -18,8 +17,9 @@ import {
   isConnectionUsable,
   listConnections,
   revokeConnection,
+  saveConnectionApproval,
   touchConnection,
-  upsertConnection,
+  withConnectionLock,
 } from './connections'
 import { MCP_CONNECTION_IDLE_MS } from './oauth-resource'
 
@@ -112,15 +112,25 @@ describe.skipIf(!hasDb)('MCP connections', () => {
     userId: string,
     allowGoLive = false,
     clientName = 'Connections test app',
-  ) =>
-    upsertConnection({
+  ) => {
+    const input = {
       userId,
       siteId: ctx.site.id,
       organizationId: ctx.org.id,
       clientId,
       clientName,
       allowGoLive,
+    }
+    return withConnectionLock(input, async () => {
+      const now = new Date()
+      const existing = await findUsableConnection({ ...input, now })
+      return saveConnectionApproval(
+        input,
+        existing?.id ?? crypto.randomUUID(),
+        now,
+      )
     })
+  }
 
   it('keeps one active connection per user, site and app, and updates it on re-approval', async () => {
     const first = await connect(owner, false)
@@ -177,15 +187,17 @@ describe.skipIf(!hasDb)('MCP connections', () => {
   })
 
   it('lets an editor disconnect only their own app, and an owner disconnect any', async () => {
-    const [mine] = await db
-      .select()
-      .from(mcpConnection)
-      .where(
-        and(
-          eq(mcpConnection.userId, editorTwo),
-          eq(mcpConnection.siteId, ctx.site.id),
-        ),
-      )
+    const mine = (
+      await db
+        .select()
+        .from(mcpConnection)
+        .where(
+          and(
+            eq(mcpConnection.userId, editorTwo),
+            eq(mcpConnection.siteId, ctx.site.id),
+          ),
+        )
+    ).at(0)
     expect(mine).toBeDefined()
 
     await expect(
@@ -222,15 +234,17 @@ describe.skipIf(!hasDb)('MCP connections', () => {
   })
 
   it('records the disconnect in the activity log, and a second disconnect changes nothing', async () => {
-    const [ownerRow] = await db
-      .select()
-      .from(mcpConnection)
-      .where(
-        and(
-          eq(mcpConnection.userId, owner),
-          eq(mcpConnection.siteId, ctx.site.id),
-        ),
-      )
+    const ownerRow = (
+      await db
+        .select()
+        .from(mcpConnection)
+        .where(
+          and(
+            eq(mcpConnection.userId, owner),
+            eq(mcpConnection.siteId, ctx.site.id),
+          ),
+        )
+    ).at(0)
     expect(ownerRow).toBeDefined()
     const revoke = () =>
       revokeConnection({
@@ -257,31 +271,31 @@ describe.skipIf(!hasDb)('MCP connections', () => {
   })
 
   it('writes last-used at most once a minute', async () => {
-    const [row] = await db
-      .insert(mcpConnection)
-      .values({
-        userId: owner,
-        siteId: ctx.site.id,
-        clientId,
-        clientName: 'Touch test',
-        lastUsedAt: new Date(Date.now() - 10_000),
-      })
-      .returning()
+    const row = (
+      await db
+        .insert(mcpConnection)
+        .values({
+          userId: owner,
+          siteId: ctx.site.id,
+          clientId,
+          clientName: 'Touch test',
+          lastUsedAt: new Date(Date.now() - 10_000),
+        })
+        .returning()
+    ).at(0)
     if (!row) throw new Error('insert failed')
     const recentBefore = row.lastUsedAt
     await touchConnection(row, new Date())
-    const [afterRecent] = await db
-      .select()
-      .from(mcpConnection)
-      .where(eq(mcpConnection.id, row.id))
+    const afterRecent = (
+      await db.select().from(mcpConnection).where(eq(mcpConnection.id, row.id))
+    ).at(0)
     expect(afterRecent?.lastUsedAt).toEqual(recentBefore)
 
     const later = new Date(Date.now() + 120_000)
     await touchConnection(row, later)
-    const [afterLater] = await db
-      .select()
-      .from(mcpConnection)
-      .where(eq(mcpConnection.id, row.id))
+    const afterLater = (
+      await db.select().from(mcpConnection).where(eq(mcpConnection.id, row.id))
+    ).at(0)
     expect(afterLater?.lastUsedAt?.getTime()).toBe(later.getTime())
   })
 })

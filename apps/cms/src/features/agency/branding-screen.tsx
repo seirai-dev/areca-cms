@@ -33,12 +33,12 @@ import {
   LOGIN_TAGLINE_MAX_LENGTH,
   fontStylesheetUrl,
 } from '#/lib/branding'
-import type { FontKey } from '#/lib/branding'
+import type { BrandingView, FontKey } from '#/lib/branding'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
 import { BrandingPreview } from './branding-preview'
-import { useBrandingForm } from './use-branding-form'
+import { useBrandingForm, useBrandingQuery } from './use-branding-form'
 import type { ImageKind } from './use-branding-form'
 
 /** The built-in iris (styles.css `--color-accent`), shown on the Areca swatch. */
@@ -82,15 +82,61 @@ function Section({
  * the floating save pill.
  */
 export function BrandingScreen() {
-  const form = useBrandingForm()
-  const { saved, preview, fields, set } = form
+  const query = useBrandingQuery()
+  if (!query.data) {
+    return (
+      <div
+        className="grid gap-8"
+        data-testid="branding-page"
+        data-ready="false"
+      >
+        <PageHeader
+          title={m.admin_branding_title()}
+          description={m.agency_branding_description()}
+        />
+        {query.isError ? (
+          <BrandingLoadError query={query} />
+        ) : (
+          <div
+            className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_440px]"
+            aria-busy="true"
+          >
+            <div className="grid gap-6">
+              <Skeleton className="h-64 rounded-card" />
+              <Skeleton className="h-48 rounded-card" />
+            </div>
+            <Skeleton className="h-80 rounded-card" />
+          </div>
+        )}
+      </div>
+    )
+  }
+  return <BrandingEditor query={query} saved={query.data} />
+}
+
+type BrandingQuery = ReturnType<typeof useBrandingQuery>
+
+function BrandingLoadError({ query }: { query: BrandingQuery }) {
+  return <QueryError title={m.agency_branding_load_error()} query={query} />
+}
+
+/** The form, mounted once the branding has loaded; the draft starts from it. */
+function BrandingEditor({
+  query,
+  saved,
+}: {
+  query: BrandingQuery
+  saved: BrandingView
+}) {
+  const form = useBrandingForm(saved)
+  const { preview, fields, set } = form
 
   // Each font renders in itself, so load them all while this page is open.
   const fontLinks = FONT_KEYS.map((key) => fontStylesheetUrl(key)).filter(
     (url): url is string => Boolean(url),
   )
 
-  const resetButton = saved ? (
+  const resetButton = (
     <ConfirmDialog
       title={m.admin_branding_reset_title()}
       description={m.admin_branding_reset_description()}
@@ -110,38 +156,18 @@ export function BrandingScreen() {
         {m.admin_branding_reset_label()}
       </Button>
     </ConfirmDialog>
-  ) : null
+  )
 
   return (
-    <div
-      className="grid gap-8"
-      data-testid="branding-page"
-      data-ready={saved ? 'true' : 'false'}
-    >
+    <div className="grid gap-8" data-testid="branding-page" data-ready="true">
       <PageHeader
         title={m.admin_branding_title()}
         description={m.agency_branding_description()}
         actions={resetButton}
       />
 
-      {form.query.isError ? (
-        <QueryError
-          title={m.agency_branding_load_error()}
-          error={form.query.error}
-          onRetry={() => void form.query.refetch()}
-          retrying={form.query.isFetching}
-        />
-      ) : !saved || !preview ? (
-        <div
-          className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_440px]"
-          aria-busy="true"
-        >
-          <div className="grid gap-6">
-            <Skeleton className="h-64 rounded-card" />
-            <Skeleton className="h-48 rounded-card" />
-          </div>
-          <Skeleton className="h-80 rounded-card" />
-        </div>
+      {query.isError ? (
+        <BrandingLoadError query={query} />
       ) : (
         <form
           className="grid items-start gap-8 pb-24 xl:grid-cols-[minmax(0,1fr)_440px]"

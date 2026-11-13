@@ -12,7 +12,8 @@ import {
   updateDraft,
 } from './entries.ts'
 import { listCollections } from './collections.ts'
-import { buildSnapshot, buildPreviewEntry } from './snapshot.ts'
+import { buildSnapshot } from './snapshot.ts'
+import { buildPreviewEntry } from './snapshot-preview.ts'
 import {
   createTestCollection,
   dueScheduleIso,

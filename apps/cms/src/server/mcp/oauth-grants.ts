@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- database lookups are checked defensively */
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash } from 'node:crypto'
 import { and, eq } from 'drizzle-orm'
@@ -125,17 +124,19 @@ async function activeGeneration(
     typeof clientId !== 'string'
   )
     invalidGrant()
-  const [connection] = await db
-    .select()
-    .from(mcpConnection)
-    .where(
-      and(
-        eq(mcpConnection.id, referenceId),
-        eq(mcpConnection.userId, userId),
-        eq(mcpConnection.clientId, clientId),
-      ),
-    )
-    .limit(1)
+  const connection = (
+    await db
+      .select()
+      .from(mcpConnection)
+      .where(
+        and(
+          eq(mcpConnection.id, referenceId),
+          eq(mcpConnection.userId, userId),
+          eq(mcpConnection.clientId, clientId),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   if (!connection || !isConnectionUsable(connection)) invalidGrant()
   return connection
 }
@@ -156,11 +157,13 @@ export async function validateMcpRefreshGrant(
   const tokenHash = createHash('sha256')
     .update(token.slice(MCP_REFRESH_TOKEN_PREFIX.length))
     .digest('base64url')
-  const [refresh] = await db
-    .select()
-    .from(oauthRefreshToken)
-    .where(eq(oauthRefreshToken.token, tokenHash))
-    .limit(1)
+  const refresh = (
+    await db
+      .select()
+      .from(oauthRefreshToken)
+      .where(eq(oauthRefreshToken.token, tokenHash))
+      .limit(1)
+  ).at(0)
   if (!refresh) return // Let the provider perform its normal invalid-token handling.
   if (refresh.expiresAt < new Date()) invalidGrant()
   const connection = await activeGeneration(
@@ -292,11 +295,11 @@ export async function handleMcpOAuthTokenRequest(
     !new URL(request.url).pathname.replace(/\/+$/, '').endsWith('/oauth2/token')
   )
     return handle(request)
-  let body: Record<string, unknown>
+  let parsed: unknown
   try {
     const text = await readOAuthTokenBody(request)
-    body = request.headers.get('content-type')?.includes('application/json')
-      ? (JSON.parse(text) as Record<string, unknown>)
+    parsed = request.headers.get('content-type')?.includes('application/json')
+      ? JSON.parse(text)
       : Object.fromEntries(new URLSearchParams(text))
   } catch (error) {
     if (error instanceof OAuthTokenBodyTooLarge) {
@@ -307,7 +310,8 @@ export async function handleMcpOAuthTokenRequest(
     }
     return handle(request)
   }
-  if (!body || typeof body !== 'object') return handle(request)
+  if (!parsed || typeof parsed !== 'object') return handle(request)
+  const body = parsed as Record<string, unknown>
   let referenceId: string | null | undefined
   if (
     body.grant_type === 'refresh_token' &&
@@ -317,22 +321,26 @@ export async function handleMcpOAuthTokenRequest(
     const hash = createHash('sha256')
       .update(body.refresh_token.slice(MCP_REFRESH_TOKEN_PREFIX.length))
       .digest('base64url')
-    const [row] = await db
-      .select({ referenceId: oauthRefreshToken.referenceId })
-      .from(oauthRefreshToken)
-      .where(eq(oauthRefreshToken.token, hash))
-      .limit(1)
+    const row = (
+      await db
+        .select({ referenceId: oauthRefreshToken.referenceId })
+        .from(oauthRefreshToken)
+        .where(eq(oauthRefreshToken.token, hash))
+        .limit(1)
+    ).at(0)
     referenceId = row?.referenceId
   } else if (
     body.grant_type === 'authorization_code' &&
     typeof body.code === 'string'
   ) {
     const hash = createHash('sha256').update(body.code).digest('base64url')
-    const [row] = await db
-      .select({ value: verification.value })
-      .from(verification)
-      .where(eq(verification.identifier, hash))
-      .limit(1)
+    const row = (
+      await db
+        .select({ value: verification.value })
+        .from(verification)
+        .where(eq(verification.identifier, hash))
+        .limit(1)
+    ).at(0)
     try {
       referenceId = row
         ? (JSON.parse(row.value) as { referenceId?: string }).referenceId
@@ -342,11 +350,13 @@ export async function handleMcpOAuthTokenRequest(
     }
   }
   if (!referenceId) return handle(request)
-  const [connection] = await db
-    .select()
-    .from(mcpConnection)
-    .where(eq(mcpConnection.id, referenceId))
-    .limit(1)
+  const connection = (
+    await db
+      .select()
+      .from(mcpConnection)
+      .where(eq(mcpConnection.id, referenceId))
+      .limit(1)
+  ).at(0)
   if (!connection) return handle(request)
   return withConnectionLock(connection, () => handle(request))
 }

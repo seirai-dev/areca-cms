@@ -3,9 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as DbModule from '#/db'
 
 import { withRequestScope } from '#/server/http/request-scope.server'
-import { securityErrorCode } from './security-errors.ts'
+import { MfaRequiredError, securityErrorCode } from './security-errors.ts'
 import {
-  assertAdminMfa,
   forgetSession,
   getSession as loadCurrentSession,
   hasRole,
@@ -13,6 +12,7 @@ import {
   requireFreshAgencyAdmin,
   requireOrgMember,
   requireOrgMemberOrNotFound,
+  requireSignedIn,
   requireUser,
 } from './session.server.ts'
 
@@ -32,8 +32,10 @@ vi.mock('#/db', async (importOriginal) => ({
 }))
 const factorProof = vi.hoisted(() => vi.fn())
 const factorVerifiedAt = vi.hoisted(() => vi.fn())
+const memberFactor = vi.hoisted(() => vi.fn())
 vi.mock('#/server/security/local-mfa', () => ({
   requireAdminLocalMfa: factorProof,
+  requireMemberLocalMfa: memberFactor,
   localMfaVerifiedAt: factorVerifiedAt,
 }))
 
@@ -71,23 +73,17 @@ beforeEach(() => {
   getSession.mockReset()
   memberRows.rows = []
   factorProof.mockReset()
-  factorProof.mockResolvedValue(undefined)
+  // The two-factor rule of the real requireAdminLocalMfa; its proof lookup is
+  // covered in audit-auth-regressions.test.ts.
+  factorProof.mockImplementation(
+    async (principal: { user: { twoFactorEnabled: boolean } }) => {
+      if (!principal.user.twoFactorEnabled) throw new MfaRequiredError()
+    },
+  )
   factorVerifiedAt.mockReset()
   factorVerifiedAt.mockResolvedValue(new Date())
-})
-
-describe('assertAdminMfa', () => {
-  it('requires two-factor when enforcement is on', () => {
-    expect(() => assertAdminMfa({ twoFactorEnabled: false }, true)).toThrow()
-    expect(() => assertAdminMfa({}, true)).toThrow()
-    expect(() => assertAdminMfa({ twoFactorEnabled: true }, true)).not.toThrow()
-  })
-
-  it('does nothing when enforcement is off', () => {
-    expect(() =>
-      assertAdminMfa({ twoFactorEnabled: false }, false),
-    ).not.toThrow()
-  })
+  memberFactor.mockReset()
+  memberFactor.mockResolvedValue(undefined)
 })
 
 describe('requireAgencyAdmin', () => {
@@ -127,6 +123,40 @@ describe('requireAgencyAdmin', () => {
     const error = await rejection(requireAgencyAdmin())
     expect(error).toBeInstanceOf(Response)
     expect((error as Response).status).toBe(403)
+  })
+})
+
+describe('requireUser', () => {
+  it('stops a two-factor session that has not entered a code', async () => {
+    getSession.mockResolvedValue(
+      sessionFor({ isAgencyAdmin: false, twoFactorEnabled: true }),
+    )
+    memberFactor.mockRejectedValue(
+      new Error('MFA_REQUIRED: Enter a code from your authenticator app'),
+    )
+    expect(securityErrorCode(await rejection(requireUser()))).toBe(
+      'MFA_REQUIRED',
+    )
+    // The same applies to every membership guard, which starts here.
+    memberRows.rows = [{ role: 'owner' }]
+    expect(
+      securityErrorCode(
+        await rejection(
+          requireOrgMemberOrNotFound('org-1', 'owner', notFoundMarker),
+        ),
+      ),
+    ).toBe('MFA_REQUIRED')
+  })
+
+  it('leaves requireSignedIn open, so the code can be entered', async () => {
+    getSession.mockResolvedValue(
+      sessionFor({ isAgencyAdmin: false, twoFactorEnabled: true }),
+    )
+    memberFactor.mockRejectedValue(new Error('MFA_REQUIRED: code'))
+    await expect(requireSignedIn()).resolves.toMatchObject({
+      user: { id: 'user-1' },
+    })
+    expect(memberFactor).not.toHaveBeenCalled()
   })
 })
 

@@ -3,8 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { FileText } from '@phosphor-icons/react'
 
 import type { MediaAsset } from '#/features/editor/media-upload'
-import { queryKeys } from '#/lib/content/query-keys'
-import { assetFileUrl } from '#/lib/content/utils'
+import { queryKeys } from '#/lib/query-keys'
+import { assetThumbnail } from '#/lib/content/utils'
 import { cn } from '#/lib/utils'
 import { getAssetFn } from '#/server/fn/assets'
 
@@ -87,9 +87,13 @@ export function EntryCover({
     >
       {image ? (
         <img
-          src={assetFileUrl(image.storageKey)}
+          {...assetThumbnail(
+            image,
+            '(min-width: 1024px) 33vw, (min-width: 520px) 50vw, 100vw',
+          )}
           alt=""
           loading="lazy"
+          decoding="async"
           onError={() => setBroken(true)}
           className="absolute inset-0 size-full object-cover transition-transform duration-500 ease-(--ease-standard) group-hover:scale-[1.02] motion-reduce:transition-none"
         />
@@ -123,10 +127,11 @@ export function EntryThumb({
   if (asset && asset.mimeType.startsWith('image/') && !broken) {
     return (
       <img
-        src={assetFileUrl(asset.storageKey)}
+        {...assetThumbnail(asset, `${size}px`)}
         alt=""
         onError={() => setBroken(true)}
         loading="lazy"
+        decoding="async"
         className={cn(
           box,
           'shrink-0 rounded-[8px] border border-border-default bg-background-subtle object-cover',

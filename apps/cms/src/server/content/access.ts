@@ -13,6 +13,8 @@ import { assertSiteVisibleTo } from '#/server/security/site-visibility'
 
 import { NotFoundError } from './errors.ts'
 import { getGlobalEntry } from './globals.ts'
+import { siteCoreColumns } from './site-core.ts'
+import type { SiteCore } from './site-core.ts'
 
 /**
  * Who may read or edit a site, entry or section. Shared by the server
@@ -39,7 +41,7 @@ export async function requireSiteAccess(
   const session = await requireUser()
   const row = (
     await db
-      .select({ site, memberRole: membership.role })
+      .select({ site: siteCoreColumns, memberRole: membership.role })
       .from(site)
       .leftJoin(
         membership,
@@ -58,7 +60,7 @@ export async function requireSiteAccess(
 
 async function decideSiteAccess(
   session: Awaited<ReturnType<typeof requireUser>>,
-  found: typeof site.$inferSelect,
+  found: SiteCore,
   memberRole: (typeof membership.$inferSelect)['role'] | null,
   role: 'owner' | undefined,
   notFound: () => Error,
@@ -101,7 +103,7 @@ export async function requireEntryAccess(entryId: string, role?: 'owner') {
       .select({
         entry,
         collection,
-        site,
+        site: siteCoreColumns,
         memberRole: membership.role,
         createdByName: createdByUser.name,
         createdByEmail: createdByUser.email,

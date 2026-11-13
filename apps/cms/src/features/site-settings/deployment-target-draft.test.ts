@@ -8,6 +8,7 @@ import type { DeploymentTarget } from '#/lib/types'
 
 import {
   buildDeploymentTarget,
+  draftTargetComplete,
   findListed,
   listedValue,
   matchesTargetSearch,
@@ -227,6 +228,54 @@ describe('buildDeploymentTarget', () => {
         healthCheckUrl: HEALTH,
       }),
     ).toBeNull()
+  })
+})
+
+describe('draftTargetComplete', () => {
+  it('accepts a target picked in the form before it is saved', () => {
+    expect(
+      draftTargetComplete({
+        provider: 'dokploy',
+        applicationId: 'app-1',
+        selection: null,
+        healthCheckUrl: HEALTH,
+      }),
+    ).toBe(true)
+    expect(
+      draftTargetComplete({
+        provider: 'cloudflare',
+        applicationId: '',
+        selection: selectionFromListed(shop),
+        healthCheckUrl: HEALTH,
+      }),
+    ).toBe(true)
+  })
+
+  it('refuses a draft without a target or a health URL', () => {
+    expect(
+      draftTargetComplete({
+        provider: 'dokploy',
+        applicationId: '',
+        selection: null,
+        healthCheckUrl: HEALTH,
+      }),
+    ).toBe(false)
+    expect(
+      draftTargetComplete({
+        provider: 'cloudflare',
+        applicationId: '',
+        selection: selectionFromListed(pages),
+        healthCheckUrl: '',
+      }),
+    ).toBe(false)
+    expect(
+      draftTargetComplete({
+        provider: 'cloudflare',
+        applicationId: '',
+        selection: null,
+        healthCheckUrl: HEALTH,
+      }),
+    ).toBe(false)
   })
 })
 

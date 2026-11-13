@@ -1,0 +1,1514 @@
+{
+  "hash": "e8400bcd8ccb2fbe49426cfbcb9804dfe0b73ff4d9fdbdd8411238f03535c9a1",
+  "snapshot": {
+    "publicationId": "",
+    "hash": "e8400bcd8ccb2fbe49426cfbcb9804dfe0b73ff4d9fdbdd8411238f03535c9a1",
+    "languages": {
+      "all": [
+        "en",
+        "nl"
+      ],
+      "main": "en"
+    },
+    "collections": {
+      "articles": [
+        {
+          "id": "snapfx-multi-d",
+          "slug": "delta",
+          "publishedAt": "2026-01-04T09:30:00.000Z",
+          "data": {
+            "slug": "delta",
+            "title": "Delta",
+            "excerpt": "Delta excerpt",
+            "body": {
+              "json": {
+                "type": "doc",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "text": "Delta body",
+                        "type": "text"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "markdown": "Delta body",
+              "document": {
+                "type": "root",
+                "children": [
+                  {
+                    "type": "paragraph",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "Delta body"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "html": "<p>Delta body</p>"
+            },
+            "category": "news",
+            "heroImage": null,
+            "related": null
+          },
+          "seo": {
+            "title": "Delta",
+            "description": "Delta excerpt",
+            "canonicalUrl": "https://fixture.example/blog/delta",
+            "robots": {
+              "index": true,
+              "follow": true,
+              "content": "index, follow, max-image-preview:large"
+            },
+            "focusKeyphrase": null,
+            "openGraph": {
+              "type": "article",
+              "title": "Delta",
+              "description": "Delta excerpt",
+              "url": "https://fixture.example/blog/delta",
+              "siteName": "Fixture Site",
+              "image": null,
+              "publishedTime": "2026-01-04T09:30:00.000Z",
+              "modifiedTime": "2026-01-04T09:30:00.000Z"
+            },
+            "twitter": {
+              "card": "summary",
+              "title": "Delta",
+              "description": "Delta excerpt",
+              "image": null
+            },
+            "author": null,
+            "summary": null,
+            "keyTakeaways": [],
+            "faq": [],
+            "about": [],
+            "jsonLd": [
+              {
+                "@context": "https://schema.org",
+                "@type": "Article",
+                "headline": "Delta",
+                "description": "Delta excerpt",
+                "url": "https://fixture.example/blog/delta",
+                "mainEntityOfPage": "https://fixture.example/blog/delta",
+                "datePublished": "2026-01-04T09:30:00.000Z",
+                "dateModified": "2026-01-04T09:30:00.000Z",
+                "publisher": {
+                  "@type": "Organization",
+                  "name": "Fixture Site",
+                  "url": "https://fixture.example"
+                }
+              }
+            ]
+          },
+          "locale": "en",
+          "locales": {
+            "en": {
+              "slug": "delta",
+              "data": {
+                "slug": "delta",
+                "title": "Delta",
+                "excerpt": "Delta excerpt",
+                "body": {
+                  "json": {
+                    "type": "doc",
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "text": "Delta body",
+                            "type": "text"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "markdown": "Delta body",
+                  "document": {
+                    "type": "root",
+                    "children": [
+                      {
+                        "type": "paragraph",
+                        "children": [
+                          {
+                            "type": "text",
+                            "value": "Delta body"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "html": "<p>Delta body</p>"
+                },
+                "category": "news",
+                "heroImage": null,
+                "related": null
+              },
+              "seo": {
+                "title": "Delta",
+                "description": "Delta excerpt",
+                "canonicalUrl": "https://fixture.example/blog/delta",
+                "robots": {
+                  "index": true,
+                  "follow": true,
+                  "content": "index, follow, max-image-preview:large"
+                },
+                "focusKeyphrase": null,
+                "openGraph": {
+                  "type": "article",
+                  "title": "Delta",
+                  "description": "Delta excerpt",
+                  "url": "https://fixture.example/blog/delta",
+                  "siteName": "Fixture Site",
+                  "image": null,
+                  "publishedTime": "2026-01-04T09:30:00.000Z",
+                  "modifiedTime": "2026-01-04T09:30:00.000Z"
+                },
+                "twitter": {
+                  "card": "summary",
+                  "title": "Delta",
+                  "description": "Delta excerpt",
+                  "image": null
+                },
+                "author": null,
+                "summary": null,
+                "keyTakeaways": [],
+                "faq": [],
+                "about": [],
+                "jsonLd": [
+                  {
+                    "@context": "https://schema.org",
+                    "@type": "Article",
+                    "headline": "Delta",
+                    "description": "Delta excerpt",
+                    "url": "https://fixture.example/blog/delta",
+                    "mainEntityOfPage": "https://fixture.example/blog/delta",
+                    "datePublished": "2026-01-04T09:30:00.000Z",
+                    "dateModified": "2026-01-04T09:30:00.000Z",
+                    "publisher": {
+                      "@type": "Organization",
+                      "name": "Fixture Site",
+                      "url": "https://fixture.example"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "snapfx-multi-b",
+          "slug": "beta",
+          "publishedAt": "2026-01-03T09:30:00.000Z",
+          "data": {
+            "slug": "beta",
+            "title": "Beta",
+            "excerpt": "Beta excerpt",
+            "body": {
+              "json": {
+                "type": "doc",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "text": "To alpha",
+                        "type": "text",
+                        "marks": [
+                          {
+                            "type": "link",
+                            "attrs": {
+                              "href": "/blog/alpha#intro",
+                              "anchor": "intro",
+                              "entryId": "snapfx-multi-a",
+                              "collection": "articles",
+                              "locale": "en"
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "text": "To a draft",
+                        "type": "text"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "text": "To nothing",
+                        "type": "text"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "markdown": "[To alpha][areca-entry-1]\n\nTo a draft\n\nTo nothing\n\n[areca-entry-1]: /blog/alpha#intro",
+              "document": {
+                "type": "root",
+                "children": [
+                  {
+                    "type": "paragraph",
+                    "children": [
+                      {
+                        "type": "link",
+                        "href": "/blog/alpha#intro",
+                        "entryId": "snapfx-multi-a",
+                        "locale": "en",
+                        "children": [
+                          {
+                            "type": "text",
+                            "value": "To alpha"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "To a draft"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "To nothing"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "html": "<p><a href=\"/blog/alpha#intro\" data-areca-entry=\"snapfx-multi-a\" data-areca-locale=\"en\">To alpha</a></p>\n<p>To a draft</p>\n<p>To nothing</p>",
+              "entryLinks": [
+                {
+                  "label": "areca-entry-1",
+                  "locale": "en"
+                }
+              ]
+            },
+            "category": "news",
+            "related": {
+              "collection": "articles",
+              "slug": "alpha",
+              "id": "snapfx-multi-a"
+            },
+            "heroImage": null
+          },
+          "seo": {
+            "title": "Beta",
+            "description": "Beta excerpt",
+            "canonicalUrl": "https://fixture.example/blog/beta",
+            "robots": {
+              "index": true,
+              "follow": true,
+              "content": "index, follow, max-image-preview:large"
+            },
+            "focusKeyphrase": null,
+            "openGraph": {
+              "type": "article",
+              "title": "Beta",
+              "description": "Beta excerpt",
+              "url": "https://fixture.example/blog/beta",
+              "siteName": "Fixture Site",
+              "image": null,
+              "publishedTime": "2026-01-03T09:30:00.000Z",
+              "modifiedTime": "2026-01-03T09:30:00.000Z"
+            },
+            "twitter": {
+              "card": "summary",
+              "title": "Beta",
+              "description": "Beta excerpt",
+              "image": null
+            },
+            "author": null,
+            "summary": null,
+            "keyTakeaways": [],
+            "faq": [],
+            "about": [],
+            "jsonLd": [
+              {
+                "@context": "https://schema.org",
+                "@type": "Article",
+                "headline": "Beta",
+                "description": "Beta excerpt",
+                "url": "https://fixture.example/blog/beta",
+                "mainEntityOfPage": "https://fixture.example/blog/beta",
+                "datePublished": "2026-01-03T09:30:00.000Z",
+                "dateModified": "2026-01-03T09:30:00.000Z",
+                "publisher": {
+                  "@type": "Organization",
+                  "name": "Fixture Site",
+                  "url": "https://fixture.example"
+                }
+              }
+            ]
+          },
+          "locale": "en",
+          "locales": {
+            "en": {
+              "slug": "beta",
+              "data": {
+                "slug": "beta",
+                "title": "Beta",
+                "excerpt": "Beta excerpt",
+                "body": {
+                  "json": {
+                    "type": "doc",
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "text": "To alpha",
+                            "type": "text",
+                            "marks": [
+                              {
+                                "type": "link",
+                                "attrs": {
+                                  "href": "/blog/alpha#intro",
+                                  "anchor": "intro",
+                                  "entryId": "snapfx-multi-a",
+                                  "collection": "articles",
+                                  "locale": "en"
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "text": "To a draft",
+                            "type": "text"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "text": "To nothing",
+                            "type": "text"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "markdown": "[To alpha][areca-entry-1]\n\nTo a draft\n\nTo nothing\n\n[areca-entry-1]: /blog/alpha#intro",
+                  "document": {
+                    "type": "root",
+                    "children": [
+                      {
+                        "type": "paragraph",
+                        "children": [
+                          {
+                            "type": "link",
+                            "href": "/blog/alpha#intro",
+                            "entryId": "snapfx-multi-a",
+                            "locale": "en",
+                            "children": [
+                              {
+                                "type": "text",
+                                "value": "To alpha"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "paragraph",
+                        "children": [
+                          {
+                            "type": "text",
+                            "value": "To a draft"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "paragraph",
+                        "children": [
+                          {
+                            "type": "text",
+                            "value": "To nothing"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "html": "<p><a href=\"/blog/alpha#intro\" data-areca-entry=\"snapfx-multi-a\" data-areca-locale=\"en\">To alpha</a></p>\n<p>To a draft</p>\n<p>To nothing</p>",
+                  "entryLinks": [
+                    {
+                      "label": "areca-entry-1",
+                      "locale": "en"
+                    }
+                  ]
+                },
+                "category": "news",
+                "related": {
+                  "collection": "articles",
+                  "slug": "alpha",
+                  "id": "snapfx-multi-a"
+                },
+                "heroImage": null
+              },
+              "seo": {
+                "title": "Beta",
+                "description": "Beta excerpt",
+                "canonicalUrl": "https://fixture.example/blog/beta",
+                "robots": {
+                  "index": true,
+                  "follow": true,
+                  "content": "index, follow, max-image-preview:large"
+                },
+                "focusKeyphrase": null,
+                "openGraph": {
+                  "type": "article",
+                  "title": "Beta",
+                  "description": "Beta excerpt",
+                  "url": "https://fixture.example/blog/beta",
+                  "siteName": "Fixture Site",
+                  "image": null,
+                  "publishedTime": "2026-01-03T09:30:00.000Z",
+                  "modifiedTime": "2026-01-03T09:30:00.000Z"
+                },
+                "twitter": {
+                  "card": "summary",
+                  "title": "Beta",
+                  "description": "Beta excerpt",
+                  "image": null
+                },
+                "author": null,
+                "summary": null,
+                "keyTakeaways": [],
+                "faq": [],
+                "about": [],
+                "jsonLd": [
+                  {
+                    "@context": "https://schema.org",
+                    "@type": "Article",
+                    "headline": "Beta",
+                    "description": "Beta excerpt",
+                    "url": "https://fixture.example/blog/beta",
+                    "mainEntityOfPage": "https://fixture.example/blog/beta",
+                    "datePublished": "2026-01-03T09:30:00.000Z",
+                    "dateModified": "2026-01-03T09:30:00.000Z",
+                    "publisher": {
+                      "@type": "Organization",
+                      "name": "Fixture Site",
+                      "url": "https://fixture.example"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "snapfx-multi-e",
+          "slug": "epsilon",
+          "publishedAt": "2026-01-03T09:30:00.000Z",
+          "data": {
+            "slug": "epsilon",
+            "title": "Epsilon",
+            "excerpt": "Epsilon excerpt",
+            "body": {
+              "json": {
+                "type": "doc",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "text": "Epsilon body",
+                        "type": "text"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "markdown": "Epsilon body",
+              "document": {
+                "type": "root",
+                "children": [
+                  {
+                    "type": "paragraph",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "Epsilon body"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "html": "<p>Epsilon body</p>"
+            },
+            "category": "news",
+            "heroImage": null,
+            "related": null
+          },
+          "seo": {
+            "title": "Epsilon",
+            "description": "Epsilon excerpt",
+            "canonicalUrl": "https://fixture.example/blog/epsilon",
+            "robots": {
+              "index": true,
+              "follow": true,
+              "content": "index, follow, max-image-preview:large"
+            },
+            "focusKeyphrase": null,
+            "openGraph": {
+              "type": "article",
+              "title": "Epsilon",
+              "description": "Epsilon excerpt",
+              "url": "https://fixture.example/blog/epsilon",
+              "siteName": "Fixture Site",
+              "image": null,
+              "publishedTime": "2026-01-03T09:30:00.000Z",
+              "modifiedTime": "2026-01-03T09:30:00.000Z"
+            },
+            "twitter": {
+              "card": "summary",
+              "title": "Epsilon",
+              "description": "Epsilon excerpt",
+              "image": null
+            },
+            "author": null,
+            "summary": null,
+            "keyTakeaways": [],
+            "faq": [],
+            "about": [],
+            "jsonLd": [
+              {
+                "@context": "https://schema.org",
+                "@type": "Article",
+                "headline": "Epsilon",
+                "description": "Epsilon excerpt",
+                "url": "https://fixture.example/blog/epsilon",
+                "mainEntityOfPage": "https://fixture.example/blog/epsilon",
+                "datePublished": "2026-01-03T09:30:00.000Z",
+                "dateModified": "2026-01-03T09:30:00.000Z",
+                "publisher": {
+                  "@type": "Organization",
+                  "name": "Fixture Site",
+                  "url": "https://fixture.example"
+                }
+              }
+            ]
+          },
+          "locale": "en",
+          "locales": {
+            "en": {
+              "slug": "epsilon",
+              "data": {
+                "slug": "epsilon",
+                "title": "Epsilon",
+                "excerpt": "Epsilon excerpt",
+                "body": {
+                  "json": {
+                    "type": "doc",
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "text": "Epsilon body",
+                            "type": "text"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "markdown": "Epsilon body",
+                  "document": {
+                    "type": "root",
+                    "children": [
+                      {
+                        "type": "paragraph",
+                        "children": [
+                          {
+                            "type": "text",
+                            "value": "Epsilon body"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "html": "<p>Epsilon body</p>"
+                },
+                "category": "news",
+                "heroImage": null,
+                "related": null
+              },
+              "seo": {
+                "title": "Epsilon",
+                "description": "Epsilon excerpt",
+                "canonicalUrl": "https://fixture.example/blog/epsilon",
+                "robots": {
+                  "index": true,
+                  "follow": true,
+                  "content": "index, follow, max-image-preview:large"
+                },
+                "focusKeyphrase": null,
+                "openGraph": {
+                  "type": "article",
+                  "title": "Epsilon",
+                  "description": "Epsilon excerpt",
+                  "url": "https://fixture.example/blog/epsilon",
+                  "siteName": "Fixture Site",
+                  "image": null,
+                  "publishedTime": "2026-01-03T09:30:00.000Z",
+                  "modifiedTime": "2026-01-03T09:30:00.000Z"
+                },
+                "twitter": {
+                  "card": "summary",
+                  "title": "Epsilon",
+                  "description": "Epsilon excerpt",
+                  "image": null
+                },
+                "author": null,
+                "summary": null,
+                "keyTakeaways": [],
+                "faq": [],
+                "about": [],
+                "jsonLd": [
+                  {
+                    "@context": "https://schema.org",
+                    "@type": "Article",
+                    "headline": "Epsilon",
+                    "description": "Epsilon excerpt",
+                    "url": "https://fixture.example/blog/epsilon",
+                    "mainEntityOfPage": "https://fixture.example/blog/epsilon",
+                    "datePublished": "2026-01-03T09:30:00.000Z",
+                    "dateModified": "2026-01-03T09:30:00.000Z",
+                    "publisher": {
+                      "@type": "Organization",
+                      "name": "Fixture Site",
+                      "url": "https://fixture.example"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "snapfx-multi-a",
+          "slug": "alpha",
+          "publishedAt": "2026-01-02T09:30:00.000Z",
+          "data": {
+            "slug": "alpha",
+            "title": "Alpha",
+            "excerpt": "Alpha excerpt",
+            "body": {
+              "json": {
+                "type": "doc",
+                "content": [
+                  {
+                    "type": "heading",
+                    "attrs": {
+                      "id": "intro",
+                      "level": 2
+                    },
+                    "content": [
+                      {
+                        "text": "Intro",
+                        "type": "text"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "text": "Alpha body",
+                        "type": "text"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "markdown": "## Intro\n\nAlpha body",
+              "document": {
+                "type": "root",
+                "children": [
+                  {
+                    "type": "heading",
+                    "depth": 2,
+                    "id": "intro",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "Intro"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "children": [
+                      {
+                        "type": "text",
+                        "value": "Alpha body"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "html": "<h2 id=\"intro\">Intro</h2>\n<p>Alpha body</p>"
+            },
+            "category": "news",
+            "heroImage": null,
+            "related": null
+          },
+          "seo": {
+            "title": "Alpha",
+            "description": "Alpha excerpt",
+            "canonicalUrl": "https://fixture.example/blog/alpha",
+            "robots": {
+              "index": true,
+              "follow": true,
+              "content": "index, follow, max-image-preview:large"
+            },
+            "focusKeyphrase": null,
+            "openGraph": {
+              "type": "article",
+              "title": "Alpha",
+              "description": "Alpha excerpt",
+              "url": "https://fixture.example/blog/alpha",
+              "siteName": "Fixture Site",
+              "image": null,
+              "publishedTime": "2026-01-02T09:30:00.000Z",
+              "modifiedTime": "2026-01-02T09:30:00.000Z"
+            },
+            "twitter": {
+              "card": "summary",
+              "title": "Alpha",
+              "description": "Alpha excerpt",
+              "image": null
+            },
+            "author": null,
+            "summary": null,
+            "keyTakeaways": [],
+            "faq": [],
+            "about": [],
+            "jsonLd": [
+              {
+                "@context": "https://schema.org",
+                "@type": "Article",
+                "headline": "Alpha",
+                "description": "Alpha excerpt",
+                "url": "https://fixture.example/blog/alpha",
+                "mainEntityOfPage": "https://fixture.example/blog/alpha",
+                "datePublished": "2026-01-02T09:30:00.000Z",
+                "dateModified": "2026-01-02T09:30:00.000Z",
+                "publisher": {
+                  "@type": "Organization",
+                  "name": "Fixture Site",
+                  "url": "https://fixture.example"
+                }
+              }
+            ]
+          },
+          "locale": "en",
+          "locales": {
+            "en": {
+              "slug": "alpha",
+              "data": {
+                "slug": "alpha",
+                "title": "Alpha",
+                "excerpt": "Alpha excerpt",
+                "body": {
+                  "json": {
+                    "type": "doc",
+                    "content": [
+                      {
+                        "type": "heading",
+                        "attrs": {
+                          "id": "intro",
+                          "level": 2
+                        },
+                        "content": [
+                          {
+                            "text": "Intro",
+                            "type": "text"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "text": "Alpha body",
+                            "type": "text"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "markdown": "## Intro\n\nAlpha body",
+                  "document": {
+                    "type": "root",
+                    "children": [
+                      {
+                        "type": "heading",
+                        "depth": 2,
+                        "id": "intro",
+                        "children": [
+                          {
+                            "type": "text",
+                            "value": "Intro"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "paragraph",
+                        "children": [
+                          {
+                            "type": "text",
+                            "value": "Alpha body"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "html": "<h2 id=\"intro\">Intro</h2>\n<p>Alpha body</p>"
+                },
+                "category": "news",
+                "heroImage": null,
+                "related": null
+              },
+              "seo": {
+                "title": "Alpha",
+                "description": "Alpha excerpt",
+                "canonicalUrl": "https://fixture.example/blog/alpha",
+                "robots": {
+                  "index": true,
+                  "follow": true,
+                  "content": "index, follow, max-image-preview:large"
+                },
+                "focusKeyphrase": null,
+                "openGraph": {
+                  "type": "article",
+                  "title": "Alpha",
+                  "description": "Alpha excerpt",
+                  "url": "https://fixture.example/blog/alpha",
+                  "siteName": "Fixture Site",
+                  "image": null,
+                  "publishedTime": "2026-01-02T09:30:00.000Z",
+                  "modifiedTime": "2026-01-02T09:30:00.000Z"
+                },
+                "twitter": {
+                  "card": "summary",
+                  "title": "Alpha",
+                  "description": "Alpha excerpt",
+                  "image": null
+                },
+                "author": null,
+                "summary": null,
+                "keyTakeaways": [],
+                "faq": [],
+                "about": [],
+                "jsonLd": [
+                  {
+                    "@context": "https://schema.org",
+                    "@type": "Article",
+                    "headline": "Alpha",
+                    "description": "Alpha excerpt",
+                    "url": "https://fixture.example/blog/alpha",
+                    "mainEntityOfPage": "https://fixture.example/blog/alpha",
+                    "datePublished": "2026-01-02T09:30:00.000Z",
+                    "dateModified": "2026-01-02T09:30:00.000Z",
+                    "publisher": {
+                      "@type": "Organization",
+                      "name": "Fixture Site",
+                      "url": "https://fixture.example"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "pages": [
+        {
+          "id": "snapfx-multi-p",
+          "slug": "home",
+          "publishedAt": "2026-01-01T09:30:00.000Z",
+          "data": {
+            "slug": "home",
+            "title": "Home",
+            "feature": {
+              "collection": "articles",
+              "slug": "beta",
+              "id": "snapfx-multi-b"
+            }
+          },
+          "seo": {
+            "title": "Home",
+            "description": null,
+            "canonicalUrl": "https://fixture.example/home",
+            "robots": {
+              "index": true,
+              "follow": true,
+              "content": "index, follow, max-image-preview:large"
+            },
+            "focusKeyphrase": null,
+            "openGraph": {
+              "type": "article",
+              "title": "Home",
+              "description": null,
+              "url": "https://fixture.example/home",
+              "siteName": "Fixture Site",
+              "image": null,
+              "publishedTime": "2026-01-01T09:30:00.000Z",
+              "modifiedTime": "2026-01-01T09:30:00.000Z"
+            },
+            "twitter": {
+              "card": "summary",
+              "title": "Home",
+              "description": null,
+              "image": null
+            },
+            "author": null,
+            "summary": null,
+            "keyTakeaways": [],
+            "faq": [],
+            "about": [],
+            "jsonLd": [
+              {
+                "@context": "https://schema.org",
+                "@type": "Article",
+                "headline": "Home",
+                "url": "https://fixture.example/home",
+                "mainEntityOfPage": "https://fixture.example/home",
+                "datePublished": "2026-01-01T09:30:00.000Z",
+                "dateModified": "2026-01-01T09:30:00.000Z",
+                "publisher": {
+                  "@type": "Organization",
+                  "name": "Fixture Site",
+                  "url": "https://fixture.example"
+                }
+              }
+            ]
+          },
+          "locale": "en",
+          "locales": {
+            "en": {
+              "slug": "home",
+              "data": {
+                "slug": "home",
+                "title": "Home",
+                "feature": {
+                  "collection": "articles",
+                  "slug": "beta",
+                  "id": "snapfx-multi-b"
+                }
+              },
+              "seo": {
+                "title": "Home",
+                "description": null,
+                "canonicalUrl": "https://fixture.example/home",
+                "robots": {
+                  "index": true,
+                  "follow": true,
+                  "content": "index, follow, max-image-preview:large"
+                },
+                "focusKeyphrase": null,
+                "openGraph": {
+                  "type": "article",
+                  "title": "Home",
+                  "description": null,
+                  "url": "https://fixture.example/home",
+                  "siteName": "Fixture Site",
+                  "image": null,
+                  "publishedTime": "2026-01-01T09:30:00.000Z",
+                  "modifiedTime": "2026-01-01T09:30:00.000Z"
+                },
+                "twitter": {
+                  "card": "summary",
+                  "title": "Home",
+                  "description": null,
+                  "image": null
+                },
+                "author": null,
+                "summary": null,
+                "keyTakeaways": [],
+                "faq": [],
+                "about": [],
+                "jsonLd": [
+                  {
+                    "@context": "https://schema.org",
+                    "@type": "Article",
+                    "headline": "Home",
+                    "url": "https://fixture.example/home",
+                    "mainEntityOfPage": "https://fixture.example/home",
+                    "datePublished": "2026-01-01T09:30:00.000Z",
+                    "dateModified": "2026-01-01T09:30:00.000Z",
+                    "publisher": {
+                      "@type": "Organization",
+                      "name": "Fixture Site",
+                      "url": "https://fixture.example"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "globals": {
+      "company": {
+        "id": "snapfx-multi-g",
+        "publishedAt": "2026-01-05T09:30:00.000Z",
+        "data": {
+          "name": "Fixture BV",
+          "about": {
+            "json": {
+              "type": "doc",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "text": "See",
+                      "type": "text",
+                      "marks": [
+                        {
+                          "type": "link",
+                          "attrs": {
+                            "href": "/blog/alpha",
+                            "entryId": "snapfx-multi-a",
+                            "collection": "articles",
+                            "locale": "en"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "markdown": "[See][areca-entry-1]\n\n[areca-entry-1]: /blog/alpha",
+            "document": {
+              "type": "root",
+              "children": [
+                {
+                  "type": "paragraph",
+                  "children": [
+                    {
+                      "type": "link",
+                      "href": "/blog/alpha",
+                      "entryId": "snapfx-multi-a",
+                      "locale": "en",
+                      "children": [
+                        {
+                          "type": "text",
+                          "value": "See"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "html": "<p><a href=\"/blog/alpha\" data-areca-entry=\"snapfx-multi-a\" data-areca-locale=\"en\">See</a></p>",
+            "entryLinks": [
+              {
+                "label": "areca-entry-1",
+                "locale": "en"
+              }
+            ]
+          }
+        },
+        "seo": {
+          "title": "Company",
+          "description": "See",
+          "canonicalUrl": "https://fixture.example/about",
+          "robots": {
+            "index": true,
+            "follow": true,
+            "content": "index, follow, max-image-preview:large"
+          },
+          "focusKeyphrase": null,
+          "openGraph": {
+            "type": "article",
+            "title": "Company",
+            "description": "See",
+            "url": "https://fixture.example/about",
+            "siteName": "Fixture Site",
+            "image": null,
+            "publishedTime": "2026-01-05T09:30:00.000Z",
+            "modifiedTime": "2026-01-05T09:30:00.000Z"
+          },
+          "twitter": {
+            "card": "summary",
+            "title": "Company",
+            "description": "See",
+            "image": null
+          },
+          "author": null,
+          "summary": null,
+          "keyTakeaways": [],
+          "faq": [],
+          "about": [],
+          "jsonLd": [
+            {
+              "@context": "https://schema.org",
+              "@type": "Article",
+              "headline": "Company",
+              "description": "See",
+              "url": "https://fixture.example/about",
+              "mainEntityOfPage": "https://fixture.example/about",
+              "datePublished": "2026-01-05T09:30:00.000Z",
+              "dateModified": "2026-01-05T09:30:00.000Z",
+              "publisher": {
+                "@type": "Organization",
+                "name": "Fixture Site",
+                "url": "https://fixture.example"
+              }
+            }
+          ]
+        },
+        "locale": "en",
+        "locales": {
+          "en": {
+            "data": {
+              "name": "Fixture BV",
+              "about": {
+                "json": {
+                  "type": "doc",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "text": "See",
+                          "type": "text",
+                          "marks": [
+                            {
+                              "type": "link",
+                              "attrs": {
+                                "href": "/blog/alpha",
+                                "entryId": "snapfx-multi-a",
+                                "collection": "articles",
+                                "locale": "en"
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "markdown": "[See][areca-entry-1]\n\n[areca-entry-1]: /blog/alpha",
+                "document": {
+                  "type": "root",
+                  "children": [
+                    {
+                      "type": "paragraph",
+                      "children": [
+                        {
+                          "type": "link",
+                          "href": "/blog/alpha",
+                          "entryId": "snapfx-multi-a",
+                          "locale": "en",
+                          "children": [
+                            {
+                              "type": "text",
+                              "value": "See"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "html": "<p><a href=\"/blog/alpha\" data-areca-entry=\"snapfx-multi-a\" data-areca-locale=\"en\">See</a></p>",
+                "entryLinks": [
+                  {
+                    "label": "areca-entry-1",
+                    "locale": "en"
+                  }
+                ]
+              }
+            },
+            "seo": {
+              "title": "Company",
+              "description": "See",
+              "canonicalUrl": "https://fixture.example/about",
+              "robots": {
+                "index": true,
+                "follow": true,
+                "content": "index, follow, max-image-preview:large"
+              },
+              "focusKeyphrase": null,
+              "openGraph": {
+                "type": "article",
+                "title": "Company",
+                "description": "See",
+                "url": "https://fixture.example/about",
+                "siteName": "Fixture Site",
+                "image": null,
+                "publishedTime": "2026-01-05T09:30:00.000Z",
+                "modifiedTime": "2026-01-05T09:30:00.000Z"
+              },
+              "twitter": {
+                "card": "summary",
+                "title": "Company",
+                "description": "See",
+                "image": null
+              },
+              "author": null,
+              "summary": null,
+              "keyTakeaways": [],
+              "faq": [],
+              "about": [],
+              "jsonLd": [
+                {
+                  "@context": "https://schema.org",
+                  "@type": "Article",
+                  "headline": "Company",
+                  "description": "See",
+                  "url": "https://fixture.example/about",
+                  "mainEntityOfPage": "https://fixture.example/about",
+                  "datePublished": "2026-01-05T09:30:00.000Z",
+                  "dateModified": "2026-01-05T09:30:00.000Z",
+                  "publisher": {
+                    "@type": "Organization",
+                    "name": "Fixture Site",
+                    "url": "https://fixture.example"
+                  }
+                }
+              ]
+            }
+          },
+          "nl": {
+            "data": {
+              "name": "Fixture NL"
+            },
+            "seo": {
+              "title": "Company",
+              "description": null,
+              "canonicalUrl": "https://fixture.example/about",
+              "robots": {
+                "index": true,
+                "follow": true,
+                "content": "index, follow, max-image-preview:large"
+              },
+              "focusKeyphrase": null,
+              "openGraph": {
+                "type": "article",
+                "title": "Company",
+                "description": null,
+                "url": "https://fixture.example/about",
+                "siteName": "Fixture Site",
+                "image": null,
+                "publishedTime": "2026-01-05T09:30:00.000Z",
+                "modifiedTime": "2026-01-05T09:30:00.000Z"
+              },
+              "twitter": {
+                "card": "summary",
+                "title": "Company",
+                "description": null,
+                "image": null
+              },
+              "author": null,
+              "summary": null,
+              "keyTakeaways": [],
+              "faq": [],
+              "about": [],
+              "jsonLd": [
+                {
+                  "@context": "https://schema.org",
+                  "@type": "Article",
+                  "headline": "Company",
+                  "url": "https://fixture.example/about",
+                  "mainEntityOfPage": "https://fixture.example/about",
+                  "datePublished": "2026-01-05T09:30:00.000Z",
+                  "dateModified": "2026-01-05T09:30:00.000Z",
+                  "publisher": {
+                    "@type": "Organization",
+                    "name": "Fixture Site",
+                    "url": "https://fixture.example"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "notes": {
+        "id": "snapfx-multi-n",
+        "publishedAt": null,
+        "data": {}
+      }
+    },
+    "globalSchema": {
+      "company": {
+        "label": "Company",
+        "fields": [
+          {
+            "key": "name",
+            "type": "text",
+            "label": "Name",
+            "required": true
+          },
+          {
+            "key": "about",
+            "type": "richtext",
+            "label": "About"
+          }
+        ],
+        "seo": true,
+        "previewPath": "/about"
+      },
+      "notes": {
+        "label": "Notes",
+        "fields": [
+          {
+            "key": "text",
+            "type": "text",
+            "label": "Text"
+          }
+        ],
+        "seo": false
+      }
+    },
+    "schema": {
+      "articles": {
+        "route": "/blog/$slug",
+        "label": "Articles",
+        "fields": [
+          {
+            "key": "slug",
+            "label": "Slug",
+            "type": "slug",
+            "required": true
+          },
+          {
+            "key": "title",
+            "type": "text",
+            "label": "Title",
+            "required": true
+          },
+          {
+            "key": "excerpt",
+            "type": "textarea",
+            "label": "Excerpt"
+          },
+          {
+            "key": "body",
+            "type": "richtext",
+            "label": "Body",
+            "required": true
+          },
+          {
+            "key": "heroImage",
+            "type": "image",
+            "label": "Hero image"
+          },
+          {
+            "key": "publishedAt",
+            "type": "datetime",
+            "label": "Published at"
+          },
+          {
+            "key": "category",
+            "type": "select",
+            "label": "Category",
+            "options": [
+              "news",
+              "updates"
+            ]
+          },
+          {
+            "key": "related",
+            "type": "reference",
+            "label": "Related"
+          }
+        ],
+        "routes": {
+          "nl": "/nieuws/$slug"
+        }
+      },
+      "pages": {
+        "route": "/$slug",
+        "label": "Articles",
+        "fields": [
+          {
+            "key": "slug",
+            "label": "Slug",
+            "type": "slug",
+            "required": true
+          },
+          {
+            "key": "title",
+            "type": "text",
+            "label": "Title",
+            "required": true
+          },
+          {
+            "key": "feature",
+            "type": "reference",
+            "label": "Feature",
+            "collection": "articles"
+          }
+        ]
+      }
+    },
+    "assets": []
+  },
+  "entryVersions": [
+    {
+      "entryId": "snapfx-multi-d",
+      "scheduledVersion": "v-delta"
+    }
+  ],
+  "linkWarnings": [
+    {
+      "sourceEntryId": "snapfx-multi-b",
+      "sourceTitle": "Beta",
+      "sourceCollectionKey": "articles",
+      "sourceGlobal": false,
+      "locale": "en",
+      "field": "body",
+      "targetEntryId": "snapfx-multi-missing",
+      "targetTitle": "",
+      "anchor": null,
+      "reason": "missing"
+    },
+    {
+      "sourceEntryId": "snapfx-multi-b",
+      "sourceTitle": "Beta",
+      "sourceCollectionKey": "articles",
+      "sourceGlobal": false,
+      "locale": "en",
+      "field": "body",
+      "targetEntryId": "snapfx-multi-c",
+      "targetTitle": "Gamma draft",
+      "anchor": null,
+      "reason": "not-live"
+    }
+  ]
+}

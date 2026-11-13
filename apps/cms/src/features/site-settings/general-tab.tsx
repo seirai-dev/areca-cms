@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { Trash } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { normalizePreviewUrl } from '#/lib/preview-url'
 import { isDevSite } from '#/lib/site-environment'
 import { Button } from '#/components/ui/button'
@@ -196,13 +196,9 @@ export function GeneralTab({
               variant="destructive"
               testId="delete-site-dialog"
               onConfirm={async () => {
-                try {
-                  await settings.remove.mutateAsync()
-                  toast.success(m.sites_deleted())
-                  await navigate({ to: '/' })
-                } catch (error) {
-                  toast.error(errorMessage(error))
-                }
+                await settings.remove.mutateAsync()
+                toast.success(m.sites_deleted())
+                await navigate({ to: '/' })
               }}
             >
               <Button
@@ -264,17 +260,13 @@ function DevEnvironmentDangerZone({
           variant="destructive"
           testId="dev-env-delete-dialog"
           onConfirm={async () => {
-            try {
-              await dev.remove.mutateAsync(devSite.id)
-              toast.success(m.dev_env_deleted())
-              await navigate({
-                to: '/sites/$siteId/settings',
-                params: { siteId: productionId },
-                search: { tab: 'development' },
-              })
-            } catch (error) {
-              toast.error(errorMessage(error))
-            }
+            await dev.remove.mutateAsync(devSite.id)
+            toast.success(m.dev_env_deleted())
+            await navigate({
+              to: '/sites/$siteId/settings',
+              params: { siteId: productionId },
+              search: { tab: 'development' },
+            })
           }}
         >
           <Button

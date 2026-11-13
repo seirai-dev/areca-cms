@@ -35,6 +35,21 @@ describe('createMemoryRateLimitStore', () => {
     await store.increment('a', 60)
     expect(await store.increment('b', 60)).toBe(1)
   })
+
+  it('stays bounded when full and keeps the newest counters', async () => {
+    let at = 0
+    const store = createMemoryRateLimitStore(() => at)
+    for (let i = 0; i < 50_000; i++) await store.increment(`old-${i}`, 60)
+    // Within the sweep interval: only the oldest key makes room.
+    at = 500
+    expect(await store.increment('fresh', 60)).toBe(1)
+    expect(await store.increment('fresh', 60)).toBe(2)
+    expect(await store.increment('old-0', 60)).toBe(1)
+    // After every counter expired, a sweep frees the store.
+    at = 61_000
+    for (let i = 0; i < 10; i++) await store.increment(`new-${i}`, 60)
+    expect(await store.increment('new-0', 60)).toBe(2)
+  })
 })
 
 describe('createFallbackRateLimitStore', () => {

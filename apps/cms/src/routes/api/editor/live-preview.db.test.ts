@@ -477,6 +477,32 @@ describe.skipIf(!hasDb)('POST /api/editor/live-preview', () => {
     }
   })
 
+  it('answers 400 instead of throwing when the client goes away mid-body', async () => {
+    const f = await fixture()
+    try {
+      setCurrentSession(f.owner)
+      // What Node gives the handler when the editor aborts the request (a newer
+      // value, or the page closing) before the body is read: the stream errors.
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"siteId":'))
+          controller.error(new Error('aborted'))
+        },
+      })
+      const res = await postLivePreview(
+        new Request('http://cms.test/api/editor/live-preview', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body,
+          duplex: 'half',
+        } as RequestInit),
+      )
+      expect(res.status).toBe(400)
+    } finally {
+      await f.cleanup()
+    }
+  })
+
   it('answers 400 when the unsaved data breaks the entry rules (same as a save)', async () => {
     const f = await fixture()
     try {

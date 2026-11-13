@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .select() are checked defensively */
 import type * as AdminRoster from './agency-admin-roster.ts'
 
 import { and, eq, sql } from 'drizzle-orm'
@@ -31,7 +30,7 @@ import { generateMcpKey } from '#/server/mcp/keys'
 import { renderTemplate } from '#/server/mail/render'
 import { cancelAllQueuedNotificationEmails } from '#/server/mail/outbox'
 
-import { LastAgencyAdminError } from './members.ts'
+import { LastAgencyAdminError } from './agency-admin-roster.ts'
 import {
   deleteOwnAccount,
   deleteUser,
@@ -129,21 +128,23 @@ describe.skipIf(!hasDb)('admin deletes a person', () => {
       userId: writer.id,
       redirectUris: ['http://localhost/callback'],
     })
-    const [queued] = await db
-      .insert(emailOutbox)
-      .values({
-        kind: 'notification',
-        notificationId: crypto.randomUUID(),
-        toAddress: writer.email,
-        userId: writer.id,
-        organizationId: fixture.org.id,
-        subject: 'Published',
-        template: 'notification',
-        params: { userId: writer.id },
-        locale: 'en',
-        status: 'queued',
-      })
-      .returning()
+    const queued = (
+      await db
+        .insert(emailOutbox)
+        .values({
+          kind: 'notification',
+          notificationId: crypto.randomUUID(),
+          toAddress: writer.email,
+          userId: writer.id,
+          organizationId: fixture.org.id,
+          subject: 'Published',
+          template: 'notification',
+          params: { userId: writer.id },
+          locale: 'en',
+          status: 'queued',
+        })
+        .returning()
+    ).at(0)
     if (!queued) throw new Error('fixture failed')
 
     await deleteUser({ actorId: admin.id, userId: writer.id })
@@ -165,21 +166,24 @@ describe.skipIf(!hasDb)('admin deletes a person', () => {
       await db.select().from(session).where(eq(session.userId, writer.id)),
     ).toHaveLength(0)
     // Their content stays, with the author unset.
-    const [kept] = await db.select().from(entry).where(eq(entry.id, written.id))
+    const kept = (
+      await db.select().from(entry).where(eq(entry.id, written.id))
+    ).at(0)
     expect(kept).toBeTruthy()
     expect(kept?.createdBy).toBeNull()
     // Another person's OAuth client survives; only the link is cleared.
-    const [oauth] = await db
-      .select()
-      .from(oauthClient)
-      .where(eq(oauthClient.clientId, clientId))
+    const oauth = (
+      await db
+        .select()
+        .from(oauthClient)
+        .where(eq(oauthClient.clientId, clientId))
+    ).at(0)
     expect(oauth).toBeTruthy()
     expect(oauth?.userId).toBeNull()
     // Queued notices are cancelled.
-    const [cancelled] = await db
-      .select()
-      .from(emailOutbox)
-      .where(eq(emailOutbox.id, queued.id))
+    const cancelled = (
+      await db.select().from(emailOutbox).where(eq(emailOutbox.id, queued.id))
+    ).at(0)
     expect(cancelled?.status).toBe('cancelled')
   })
 
@@ -189,15 +193,17 @@ describe.skipIf(!hasDb)('admin deletes a person', () => {
 
     await deleteUser({ actorId: admin.id, userId: target.id })
 
-    const [notice] = await db
-      .select()
-      .from(emailOutbox)
-      .where(
-        and(
-          eq(emailOutbox.kind, 'account_deleted'),
-          eq(emailOutbox.toAddress, target.email),
-        ),
-      )
+    const notice = (
+      await db
+        .select()
+        .from(emailOutbox)
+        .where(
+          and(
+            eq(emailOutbox.kind, 'account_deleted'),
+            eq(emailOutbox.toAddress, target.email),
+          ),
+        )
+    ).at(0)
     expect(notice).toMatchObject({
       status: 'queued',
       toAddress: target.email,
@@ -244,20 +250,22 @@ describe.skipIf(!hasDb)('admin deletes a person', () => {
   it('deleting a person removes their notification rows', async () => {
     const admin = await person({ admin: true })
     const target = await person()
-    const [row] = await db
-      .insert(notification)
-      .values({
-        userId: target.id,
-        event: 'release.live',
-        payload: {
-          siteId: crypto.randomUUID(),
-          siteName: 'x',
-          orgName: 'y',
-          recipientRole: 'owner',
-        },
-        dedupeKey: `release.live:${crypto.randomUUID()}:${target.id}`,
-      })
-      .returning()
+    const row = (
+      await db
+        .insert(notification)
+        .values({
+          userId: target.id,
+          event: 'release.live',
+          payload: {
+            siteId: crypto.randomUUID(),
+            siteName: 'x',
+            orgName: 'y',
+            recipientRole: 'owner',
+          },
+          dedupeKey: `release.live:${crypto.randomUUID()}:${target.id}`,
+        })
+        .returning()
+    ).at(0)
     await deleteUser({ actorId: admin.id, userId: target.id })
     expect(
       await db
@@ -293,10 +301,12 @@ describe.skipIf(!hasDb)('a person deletes their own account', () => {
       actorId: null,
       meta: expect.objectContaining({ self: true, actorName: 'Solo Sam' }),
     })
-    const [notice] = await db
-      .select()
-      .from(emailOutbox)
-      .where(eq(emailOutbox.toAddress, target.email))
+    const notice = (
+      await db
+        .select()
+        .from(emailOutbox)
+        .where(eq(emailOutbox.toAddress, target.email))
+    ).at(0)
     expect(notice).toMatchObject({ kind: 'account_deleted' })
     expect(notice?.params).toEqual(expect.objectContaining({ self: true }))
   })

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 
+import { queryKeys } from '#/lib/query-keys'
 import { listPendingReleaseChangesFn } from '#/server/fn/publishing'
 import type { LinkWarning } from '#/server/content/snapshot'
 
@@ -41,7 +42,7 @@ export function usePendingEntries({
   enabled: boolean
 }) {
   const query = useQuery({
-    queryKey: ['golive-pending', siteId] as const,
+    queryKey: queryKeys.goLivePending(siteId),
     queryFn: async () =>
       await listPendingReleaseChangesFn({
         data: { siteId },

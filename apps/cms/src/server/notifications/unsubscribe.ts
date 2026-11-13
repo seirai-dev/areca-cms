@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 /**
  * One-click unsubscribe for notification emails. A token names one user, one
  * organization (null for agency-role alerts) and one event, signed with
@@ -6,14 +5,15 @@
  */
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 
 import { db } from '#/db'
-import { membership, organization } from '#/db/schema'
+import { organization } from '#/db/schema'
 import { env } from '#/env'
 import { isEventKey } from '#/lib/notifications'
 import type { EventKey, NotificationRole } from '#/lib/notifications'
 import { audit } from '#/server/audit'
+import { membershipRole } from '#/server/security/org-role'
 
 import {
   choiceKey,
@@ -118,17 +118,7 @@ async function roleFor(
   target: UnsubscribeTarget,
 ): Promise<NotificationRole | null> {
   if (target.organizationId === null) return 'agency'
-  const [member] = await db
-    .select({ role: membership.role })
-    .from(membership)
-    .where(
-      and(
-        eq(membership.userId, target.userId),
-        eq(membership.organizationId, target.organizationId),
-      ),
-    )
-    .limit(1)
-  return member?.role ?? null
+  return membershipRole(target.userId, target.organizationId)
 }
 
 /** Effective state for the token's event. Null when the person has no role there. */
@@ -161,11 +151,13 @@ async function targetState(
 
 async function organizationName(organizationId: string | null) {
   if (!organizationId) return null
-  const [row] = await db
-    .select({ name: organization.name })
-    .from(organization)
-    .where(eq(organization.id, organizationId))
-    .limit(1)
+  const row = (
+    await db
+      .select({ name: organization.name })
+      .from(organization)
+      .where(eq(organization.id, organizationId))
+      .limit(1)
+  ).at(0)
   return row?.name ?? null
 }
 

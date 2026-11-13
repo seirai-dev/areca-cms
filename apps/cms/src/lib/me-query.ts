@@ -1,9 +1,10 @@
 import { queryOptions } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
 
+import { queryKeys } from '#/lib/query-keys'
 import { getMeFn } from '#/server/fn/me'
 
-export const ME_QUERY_KEY = ['me'] as const
+export const ME_QUERY_KEY = queryKeys.me()
 
 /**
  * The signed-in user, cached briefly so clicking around the app (pages, tabs,
@@ -18,8 +19,20 @@ const meQueryOptions = queryOptions({
   staleTime: 30_000,
 })
 
+/** The user each query client last loaded data for (null: signed out). */
+const cacheOwner = new WeakMap<QueryClient, string | null>()
+
 export async function loadMe(queryClient: QueryClient) {
   const me = await queryClient.fetchQuery(meQueryOptions)
+  // Cached queries belong to whoever was signed in when they ran. When that
+  // changes without a page load (sign-out, another account), drop them all.
+  const userId = me?.user.id ?? null
+  if (cacheOwner.has(queryClient) && cacheOwner.get(queryClient) !== userId) {
+    queryClient.removeQueries({
+      predicate: (query) => query.queryKey[0] !== ME_QUERY_KEY[0],
+    })
+  }
+  cacheOwner.set(queryClient, userId)
   // Never remember "signed out": the next check after signing in must ask.
   if (!me) {
     queryClient.removeQueries({ queryKey: ME_QUERY_KEY })

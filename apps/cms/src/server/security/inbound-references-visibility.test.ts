@@ -1,6 +1,5 @@
 import type * as MailConfig from '#/server/mail/config'
 import type * as MailTransport from '#/server/mail/transport'
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -105,6 +104,7 @@ describe.skipIf(!runnable)(
       referrerIds = { enabled: enabled.entry.id, disabled: disabled.entry.id }
     }, 60_000)
     afterAll(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unset when beforeAll failed
       await w?.destroy()
     })
 

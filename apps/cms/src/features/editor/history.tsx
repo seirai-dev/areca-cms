@@ -9,7 +9,8 @@ import {
   PencilSimple,
   Sparkle,
 } from '@phosphor-icons/react'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { AnimatePresence, useReducedMotion } from 'motion/react'
+import * as motion from 'motion/react-m'
 
 import { Button } from '#/components/ui/button'
 import { QueryError } from '#/components/ui/query-error'

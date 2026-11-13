@@ -1,11 +1,6 @@
 import * as React from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
-import { WarningCircle } from '@phosphor-icons/react'
+import { queryOptions, useQuery } from '@tanstack/react-query'
 
-import { queryKeys } from '#/lib/content/query-keys'
-
-import { useShortcut } from '#/components/shell/shortcuts'
 import { NotFoundCard } from '#/components/shell/not-found'
 import {
   AlertDialog,
@@ -23,79 +18,54 @@ import { EditorCanvas } from '#/features/editor/editor-canvas'
 import { EntryHistory } from '#/features/editor/history'
 import { SeoPanel } from '#/features/editor/seo-panel'
 import { useEntryEditor } from '#/features/editor/use-entry-editor'
-import { baseLocale, readLocale } from '#/lib/content-locale'
-import { LanguageBar } from '#/features/editor/language-bar'
+import { EditorLanguageBar } from '#/features/editor/editor-language-bar'
+import { EditorNotices } from '#/features/editor/editor-notices'
 import { LanguageFade } from '#/features/editor/language-fade'
-import { uiLanguageName } from '#/lib/site-languages'
-import {
-  blockersFor,
-  fieldLabels,
-  localeContext,
-  localeSummaries,
-  requiredLocales,
-} from '#/features/editor/language-state'
-import type { LocaleBlocker } from '#/features/editor/language-state'
 import { LocaleFieldsContext } from '#/features/editor/locale-fields'
-import type { LocaleFields } from '#/features/editor/locale-fields'
-import { useContentLanguage } from '#/features/editor/use-content-language'
-import { TranslateLanguageButton } from '#/features/editor/translate-language-button'
-import { useAiTranslation } from '#/features/editor/use-ai-translation'
+import { revealField } from '#/features/editor/reveal-field'
+import { useClickSource } from '#/features/editor/use-click-source'
+import { useEditorSession } from '#/features/editor/use-editor-session'
 import {
   entryUiStatus,
   isEditedSinceReady,
 } from '#/features/golive/entry-live-state'
-import { useCopyEntryAction } from '#/features/dev-env/use-copy-to-production'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { QueryError } from '#/components/ui/query-error'
 import { Skeleton } from '#/components/ui/skeleton'
 import { SlideOver } from '#/components/ui/slide-over'
 import { initialEntryData } from '#/lib/content/utils'
+import { queryKeys } from '#/lib/query-keys'
 import { isDevSite } from '#/lib/site-environment'
 import { canManageSite } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
-import type { Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 import { readEntrySeo, SEO_KEY } from '#/lib/seo'
 import { previewOrigin } from '#/lib/preview-url'
-import { getAiAvailabilityFn } from '#/server/fn/ai'
 import { getGlobalFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
-import { PreviewPane } from '#/features/visual/preview-pane'
-import type { ClickSource } from '#/features/visual/preview-pane'
+import { LazyPreviewPane } from '#/features/visual/lazy-preview-pane'
 import { VisualEditorLayout } from '#/features/visual/visual-editor-layout'
 import { VisualFullScreenProvider } from '#/features/visual/visual-context'
 import { VisualShortcuts } from '#/features/visual/visual-shortcuts'
-import { seoClickFields } from '#/features/visual/use-click-to-edit'
 import {
   VISUAL_TOKEN_REFRESH_MS,
   useVisualMode,
   useVisualModeActive,
 } from '#/features/visual/visual-mode'
 
-import {
-  conflictReadyBlock,
-  EditorConflictNotice,
-} from '#/features/editor/conflict-notice'
-import { announceReveal, pulseField } from '#/features/editor/reveal-field'
 import { GlobalEditorTopBar } from './global-editor-top-bar'
 import { groupFields } from './site-content'
 
-/** The section row as `listGlobals` returns it (a collection row, kind global). */
-export type GlobalRecord = {
-  id: string
-  key: string
-  label: string
-  enabled: boolean
-  seoEnabled: boolean
-  previewPath: string | null
-  fields: Field[]
-  /** Languages besides main that must be complete before going live. */
-  requiredLanguages?: string[]
-}
+/** The section row (a collection row, kind global). */
+export type GlobalRecord = Awaited<ReturnType<typeof getGlobalFn>>['global']
 
-export function globalQueryKey(siteId: string, key: string) {
-  return ['global', siteId, key] as const
+export function globalQuery(siteId: string, key: string) {
+  return queryOptions({
+    queryKey: queryKeys.global(siteId, key),
+    queryFn: () => getGlobalFn({ data: { siteId, key } }),
+    retry: false,
+  })
 }
 
 /**
@@ -114,25 +84,13 @@ export function GlobalEditorScreen({
   globalKey: string
 }) {
   const isAgency = me.user.isAgencyAdmin
-  const query = useQuery({
-    queryKey: globalQueryKey(site.id, globalKey),
-    queryFn: () => getGlobalFn({ data: { siteId: site.id, key: globalKey } }),
-    retry: false,
-  })
+  const query = useQuery(globalQuery(site.id, globalKey))
 
   if (query.isLoading) return <GlobalEditorSkeleton />
   if (query.isError) {
-    return (
-      <QueryError
-        title={m.globals_could_not_load()}
-        error={query.error}
-        onRetry={() => void query.refetch()}
-        retrying={query.isFetching}
-      />
-    )
+    return <QueryError title={m.globals_could_not_load()} query={query} />
   }
-  const found = query.data?.global as GlobalRecord | undefined
-  if (!found || (!found.enabled && !isAgency)) {
+  if (!query.data || (!query.data.global.enabled && !isAgency)) {
     return <NotFoundCard />
   }
 
@@ -141,8 +99,8 @@ export function GlobalEditorScreen({
       key={`${site.id}:${globalKey}`}
       me={me}
       site={site}
-      global={found}
-      entryId={query.data!.entry.id}
+      global={query.data.global}
+      entryId={query.data.entry.id}
     />
   )
 }
@@ -171,7 +129,6 @@ function GlobalEditorView({
   const [restoreId, setRestoreId] = React.useState<string | null>(null)
 
   const fields = global.fields
-  const navigate = useNavigate()
   // Visual mode (docs/design/visual-editor.md). Sections with no preview path
   // have nothing to show, so they do not reopen in Visual by themselves.
   const visual = useVisualMode({ supported: Boolean(global.previewPath) })
@@ -184,137 +141,24 @@ function GlobalEditorView({
     previewRefetchInterval: visual.active ? VISUAL_TOKEN_REFRESH_MS : undefined,
   })
   const { entry, data } = editor
-  // Click to edit: every field the column shows, plus the SEO fields.
-  const clickFields = React.useMemo(
-    () => [
-      ...fields.map((field) => ({ key: field.key, label: field.label })),
-      ...(global.seoEnabled ? seoClickFields() : []),
-    ],
-    [fields, global.seoEnabled],
-  )
-
-  // Content languages (multilingual sites only; null otherwise).
-  const lang = useContentLanguage({ siteId, languages: site.languages })
-  const active = lang.active
-  const ctx = React.useMemo(
-    () => (lang.languages ? localeContext(lang.languages, fields) : null),
-    [lang.languages, fields],
-  )
-  const requiredLanguages = global.requiredLanguages ?? []
-  const requiredKey = requiredLanguages.join('|')
-  const required = lang.languages
-    ? requiredLocales(lang.languages, requiredLanguages)
-    : []
-  const summaries = React.useMemo(
-    () => (ctx ? localeSummaries(data, ctx, required) : []),
-    // `requiredKey` stands in for the contents of `required`.
-    [data, ctx, requiredKey],
-  )
-  const view = React.useMemo(
-    () => (ctx && active ? readLocale(data, active, ctx) : data),
-    [data, ctx, active],
-  )
-  const mainView = React.useMemo(
-    () => (ctx ? readLocale(data, lang.main, ctx) : data),
-    [data, ctx, lang.main],
-  )
-  // AI translation needs AI set up and a saved section (the server reads it).
-  const aiQuery = useQuery({
-    queryKey: queryKeys.aiAvailability(),
-    queryFn: () => getAiAvailabilityFn(),
-    staleTime: 30_000,
-  })
-  const translateEnabled =
-    aiQuery.data?.enabled === true && Boolean(editor.entryId)
-  const translate = useAiTranslation({
-    siteId,
-    entryId: editor.entryId ?? '',
+  const session = useEditorSession({
+    editor,
+    site,
     fields,
-    main: lang.main,
-    active: active ?? lang.main,
-    source: mainView,
-    target: view,
+    requiredLanguages: global.requiredLanguages,
     seoEnabled: global.seoEnabled,
-    applyPatch: (patch) => {
-      if (ctx && active) editor.updateLocaleFields(patch, active, ctx)
-    },
-    save: editor.save,
+    copyDestination: { kind: 'global', globalKey: global.key },
+    reveal: revealField,
   })
-  const localeFields: LocaleFields | null =
-    ctx && active
-      ? {
-          active,
-          main: lang.main,
-          mainName: uiLanguageName(lang.main),
-          mainView,
-          isMain: lang.isMain,
-          onTranslateField: translateEnabled ? translate.translateField : null,
-          translatingKey:
-            translate.pendingScope === 'language'
-              ? null
-              : translate.pendingScope,
-        }
-      : null
-  const blockers = ctx ? blockersFor(data, ctx, required) : []
-  const blocker: LocaleBlocker | null =
-    editor.serverBlockers.at(0) ?? blockers.at(0) ?? null
-
-  function focusBlocker(item: LocaleBlocker) {
-    lang.setActive(item.locale)
-    const key = item.missing[0]
-    if (!key) return
-    requestAnimationFrame(() => {
-      const node = document.querySelector<HTMLElement>(
-        `[data-field="${CSS.escape(key)}"]`,
-      )
-      node
-        ?.querySelector<HTMLElement>(
-          'input, textarea, [contenteditable="true"]',
-        )
-        ?.focus()
-    })
-  }
-
-  const languageBlock = blocker
-    ? {
-        message: m.editor_language_blocker({
-          language: uiLanguageName(blocker.locale),
-          fields: fieldLabels(blocker.missing, fields).join(', '),
-        }),
-        onFix: () => focusBlocker(blocker),
-      }
-    : null
-  const conflictBlock = conflictReadyBlock(
-    editor.conflict,
-    () => void editor.reloadServerDraft(),
-  )
-  const readyBlock = conflictBlock ?? languageBlock
-
-  // Writes the active language; the main language (and single-language
-  // sites) use the ordinary update.
-  function onLocaleChange(key: string, value: unknown) {
-    if (!ctx || !active) {
-      editor.updateField(key, value)
-      return
-    }
-    if (lang.isMain && baseLocale(data, ctx) === lang.main) {
-      editor.updateField(key, value)
-      return
-    }
-    editor.updateLocaleField(key, value, active, ctx)
-  }
-
-  useShortcut('mod+s', () => void editor.save())
-
-  // Copy to production: dev envs only (docs/design/dev-environments.md, Decision 18).
-  const copyAction = useCopyEntryAction({
-    devSiteId: siteId,
-    productionSiteId: site.parentSiteId,
-    isDevelopment: devSite,
-    collectionKey: global.key,
-    destination: { kind: 'global', globalKey: global.key },
-    devEntryId: entryId,
-    save: editor.save,
+  const { ctx, active, view } = session
+  // Click to edit: every field the column shows, plus the SEO fields.
+  const clickSource = useClickSource({
+    editor,
+    siteId,
+    fields,
+    seo: global.seoEnabled,
+    globalKey: global.key,
+    reveal: revealField,
   })
 
   if (editor.loading || !entry) return <GlobalEditorSkeleton />
@@ -330,7 +174,6 @@ function GlobalEditorView({
   })
   const hasReady = entry.status === 'published' || entry.status === 'scheduled'
   const changed = editedSinceReady || editor.dirty
-  const canDiscard = hasReady && changed
   const discardReason = !hasReady
     ? m.globals_never_ready()
     : !changed
@@ -343,176 +186,19 @@ function GlobalEditorView({
 
   const groups = groupFields(fields)
   const seoOn = global.seoEnabled
-  const hasErrors = editor.errorCount > 0 || Boolean(editor.formError)
-  const errorKeys = Object.keys(editor.fieldErrors).filter(Boolean)
-
-  /**
-   * Scrolls to and focuses a field (the save banner's links, a click in the
-   * visual preview). `pulse` makes it glow briefly. An SEO field opens its
-   * collapsed group first, via announceReveal.
-   */
-  function revealField(key: string, options: { pulse?: boolean } = {}) {
-    announceReveal(key)
-    const attempt = (tries: number) => {
-      const node = document.querySelector<HTMLElement>(
-        `[data-field="${CSS.escape(key)}"]`,
-      )
-      if (!node) {
-        if (tries > 0) window.setTimeout(() => attempt(tries - 1), 120)
-        return
-      }
-      node.scrollIntoView({ block: 'center', behavior: 'smooth' })
-      const focusable = node.matches(
-        'input, textarea, [contenteditable="true"], button',
-      )
-        ? node
-        : node.querySelector<HTMLElement>(
-            'input, textarea, [contenteditable="true"], button',
-          )
-      focusable?.focus({ preventScroll: true })
-      if (options.pulse) pulseField(node)
-    }
-    requestAnimationFrame(() => attempt(5))
-  }
 
   function openPreview() {
     if (editor.previewUrl) window.open(editor.previewUrl, '_blank', 'noopener')
-  }
-
-  // Click to edit: the fields a preview may open, and where "Open" goes.
-  const clickSource: ClickSource = {
-    self: { entryId: editor.entryId ?? null, globalKey: global.key },
-    fields: clickFields,
-    onSelectField: (key) => revealField(key, { pulse: true }),
-    onOpenOwner: (owner) => {
-      void (async () => {
-        // Save first, so nothing typed here is left behind.
-        await editor.save().catch(() => null)
-        if (owner.kind === 'entry') {
-          await navigate({
-            to: '/sites/$siteId/c/$collectionKey/$entryId',
-            params: {
-              siteId,
-              collectionKey: owner.collectionKey,
-              entryId: owner.entryId,
-            },
-            search: { view: 'visual' },
-          })
-        } else {
-          await navigate({
-            to: '/sites/$siteId/globals/$globalKey',
-            params: { siteId, globalKey: owner.globalKey },
-            search: { view: 'visual' },
-          })
-        }
-      })()
-    },
   }
 
   // Visual mode needs a preview path and a loaded preview URL.
   const canVisual = Boolean(global.previewPath && editor.previewUrl)
   const visualReason = canVisual ? null : previewReason
 
-  const languageBar =
-    lang.languages && ctx && active ? (
-      <LanguageBar
-        main={lang.main}
-        active={active}
-        summaries={summaries}
-        fields={fields}
-        onSelect={lang.setActive}
-        trailing={
-          translateEnabled && !lang.isMain ? (
-            <TranslateLanguageButton
-              label={m.editor_translate_language({
-                language: uiLanguageName(lang.main),
-              })}
-              running={translate.pendingScope === 'language'}
-              disabled={!translate.hasSource}
-              disabledReason={m.editor_translate_add_source({
-                language: uiLanguageName(lang.main),
-              })}
-              onClick={translate.translateLanguage}
-            />
-          ) : undefined
-        }
-      />
-    ) : undefined
-
   // The section's fields: the column in Write mode, the left column in Visual.
   const fieldsColumn = (
     <>
-      <EditorConflictNotice
-        conflict={editor.conflict}
-        approvalConflict={editor.approvalConflict}
-        recoveredDraft={Boolean(editor.recoveredDraft)}
-        className="grid gap-3 rounded-card border border-border-error/30 p-4"
-        onReload={() => void editor.reloadServerDraft()}
-        onReapply={() => void editor.reapplyRecoveredDraft()}
-        onDiscard={editor.discardRecoveredDraft}
-      />
-
-      {editor.restoreSkippedFields.length > 0 ? (
-        <section
-          role="status"
-          className="grid gap-2 rounded-card border border-border-default p-4"
-        >
-          <h2 className="text-headline text-text-primary">
-            {m.editor_revision_skipped_fields()}
-          </h2>
-          <p className="text-callout text-text-secondary">
-            {m.editor_revision_keep_current()}
-          </p>
-          <ul className="list-disc space-y-1 pl-5 text-callout">
-            {editor.restoreSkippedFields.map((field) => (
-              <li key={field.key}>
-                <strong>{field.label}</strong>: {field.reason}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {hasErrors ? (
-        <div
-          role="alert"
-          data-testid="editor-errors"
-          className="flex items-start gap-3 rounded-card border border-border-error/30 bg-status-error-bg px-4 py-3 text-[14px] leading-5 text-text-primary"
-        >
-          <WarningCircle
-            weight="fill"
-            className="mt-0.5 size-4 shrink-0 text-icon-error"
-          />
-          <span className="grid gap-0.5">
-            <span className="font-medium">
-              {editor.errorCount > 0
-                ? editor.errorCount === 1
-                  ? m.editor_save_fix_one()
-                  : m.editor_save_fix_other({ count: editor.errorCount })
-                : m.editor_save_failed()}
-            </span>
-            {errorKeys.length > 0 ? (
-              <span className="flex flex-wrap gap-x-3 gap-y-1">
-                {errorKeys.map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => revealField(key)}
-                    className="text-callout font-medium text-text-primary underline decoration-border-error underline-offset-4 hover:decoration-current"
-                  >
-                    {fieldLabels([key], fields)[0] ?? key}
-                  </button>
-                ))}
-              </span>
-            ) : null}
-            {editor.formError ? (
-              <span className="text-callout text-text-secondary">
-                {editor.formError}
-              </span>
-            ) : null}
-          </span>
-        </div>
-      ) : null}
+      <EditorNotices editor={editor} fields={fields} onReveal={revealField} />
 
       {fields.length === 0 ? (
         <p className="rounded-[12px] border border-dashed border-border-strong px-4 py-4 text-center text-callout text-text-secondary">
@@ -535,7 +221,7 @@ function GlobalEditorView({
                 canvasFields={[field]}
                 data={view}
                 errors={editor.fieldErrors}
-                onChange={onLocaleChange}
+                onChange={session.onLocaleChange}
                 organizationId={site.organizationId}
                 linkContext={{
                   siteId,
@@ -551,7 +237,7 @@ function GlobalEditorView({
                 key={field.key}
                 field={field}
                 value={view[field.key]}
-                onChange={(value) => onLocaleChange(field.key, value)}
+                onChange={(value) => session.onLocaleChange(field.key, value)}
                 error={editor.fieldErrors[field.key]}
                 siteId={siteId}
                 devSite={devSite}
@@ -566,7 +252,7 @@ function GlobalEditorView({
         <div className="grid gap-4 border-t border-border-default pt-6">
           <SeoPanel
             seo={readEntrySeo(view)}
-            onChange={(next) => onLocaleChange(SEO_KEY, next)}
+            onChange={(next) => session.onLocaleChange(SEO_KEY, next)}
             errors={editor.fieldErrors}
             organizationId={site.organizationId}
             productionUrl={site.productionUrl}
@@ -586,7 +272,7 @@ function GlobalEditorView({
   return (
     <VisualFullScreenProvider active={visual.active}>
       <VisualShortcuts mode={visual} canVisual={canVisual} />
-      <LocaleFieldsContext.Provider value={localeFields}>
+      <LocaleFieldsContext.Provider value={session.localeFields}>
         <div
           data-testid="global-editor"
           data-ready={editor.ready ? 'true' : 'false'}
@@ -595,7 +281,7 @@ function GlobalEditorView({
           data-view={visual.active ? 'visual' : 'write'}
           style={
             {
-              '--editor-bar-h': languageBar ? '100px' : '56px',
+              '--editor-bar-h': session.multilingual ? '100px' : '56px',
             } as React.CSSProperties
           }
           className={
@@ -603,54 +289,16 @@ function GlobalEditorView({
           }
         >
           <GlobalEditorTopBar
-            languageBar={languageBar}
-            readyBlock={readyBlock}
-            copyAction={copyAction}
+            editor={editor}
             siteId={siteId}
-            label={global.label}
             uiStatus={uiStatus}
-            backendStatus={entry.status}
-            scheduledAt={entry.scheduledAt}
             editedSinceReady={editedSinceReady}
-            saveStatus={editor.status}
-            conflict={editor.conflict}
-            lastSavedAt={editor.lastSavedAt}
-            updatedAt={entry.updatedAt}
-            errorCount={editor.errorCount}
-            onSave={() => void editor.save()}
             canManage={canManage}
-            canSchedule={canSchedule}
-            busy={editor.busy}
-            markReadyPending={editor.markReadyPending}
-            markable={editor.markable}
-            hasReady={hasReady}
-            canDiscard={canDiscard}
-            discardPending={editor.discardPending}
-            onMarkReady={editor.markReady}
-            onDiscard={() => void editor.discard().catch(() => undefined)}
-            discardReason={discardReason}
-            previewAvailable={previewAvailable}
-            previewUrl={editor.previewUrl}
-            previewReason={previewReason}
-            onPreview={openPreview}
-            scheduled={entry.status === 'scheduled'}
-            scheduleOpen={scheduleOpen}
-            onScheduleOpenChange={setScheduleOpen}
-            schedulePending={editor.schedulePending}
-            scheduleInitialAt={
-              entry.scheduledAt ? new Date(entry.scheduledAt) : null
+            readyBlock={session.readyBlock}
+            copyAction={session.copyAction}
+            languageBar={
+              <EditorLanguageBar session={session} fields={fields} />
             }
-            scheduleInitialTimeZone={entry.scheduleTimezone}
-            onScheduleSubmit={async (at, timeZone) => {
-              // A form opened before the conflict must not approve over it.
-              if (editor.conflict) return
-              const result = await editor
-                .schedule(at, timeZone)
-                .catch(() => null)
-              if (result) setScheduleOpen(false)
-            }}
-            onCancelSchedule={editor.cancelSchedule}
-            onOpenHistory={() => setHistoryOpen(true)}
             visualMode={
               visual.available
                 ? {
@@ -661,6 +309,28 @@ function GlobalEditorView({
                   }
                 : undefined
             }
+            label={global.label}
+            canSchedule={canSchedule}
+            hasReady={hasReady}
+            discardReason={discardReason}
+            preview={{
+              available: previewAvailable,
+              reason: previewReason,
+              open: openPreview,
+            }}
+            schedule={{
+              open: scheduleOpen,
+              onOpenChange: setScheduleOpen,
+              onSubmit: async (at, timeZone) => {
+                // A form opened before the conflict must not approve over it.
+                if (editor.conflict) return
+                const result = await editor
+                  .schedule(at, timeZone)
+                  .catch(() => null)
+                if (result) setScheduleOpen(false)
+              },
+            }}
+            onOpenHistory={() => setHistoryOpen(true)}
           />
 
           {visual.active ? (
@@ -677,7 +347,7 @@ function GlobalEditorView({
                 </LanguageFade>
               }
               preview={
-                <PreviewPane
+                <LazyPreviewPane
                   previewUrl={editor.previewUrl}
                   title={global.label}
                   lastSavedAt={editor.lastSavedAt}
@@ -722,7 +392,7 @@ function GlobalEditorView({
             />
           </SlideOver>
 
-          {translate.dialog}
+          {session.translate.dialog}
 
           <ConfirmDialog
             open={restoreId !== null}

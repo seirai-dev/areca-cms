@@ -11,7 +11,7 @@
  * accepts messages from that origin sent by its parent window.
  */
 import type { PreviewResult } from './types.js'
-import { startOverlay, type OverlayHandle } from './visual-overlay.js'
+import type { OverlayHandle } from './visual-overlay.js'
 
 /** The SDK version the bridge announces in `hello`. Matches the package version. */
 export const SDK_VERSION = '0.11.0'
@@ -301,6 +301,9 @@ function normaliseOrigin(value: string): string {
   return origin
 }
 
+// A failed overlay chunk is reported once per page, not once per bridge.
+let overlayLoadWarned = false
+
 /**
  * Connects a site's preview page to the CMS. It answers `ping` with `hello`, announces
  * itself once when created, and passes each newer `update` to `onUpdate`. It reports
@@ -317,6 +320,10 @@ export function createVisualBridge(options: VisualBridgeOptions): VisualBridge {
   let connected = false
   let lastSeq = -1
   let destroyed = false
+  let overlay: OverlayHandle | null = null
+  // What the CMS asked of the overlay before it loaded, applied once it starts.
+  let lastMode: ModeMessage | null = null
+  let lastHighlight: Marker | null = null
 
   function currentHref(): string {
     const href = target.location?.href
@@ -360,8 +367,10 @@ export function createVisualBridge(options: VisualBridgeOptions): VisualBridge {
       lastSeq = message.seq
       options.onUpdate(message.result, { seq: message.seq, locale: message.locale })
     } else if (message.type === 'areca:v1:mode') {
+      lastMode = message
       overlay?.setMode(message)
     } else if (message.type === 'areca:v1:highlight') {
+      lastHighlight = message.target
       overlay?.highlight(message.target)
     }
   }
@@ -373,15 +382,27 @@ export function createVisualBridge(options: VisualBridgeOptions): VisualBridge {
   post(hello())
 
   // The overlay draws on the real page only. A fake window (tests) never touches the DOM.
-  // It starts after hello, so its first markers message follows the announcement.
-  const overlay: OverlayHandle | null =
-    markers && options.window === undefined && typeof document !== 'undefined'
-      ? startOverlay({
+  // It loads on demand, so pages outside the CMS frame never download it, and starts
+  // after hello, so its first markers message follows the announcement.
+  if (markers && options.window === undefined && typeof document !== 'undefined') {
+    void import('./visual-overlay.js').then(
+      ({ startOverlay }) => {
+        if (destroyed) return
+        overlay = startOverlay({
           post: (message) => post(message),
           document,
           window: target as unknown as Window,
         })
-      : null
+        if (lastMode) overlay.setMode(lastMode)
+        if (lastHighlight) overlay.highlight(lastHighlight)
+      },
+      (error: unknown) => {
+        if (overlayLoadWarned) return
+        overlayLoadWarned = true
+        console.warn('Live preview: could not load the click-to-edit overlay.', error)
+      },
+    )
+  }
 
   return {
     destroy() {

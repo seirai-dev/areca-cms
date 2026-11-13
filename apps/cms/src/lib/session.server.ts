@@ -1,18 +1,16 @@
 import { redirect } from '@tanstack/react-router'
 import { getRequestHeaders } from '@tanstack/react-start/server'
-import { and, eq } from 'drizzle-orm'
-
-import { db } from '#/db'
-import { membership } from '#/db/schema'
-import { env } from '#/env'
-import { MfaRequiredError } from '#/lib/security-errors'
 import {
   SESSION_MEMO_KEY,
   forgetForRequest,
   isReadOnlyRequest,
   memoizeForRequest,
 } from '#/server/http/request-scope.server'
-import { requireAdminLocalMfa } from '#/server/security/local-mfa'
+import {
+  requireAdminLocalMfa,
+  requireMemberLocalMfa,
+} from '#/server/security/local-mfa'
+import { membershipRole } from '#/server/security/org-role'
 import { assertFreshSession } from '#/server/security/step-up'
 
 import type { MembershipRole } from './types.ts'
@@ -53,10 +51,12 @@ export function forgetSession() {
 }
 
 /**
- * A blocked person is signed out here too. Their sessions are deleted when
- * they are blocked, so this is defence in depth.
+ * The signed-in session before the second-factor rule. Only for the steps
+ * that lead to passing it, such as entering the code. A blocked person is
+ * signed out here too. Their sessions are deleted when they are blocked, so
+ * this is defence in depth.
  */
-export async function requireUser() {
+export async function requireSignedIn() {
   const session = await getSession()
   if (!session || session.user.blockedAt) {
     throw redirect({ href: '/login' })
@@ -65,16 +65,15 @@ export async function requireUser() {
 }
 
 /**
- * Agency admins can reach every client, so they must have two-factor enabled
- * before any admin power is exercised. Throws `MFA_REQUIRED` otherwise.
+ * A signed-in user whose session counts. Someone with two-factor on must have
+ * entered a code in this session (`requireMemberLocalMfa`). While
+ * `ADMIN_MFA_REQUIRED` is on, agency admins are held to their own rule by the
+ * admin and membership guards below.
  */
-export function assertAdminMfa(
-  user: { twoFactorEnabled?: boolean | null },
-  required: boolean = env.ADMIN_MFA_REQUIRED,
-) {
-  if (required && !user.twoFactorEnabled) {
-    throw new MfaRequiredError()
-  }
+export async function requireUser() {
+  const session = await requireSignedIn()
+  await requireMemberLocalMfa(session)
+  return session
 }
 
 export async function requireAgencyAdmin() {
@@ -82,7 +81,6 @@ export async function requireAgencyAdmin() {
   if (!session.user.isAgencyAdmin) {
     throw new Response('Forbidden', { status: 403 })
   }
-  assertAdminMfa(session.user)
   await requireAdminLocalMfa(session)
   return session
 }
@@ -94,7 +92,6 @@ export async function requireAgencyAdmin() {
 export async function requireAccountUser() {
   const session = await requireUser()
   if (session.user.isAgencyAdmin) {
-    assertAdminMfa(session.user)
     await requireAdminLocalMfa(session)
   }
   return session
@@ -131,17 +128,8 @@ async function loadOrgMembership(orgId: string): Promise<OrgMembership> {
     return resolveOrgMembership(session, null, forbidden)
   }
 
-  const rows = await db
-    .select({ role: membership.role })
-    .from(membership)
-    .where(
-      and(
-        eq(membership.userId, session.user.id),
-        eq(membership.organizationId, orgId),
-      ),
-    )
-    .limit(1)
-  return resolveOrgMembership(session, rows.at(0) ?? null, forbidden)
+  const role = await membershipRole(session.user.id, orgId)
+  return resolveOrgMembership(session, role ? { role } : null, forbidden)
 }
 
 /**
@@ -156,7 +144,6 @@ export async function resolveOrgMembership(
   notFound: () => unknown,
 ): Promise<OrgMembership> {
   if (session.user.isAgencyAdmin) {
-    assertAdminMfa(session.user)
     await requireAdminLocalMfa(session)
     return { session, member: null }
   }

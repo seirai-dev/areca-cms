@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 /**
  * Seeds for the person-level DB tests (blocking, deletion, client access).
  * People are created per test with unique emails and removed afterwards.
@@ -6,6 +5,7 @@
 import { inArray, isNull, and, eq } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import { membership, organization, user } from '#/db/schema'
 import { createTestSite } from '#/server/content/test-utils'
 
@@ -20,28 +20,32 @@ export async function makePerson(
   } = {},
 ) {
   const id = crypto.randomUUID()
-  const [row] = await db
-    .insert(user)
-    .values({
-      id,
-      name: input.name ?? `Person ${id.slice(0, 6)}`,
-      email: `person-${id}@areca.test`,
-      emailVerified: true,
-      isAgencyAdmin: input.admin ?? false,
-      twoFactorEnabled: input.twoFactor ?? false,
-      locale: input.locale === undefined ? 'en' : input.locale,
-    })
-    .returning()
+  const row = (
+    await db
+      .insert(user)
+      .values({
+        id,
+        name: input.name ?? `Person ${id.slice(0, 6)}`,
+        email: `person-${id}@areca.test`,
+        emailVerified: true,
+        isAgencyAdmin: input.admin ?? false,
+        twoFactorEnabled: input.twoFactor ?? false,
+        locale: input.locale === undefined ? 'en' : input.locale,
+      })
+      .returning()
+  ).at(0)
   if (!row) throw new Error('Failed to create person')
   return row
 }
 
 export async function makeClient(label = 'Client') {
   const suffix = crypto.randomUUID()
-  const [row] = await db
-    .insert(organization)
-    .values({ name: label, slug: `client-${suffix}` })
-    .returning()
+  const row = (
+    await db
+      .insert(organization)
+      .values({ name: label, slug: `client-${suffix}` })
+      .returning()
+  ).at(0)
   if (!row) throw new Error('Failed to create client')
   return row
 }
@@ -61,7 +65,7 @@ export async function join(
  * with this. The locking and the row locks stay real; only the set counted
  * is narrowed to the fixture admins.
  */
-export async function scopedActiveAdminCount(tx: TestTx, ids: string[]) {
+export async function scopedActiveAdminCount(tx: Tx, ids: string[]) {
   const rows = await tx
     .select({ id: user.id })
     .from(user)
@@ -74,8 +78,6 @@ export async function scopedActiveAdminCount(tx: TestTx, ids: string[]) {
     )
   return rows.length
 }
-
-type TestTx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 export async function removePeople(ids: string[]) {
   if (ids.length === 0) return

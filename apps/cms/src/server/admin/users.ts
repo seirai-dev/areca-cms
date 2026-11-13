@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 /**
  * Person-level administration: blocking, deleting, renaming, signing people
  * out, resetting two-factor, and the bulk versions of those. Client access
@@ -12,6 +11,7 @@
 import { and, eq, ilike, inArray, isNull, or } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import {
   invitation,
   mcpConnection,
@@ -40,8 +40,8 @@ import {
   countActiveAgencyAdmins,
   lockAgencyAdminRoster,
 } from './agency-admin-roster.ts'
-import { countOwners, lockOrganization } from './members.ts'
-import type { Tx } from './members.ts'
+import { countOwners } from './members.ts'
+import { lockOrganizationForMutation } from './organization-lock.ts'
 
 /** Longest internal block note an agency admin can write. */
 export const BLOCK_REASON_MAX_LENGTH = 500
@@ -66,30 +66,33 @@ const personColumns = {
 }
 
 export async function lockPerson(tx: Tx, userId: string): Promise<PersonRow> {
-  const [row] = await tx
-    .select(personColumns)
-    .from(user)
-    .where(eq(user.id, userId))
-    .for('update')
+  const row = (
+    await tx
+      .select(personColumns)
+      .from(user)
+      .where(eq(user.id, userId))
+      .for('update')
+  ).at(0)
   if (!row) throw new NotFoundError(m.server_user_not_found())
   return row
 }
 
 async function readPerson(tx: Tx, userId: string): Promise<PersonRow> {
-  const [row] = await tx
-    .select(personColumns)
-    .from(user)
-    .where(eq(user.id, userId))
+  const row = (
+    await tx.select(personColumns).from(user).where(eq(user.id, userId))
+  ).at(0)
   if (!row) throw new NotFoundError(m.server_user_not_found())
   return row
 }
 
 async function nameOf(tx: Tx, userId: string) {
-  const [row] = await tx
-    .select({ name: user.name })
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1)
+  const row = (
+    await tx
+      .select({ name: user.name })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1)
+  ).at(0)
   return row?.name ?? ''
 }
 
@@ -124,7 +127,7 @@ async function selfDeleteBlockersIn(
     .orderBy(membership.organizationId)
   const soleOwnerClients: Array<{ organizationId: string; name: string }> = []
   for (const row of owned) {
-    if (lock) await lockOrganization(tx, row.organizationId)
+    if (lock) await lockOrganizationForMutation(tx, row.organizationId)
     if ((await countOwners(tx, row.organizationId)) <= 1) {
       soleOwnerClients.push({
         organizationId: row.organizationId,

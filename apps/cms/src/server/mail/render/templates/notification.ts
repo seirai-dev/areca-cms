@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import { eq } from 'drizzle-orm'
 
 import { db } from '#/db'
@@ -169,11 +168,13 @@ export async function render(
   ctx: RenderContext,
 ): Promise<RenderedMail> {
   const { locale, brand } = ctx
-  const [row] = await (ctx.connection ?? db)
-    .select()
-    .from(notification)
-    .where(eq(notification.id, String(params.notificationId ?? '')))
-    .limit(1)
+  const row = (
+    await (ctx.connection ?? db)
+      .select()
+      .from(notification)
+      .where(eq(notification.id, String(params.notificationId ?? '')))
+      .limit(1)
+  ).at(0)
   if (!row) throw new MailRenderError('the notification no longer exists')
   await loadRecipient(row.userId, ctx.connection)
   if (!isEventKey(row.event)) {
