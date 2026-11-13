@@ -315,6 +315,37 @@ describe.skipIf(!process.env.DATABASE_URL)(
       })
     })
 
+    it('counts usage without waiting for a transaction that holds the organization asset lock', async () => {
+      await withTestSite(async (ctx) => {
+        const [image] = await db
+          .insert(asset)
+          .values({
+            organizationId: ctx.org.id,
+            storageKey: `${ctx.org.id}/busy.png`,
+            originalFilename: 'busy.png',
+            mimeType: 'image/png',
+            size: 4,
+          })
+          .returning()
+        const connection = await pool.connect()
+        try {
+          await connection.query('BEGIN')
+          await connection.query(
+            'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+            [`assets:${ctx.org.id}`],
+          )
+          const counted = await Promise.race([
+            assetUsage(image.id, ctx.org.id),
+            new Promise((resolve) => setTimeout(() => resolve('blocked'), 2000)),
+          ])
+          expect(counted).toBe(0)
+        } finally {
+          await connection.query('ROLLBACK')
+          connection.release()
+        }
+      })
+    })
+
     it('keeps organization object cleanup retryable after organization and archives are deleted', async () => {
       await withTestSite(async (ctx) => {
         const key = `${ctx.org.id}/org-cleanup.pdf`
