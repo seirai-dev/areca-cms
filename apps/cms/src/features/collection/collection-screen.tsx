@@ -45,11 +45,7 @@ import type { SchemaSegment } from '#/features/content-model/schema-editor-sheet
 import { editorPublishReason } from '#/features/golive/golive-tray'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { useDebouncedValue } from '#/hooks/use-debounced-value'
-import {
-  canManageSite,
-  collectionIcon,
-  singularLabel,
-} from '#/lib/site-nav'
+import { canManageSite, collectionIcon, singularLabel } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
 import { isDevSite } from '#/lib/site-environment'
 import type { Field } from '#/lib/types'

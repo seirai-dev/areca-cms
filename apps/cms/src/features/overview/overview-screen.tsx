@@ -44,11 +44,7 @@ import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { usePanel } from '#/features/shell/panel'
 import { formatRelativeTime } from '#/lib/relative-time'
 import { isDevSite } from '#/lib/site-environment'
-import {
-  canManageSite,
-  collectionIcon,
-  displayHost,
-} from '#/lib/site-nav'
+import { canManageSite, collectionIcon, displayHost } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
 import { listRecentEntriesFn } from '#/server/fn/content'
