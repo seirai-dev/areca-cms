@@ -3,7 +3,7 @@ import { CheckCircle, Prohibit } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 import type { CloudflareDeployTarget } from '#/adapters/deployment/cloudflare-targets'
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { Tag } from '#/components/ui/tag'
 import { Button } from '#/components/ui/button'

@@ -95,6 +95,8 @@ export const queryKeys = {
   /** Prefix of every section editor of one site. */
   globalFamily: (siteId: string) => ['global', siteId] as const,
   global: (siteId: string, key: string) => ['global', siteId, key] as const,
+  globalPreview: (siteId: string, key: string) =>
+    ['global-preview', siteId, key] as const,
 
   // Media. Every asset list of a client shares `assetsOf(organizationId)`.
   assetsOf: (organizationId: string) => ['assets', organizationId] as const,
@@ -115,8 +117,13 @@ export const queryKeys = {
   buildJob: (id: string) => ['build-job', id] as const,
   /** The go-live tray's pending list of one site. */
   goLivePending: (siteId: string) => ['golive-pending', siteId] as const,
-  goLiveErrorEntry: (siteId: string, collection: string, slug: string) =>
-    ['golive-error-entry', siteId, collection, slug] as const,
+  /** Go-live validation errors, kept in the cache so the tray and the panel share them. */
+  goLiveErrors: (siteId: string) => ['golive-errors', siteId] as const,
+  goLiveErrorEntry: (
+    siteId: string,
+    collection: string | undefined,
+    slug: string | undefined,
+  ) => ['golive-error-entry', siteId, collection, slug] as const,
   pausedJobs: () => ['agency', 'paused-jobs'] as const,
 
   // Sites and clients

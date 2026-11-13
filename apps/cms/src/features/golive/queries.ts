@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
 
-import { queryKeys } from '#/lib/content/query-keys'
+import { queryKeys } from '#/lib/query-keys'
 import { isActiveJobStatus } from '#/lib/status'
 import {
   getBuildJobFn,

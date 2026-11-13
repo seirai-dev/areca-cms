@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router'
 import { WarningCircle } from '@phosphor-icons/react'
 
 import { Button } from '#/components/ui/button'
+import { queryKeys } from '#/lib/query-keys'
 import { m } from '#/paraglide/messages'
 import { listEntriesFn } from '#/server/fn/content'
 
@@ -51,7 +52,7 @@ export function ErrorChecklist({
 
 function ErrorItem({ siteId, error }: { siteId: string; error: GoLiveError }) {
   const lookup = useQuery({
-    queryKey: ['golive-error-entry', siteId, error.collection, error.slug],
+    queryKey: queryKeys.goLiveErrorEntry(siteId, error.collection, error.slug),
     queryFn: async () => {
       const result = await listEntriesFn({
         data: {

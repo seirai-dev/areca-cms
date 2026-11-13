@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
 import { useStepUp } from '#/features/security/step-up'
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
+import { queryKeys } from '#/lib/query-keys'
 import type { MailSecure } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import {
@@ -23,11 +24,6 @@ import {
   portForEncryption,
 } from './mail-settings-logic'
 import type { MailFieldKey } from './mail-settings-logic'
-
-export const mailSettingsQueryKey = ['mail-settings'] as const
-export const mailHealthQueryKey = ['mail-health'] as const
-export const mailRecentQueryKey = (failedOnly: boolean) =>
-  ['mail-recent', failedOnly ? 'failed' : 'all'] as const
 
 /** Text fields as the inputs hold them. The port stays a string until sent. */
 export type MailFields = {
@@ -123,7 +119,7 @@ function toDraft(fields: MailFields) {
 
 export function useMailHealth(enabled: boolean) {
   return useQuery({
-    queryKey: mailHealthQueryKey,
+    queryKey: queryKeys.mailHealth(),
     queryFn: () => getMailHealthFn(),
     staleTime: 60_000,
     enabled,
@@ -132,7 +128,7 @@ export function useMailHealth(enabled: boolean) {
 
 export function useRecentEmails(failedOnly: boolean) {
   return useQuery({
-    queryKey: mailRecentQueryKey(failedOnly),
+    queryKey: queryKeys.mailRecent(failedOnly),
     queryFn: () =>
       listRecentEmailsFn({
         data: failedOnly ? { status: 'failed' } : undefined,
@@ -142,7 +138,7 @@ export function useRecentEmails(failedOnly: boolean) {
 
 export function useMailSettingsQuery() {
   return useQuery({
-    queryKey: mailSettingsQueryKey,
+    queryKey: queryKeys.mailSettings(),
     queryFn: () => getMailSettingsFn(),
   })
 }
@@ -234,7 +230,7 @@ export function useMailSettings(saved: MailStatus) {
   const sendTest = useMutation({
     mutationFn: () => sendTestEmailFn({ data: toDraft(fields) }),
     onSuccess: (result) => {
-      void queryClient.invalidateQueries({ queryKey: ['mail-recent'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.mailRecent() })
       if (result.ok) {
         setTestFailure(null)
         toast.success(m.agency_mail_test_sent({ email: result.to }))
@@ -259,8 +255,8 @@ export function useMailSettings(saved: MailStatus) {
       setFormOpen(false)
       seed(result.status)
       setVerifyResult(result.verified ? { ok: true } : null)
-      queryClient.setQueryData(mailSettingsQueryKey, result.status)
-      void queryClient.invalidateQueries({ queryKey: mailHealthQueryKey })
+      queryClient.setQueryData(queryKeys.mailSettings(), result.status)
+      void queryClient.invalidateQueries({ queryKey: queryKeys.mailHealth() })
       toast.success(m.agency_mail_saved())
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -270,8 +266,8 @@ export function useMailSettings(saved: MailStatus) {
     mutationFn: () => stepUp.run(() => useEnvironmentMailFn()),
     onSuccess: (status) => {
       setFormOpen(false)
-      queryClient.setQueryData(mailSettingsQueryKey, status)
-      void queryClient.invalidateQueries({ queryKey: mailHealthQueryKey })
+      queryClient.setQueryData(queryKeys.mailSettings(), status)
+      void queryClient.invalidateQueries({ queryKey: queryKeys.mailHealth() })
       toast.success(m.agency_mail_env_enabled())
     },
     onError: (err) => toast.error(errorMessage(err)),

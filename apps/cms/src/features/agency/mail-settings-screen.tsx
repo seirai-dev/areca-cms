@@ -111,14 +111,7 @@ export function MailSettingsScreen() {
 type MailSettingsQuery = ReturnType<typeof useMailSettingsQuery>
 
 function MailLoadError({ query }: { query: MailSettingsQuery }) {
-  return (
-    <QueryError
-      title={m.agency_mail_load_error()}
-      error={query.error}
-      onRetry={() => void query.refetch()}
-      retrying={query.isFetching}
-    />
-  )
+  return <QueryError title={m.agency_mail_load_error()} query={query} />
 }
 
 /** The form, mounted once the settings have loaded; the draft starts from them. */
@@ -745,12 +738,7 @@ function RecentEmailsSection() {
         </div>
 
         {recent.isError ? (
-          <QueryError
-            title={m.agency_mail_recent_error()}
-            error={recent.error}
-            onRetry={() => void recent.refetch()}
-            retrying={recent.isFetching}
-          />
+          <QueryError title={m.agency_mail_recent_error()} query={recent} />
         ) : recent.isPending ? (
           <div className="grid gap-2" aria-busy="true">
             <Skeleton className="h-16 rounded-control" />

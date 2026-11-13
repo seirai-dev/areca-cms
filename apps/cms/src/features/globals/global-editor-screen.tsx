@@ -34,6 +34,7 @@ import { QueryError } from '#/components/ui/query-error'
 import { Skeleton } from '#/components/ui/skeleton'
 import { SlideOver } from '#/components/ui/slide-over'
 import { initialEntryData } from '#/lib/content/utils'
+import { queryKeys } from '#/lib/query-keys'
 import { isDevSite } from '#/lib/site-environment'
 import { canManageSite } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
@@ -59,13 +60,9 @@ import { groupFields } from './site-content'
 /** The section row (a collection row, kind global). */
 export type GlobalRecord = Awaited<ReturnType<typeof getGlobalFn>>['global']
 
-export function globalQueryKey(siteId: string, key: string) {
-  return ['global', siteId, key] as const
-}
-
 export function globalQuery(siteId: string, key: string) {
   return queryOptions({
-    queryKey: globalQueryKey(siteId, key),
+    queryKey: queryKeys.global(siteId, key),
     queryFn: () => getGlobalFn({ data: { siteId, key } }),
     retry: false,
   })
@@ -91,14 +88,7 @@ export function GlobalEditorScreen({
 
   if (query.isLoading) return <GlobalEditorSkeleton />
   if (query.isError) {
-    return (
-      <QueryError
-        title={m.globals_could_not_load()}
-        error={query.error}
-        onRetry={() => void query.refetch()}
-        retrying={query.isFetching}
-      />
-    )
+    return <QueryError title={m.globals_could_not_load()} query={query} />
   }
   if (!query.data || (!query.data.global.enabled && !isAgency)) {
     return <NotFoundCard />

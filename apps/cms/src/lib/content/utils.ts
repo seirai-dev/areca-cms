@@ -169,9 +169,6 @@ export function fieldErrorsFromUnknown(error: unknown): {
   }
 }
 
-/** @deprecated Import `errorMessage` from `#/lib/errors`. */
-export { errorMessage } from '#/lib/errors'
-
 export function browserTimezone() {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'

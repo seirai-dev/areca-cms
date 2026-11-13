@@ -18,16 +18,7 @@ export default [
     // Query keys come from the registry, so keys that must match across
     // files (for invalidation) cannot drift apart.
     files: ['src/**/*.{ts,tsx}'],
-    ignores: [
-      'src/lib/query-keys.ts',
-      'src/**/*.test.ts',
-      // TODO: move these to `queryKeys` (left out of the registry sweep).
-      'src/features/golive/use-pending-entries.ts',
-      'src/features/golive/use-go-live.ts',
-      'src/features/golive/golive-panel.tsx',
-      'src/features/editor/use-entry-editor.ts',
-      'src/features/agency/use-mail-settings.ts',
-    ],
+    ignores: ['src/lib/query-keys.ts', 'src/**/*.test.ts'],
     rules: {
       'no-restricted-syntax': [
         'error',

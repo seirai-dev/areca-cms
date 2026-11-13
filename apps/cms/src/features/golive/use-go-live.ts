@@ -5,8 +5,8 @@ import { toast } from 'sonner'
 
 import { publishingRequestIdentity } from './request-identity'
 
-import { queryKeys } from '#/lib/content/query-keys'
-import { errorMessage } from '#/lib/content/utils'
+import { errorMessage } from '#/lib/errors'
+import { queryKeys } from '#/lib/query-keys'
 import { m } from '#/paraglide/messages'
 import {
   cancelJobFn,
@@ -15,8 +15,6 @@ import {
   requestPublicationFn,
   requestRollbackFn,
 } from '#/server/fn/publishing'
-
-const errorsKey = (siteId: string) => ['golive-errors', siteId] as const
 
 /**
  * Invalidate everything Go‑live reads for one site. `refetchType: 'none'`
@@ -41,12 +39,12 @@ export function invalidateGoLiveKeys(
       refetchType,
     }),
     queryClient.invalidateQueries({
-      queryKey: ['golive-pending', siteId],
+      queryKey: queryKeys.goLivePending(siteId),
       refetchType,
     }),
     // The agency "needs attention" lists read failed builds from it.
     queryClient.invalidateQueries({
-      queryKey: ['sites-overview'],
+      queryKey: queryKeys.sitesOverview(),
       refetchType,
     }),
   ])
@@ -69,7 +67,7 @@ export function useGoLive(siteId: string) {
   const invalidate = useInvalidateGoLive(siteId)
 
   const errorsQuery = useQuery({
-    queryKey: errorsKey(siteId),
+    queryKey: queryKeys.goLiveErrors(siteId),
     queryFn: () => [] as string[],
     initialData: [] as string[],
     staleTime: Infinity,
@@ -96,10 +94,10 @@ export function useGoLive(siteId: string) {
     },
     onSuccess: async (result) => {
       if ('ok' in result && result.ok === false) {
-        queryClient.setQueryData(errorsKey(siteId), result.errors)
+        queryClient.setQueryData(queryKeys.goLiveErrors(siteId), result.errors)
         return
       }
-      queryClient.setQueryData(errorsKey(siteId), [])
+      queryClient.setQueryData(queryKeys.goLiveErrors(siteId), [])
       toast.success(m.golive_toast_started(), {
         description: m.golive_toast_started_description(),
       })
@@ -114,7 +112,8 @@ export function useGoLive(siteId: string) {
       mutation.mutateAsync(options ?? {}),
     isPending: mutation.isPending,
     errors: errorsQuery.data,
-    clearErrors: () => queryClient.setQueryData(errorsKey(siteId), []),
+    clearErrors: () =>
+      queryClient.setQueryData(queryKeys.goLiveErrors(siteId), []),
   }
 }
 

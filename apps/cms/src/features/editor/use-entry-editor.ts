@@ -12,10 +12,10 @@ import { authClient } from '#/lib/auth-client'
 import { readLocale, writeLocale } from '#/lib/content-locale'
 import { isValidSlug } from '#/lib/slug'
 import type { LocaleCtx } from '#/lib/content-locale'
-import { OVERVIEW_ENTRIES, queryKeys } from '#/lib/content/query-keys'
+import { errorMessage } from '#/lib/errors'
+import { OVERVIEW_ENTRIES, queryKeys } from '#/lib/query-keys'
 import { entryQuery as entryOptions } from '#/lib/content/queries'
 import {
-  errorMessage,
   fieldErrorsFromUnknown,
   firstTextField,
   initialEntryData,
@@ -181,7 +181,7 @@ export function useEntryEditor({
 
   const previewQuery = useQuery({
     queryKey: globalKey
-      ? (['global-preview', siteId, globalKey] as const)
+      ? queryKeys.globalPreview(siteId, globalKey)
       : queryKeys.previewUrl(siteId, collectionKey, entry?.slug ?? ''),
     queryFn: () =>
       globalKey
@@ -438,11 +438,11 @@ export function useEntryEditor({
       const refetchType = refetch ? 'active' : 'none'
       return Promise.all([
         queryClient.invalidateQueries({
-          queryKey: ['entries', siteId, collectionKey],
+          queryKey: queryKeys.entriesOf(siteId, collectionKey),
           refetchType,
         }),
         queryClient.invalidateQueries({
-          queryKey: ['entries', siteId, OVERVIEW_ENTRIES],
+          queryKey: queryKeys.entriesOf(siteId, OVERVIEW_ENTRIES),
           refetchType,
         }),
         id
