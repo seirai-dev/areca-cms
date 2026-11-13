@@ -54,6 +54,7 @@ import { isMultilingual, nonMainLanguages } from '#/lib/site-languages'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 import type { Me } from '#/server/fn/me'
+import { useSelection } from '#/hooks/use-selection'
 
 import {
   CollectionSearch,
@@ -191,7 +192,7 @@ function CollectionView({
     imageField ? 'cards' : 'list',
   )
   const [selectMode, setSelectMode] = React.useState(false)
-  const [selected, setSelected] = React.useState<Set<string>>(new Set())
+  const selection = useSelection()
   const [confirmDelete, setConfirmDelete] = React.useState<string[] | null>(
     null,
   )
@@ -213,14 +214,14 @@ function CollectionView({
   // Failed entries stay selected (so they can be retried); the rest clear.
   const bulk = useEntryBulkActions(siteId, collection.key, {
     onResult: (result) =>
-      setSelected(new Set(result.failed.map((item) => item.id))),
+      selection.replace(result.failed.map((item) => item.id)),
   })
 
   const filtersActive =
     status !== 'all' || search !== '' || missingFilter !== undefined
   const singular = singularLabel(collection.label)
   const plural = collection.label.toLocaleLowerCase()
-  const selectedRows = rows.filter((row) => selected.has(row.id))
+  const selectedRows = rows.filter((row) => selection.isSelected(row.id))
 
   // `n` inside a collection: the shell navigates to New; a turned-off
   // collection overrides it with nothing (no new entries there).
@@ -229,23 +230,14 @@ function CollectionView({
     'escape',
     () => {
       setSelectMode(false)
-      setSelected(new Set())
+      selection.clear()
     },
     { enabled: selectMode },
   )
 
-  function toggle(id: string) {
-    setSelected((current) => {
-      const next = new Set(current)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
   function exitSelect() {
     setSelectMode(false)
-    setSelected(new Set())
+    selection.clear()
   }
 
   function targetsFor(ids: string[]): BulkTarget[] {
@@ -426,7 +418,7 @@ function CollectionView({
             devSite={devSite}
             onChange={(next) => {
               setStatus(next)
-              setSelected(new Set())
+              selection.clear()
             }}
           />
           <MissingLanguageFilter
@@ -434,7 +426,7 @@ function CollectionView({
             languages={nonMainLanguages(languages)}
             onChange={(next) => {
               onMissingLanguageChange?.(next)
-              setSelected(new Set())
+              selection.clear()
             }}
           />
         </div>
@@ -444,7 +436,7 @@ function CollectionView({
           devSite={devSite}
           onChange={(next) => {
             setStatus(next)
-            setSelected(new Set())
+            selection.clear()
           }}
         />
       )}
@@ -546,8 +538,8 @@ function CollectionView({
                     devSite={devSite}
                     canManage={canManage}
                     selectMode={selectMode}
-                    selected={selected.has(row.id)}
-                    onToggleSelect={() => toggle(row.id)}
+                    selected={selection.isSelected(row.id)}
+                    onToggleSelect={() => selection.toggle(row.id)}
                     onAction={onItemAction}
                     muted={!collection.enabled}
                     coverage={row.coverage ?? undefined}
@@ -574,8 +566,8 @@ function CollectionView({
                     devSite={devSite}
                     canManage={canManage}
                     selectMode={selectMode}
-                    selected={selected.has(row.id)}
-                    onToggleSelect={() => toggle(row.id)}
+                    selected={selection.isSelected(row.id)}
+                    onToggleSelect={() => selection.toggle(row.id)}
                     onAction={onItemAction}
                     muted={!collection.enabled}
                     coverage={row.coverage ?? undefined}
@@ -612,9 +604,9 @@ function CollectionView({
         data-testid="bulk-actions"
       >
         <FloatingBarLabel>
-          {selected.size === 0
+          {selection.picked.length === 0
             ? m.collection_select_hint()
-            : m.editor_selected_count({ count: selected.size })}
+            : m.editor_selected_count({ count: selection.picked.length })}
         </FloatingBarLabel>
         <BulkButton
           canManage={canManage}
@@ -636,18 +628,18 @@ function CollectionView({
         </BulkButton>
         <BulkButton
           canManage={canManage}
-          disabled={selected.size === 0 || bulk.isPending}
-          onClick={() => runAction('archive', [...selected])}
+          disabled={selection.picked.length === 0 || bulk.isPending}
+          onClick={() => runAction('archive', selection.picked)}
           testId="bulk-archive"
-          label={m.collection_bulk_archive({ count: selected.size })}
+          label={m.collection_bulk_archive({ count: selection.picked.length })}
         >
           <Archive />
         </BulkButton>
         <BulkButton
           canManage={canManage}
           destructive
-          disabled={selected.size === 0 || bulk.isPending}
-          onClick={() => runAction('delete', [...selected])}
+          disabled={selection.picked.length === 0 || bulk.isPending}
+          onClick={() => runAction('delete', selection.picked)}
           testId="bulk-delete"
           label={m.editor_delete()}
         >
