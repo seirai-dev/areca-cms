@@ -124,16 +124,9 @@ type WorkerState = {
   inFlight: Set<Promise<unknown>>
   /** Aborted when the drain deadline passes: stop and leave rows for recovery. */
   abort?: AbortController
-  timer: ReturnType<typeof setInterval>
-  recoveryTimer: ReturnType<typeof setInterval>
-  schedulerTimer: ReturnType<typeof setInterval>
-  cleanupTimer?: ReturnType<typeof setInterval>
-  mailTimer?: ReturnType<typeof setInterval>
-  notificationEventsTimer?: ReturnType<typeof setInterval>
-  mailCleanupTimer?: ReturnType<typeof setInterval>
+  /** Clears each loop's timer. */
+  stops: Array<() => void>
   pool?: JobPool
-  ticking: boolean
-  schedulerTicking: boolean
 }
 
 const g = globalThis as typeof globalThis & {
@@ -212,13 +205,6 @@ export async function claimNextJob() {
     await db.select().from(buildJob).where(eq(buildJob.id, id)).limit(1)
   ).at(0)
   return job ?? null
-}
-
-export async function runOnce(deps?: ProcessJobDeps) {
-  const job = await claimNextJob()
-  if (!job) return null
-  await processJob(job, deps)
-  return job
 }
 
 export async function processJob(
@@ -966,25 +952,17 @@ export function createJobPool({
     inFlight: () => running.size,
     async drain(timeoutMs = 30_000) {
       stopped = true
-      let timer: ReturnType<typeof setTimeout> | undefined
-      const timeout = new Promise<'timeout'>((resolve) => {
-        timer = setTimeout(() => resolve('timeout'), timeoutMs)
-      })
-      try {
-        const result = await Promise.race([
-          (async () => {
-            // A claim already in progress can add a task after stop. Include
-            // that task before deciding the pool has finished draining.
-            await filling
-            await Promise.allSettled([...running])
-            return 'done' as const
-          })(),
-          timeout,
-        ])
-        return result === 'done'
-      } finally {
-        clearTimeout(timer)
-      }
+      const result = await raceDeadline(
+        (async () => {
+          // A claim already in progress can add a task after stop. Include
+          // that task before deciding the pool has finished draining.
+          await filling
+          await Promise.allSettled([...running])
+          return 'done' as const
+        })(),
+        timeoutMs,
+      )
+      return result === 'done'
     },
   }
 }
@@ -1107,22 +1085,26 @@ export type WorkerLoopDeps = {
  * - cleanup: retries durable storage object deletions
  * - mail: sends due outbox emails; mailCleanup: prunes old outbox rows
  */
-/**
- * Records each loop tick's promise in `inFlight` until it settles, so shutdown
- * can wait for it. A run that resolves also stamps the loop's success clock,
- * which readiness and metrics read. The promise itself is returned unchanged.
- */
-function trackLoops(
+export function startWorkerLoops(
   deps: WorkerLoopDeps,
-  inFlight: Set<Promise<unknown>>,
-): WorkerLoopDeps {
+  {
+    intervalMs = 3000,
+    schedulerIntervalMs = Math.min(intervalMs, 15_000),
+  }: { intervalMs?: number; schedulerIntervalMs?: number } = {},
+): WorkerState {
+  markLoopsStarted()
+  const state: WorkerState = { inFlight: new Set(), stops: [] }
+  /**
+   * Records each run's promise in `inFlight` until it settles, so shutdown can
+   * wait for it. A run that resolves also stamps the loop's success clock,
+   * which readiness and metrics read.
+   */
   const track =
-    <T>(loop: LoopName, run: () => Promise<T>) =>
-    () => {
+    (loop: LoopName, run: () => Promise<unknown>) => (): Promise<unknown> => {
       const promise = run()
-      inFlight.add(promise)
+      state.inFlight.add(promise)
       const done = () => {
-        inFlight.delete(promise)
+        state.inFlight.delete(promise)
       }
       promise.then(() => {
         recordLoopSuccess(loop)
@@ -1130,159 +1112,72 @@ function trackLoops(
       }, done)
       return promise
     }
-  return {
-    processJobs: track('worker', deps.processJobs),
-    recover: track('recovery', deps.recover),
-    schedule: track('scheduler', deps.schedule),
-    cleanup: deps.cleanup && track('cleanup', deps.cleanup),
-    mail: deps.mail && track('mail', deps.mail),
-    notificationEvents:
-      deps.notificationEvents &&
-      track('notifications', deps.notificationEvents),
-    mailCleanup: deps.mailCleanup && track('maintenance', deps.mailCleanup),
-  }
-}
-
-export function startWorkerLoops(
-  rawDeps: WorkerLoopDeps,
-  {
-    intervalMs = 3000,
-    schedulerIntervalMs = Math.min(intervalMs, 15_000),
-  }: { intervalMs?: number; schedulerIntervalMs?: number } = {},
-): WorkerState {
-  markLoopsStarted()
-  const inFlight = new Set<Promise<unknown>>()
-  const deps = trackLoops(rawDeps, inFlight)
-  const state = {
-    ticking: true,
-    schedulerTicking: false,
-    inFlight,
-  } as WorkerState
-  let recovering = false
-
-  state.recoveryTimer = setInterval(
-    () => {
-      if (recovering) return
-      recovering = true
-      void deps
-        .recover()
-        .catch((error) =>
-          logger.error('periodic recovery failed', { err: error }),
-        )
+  /** setInterval that skips a tick while the previous run is still going. */
+  const loop = (
+    run: () => Promise<unknown>,
+    everyMs: number,
+    errorLabel: string,
+    onFire?: () => void,
+  ) => {
+    let busy = false
+    const tick = (work = run) => {
+      if (busy) return
+      busy = true
+      void work()
+        .catch((error) => logger.error(errorLabel, { err: error }))
         .finally(() => {
-          recovering = false
+          busy = false
         })
-    },
-    Math.min(intervalMs, 15_000),
+    }
+    const timer = setInterval(() => {
+      onFire?.()
+      tick()
+    }, everyMs)
+    state.stops.push(() => clearInterval(timer))
+    return tick
+  }
+
+  const recover = track('recovery', deps.recover)
+  const processJobs = track('worker', deps.processJobs)
+  loop(recover, Math.min(intervalMs, 15_000), 'periodic recovery failed')
+  // The timer firing proves the event loop is alive even while a long
+  // deployment keeps the previous tick in flight.
+  const jobs = loop(processJobs, intervalMs, 'worker tick failed', () =>
+    recordTick('worker'),
   )
-  state.timer = setInterval(() => {
-    // The timer firing proves the event loop is alive even while a long
-    // deployment keeps the previous tick in flight.
-    recordTick('worker')
-    if (state.ticking) return
-    state.ticking = true
-    void deps
-      .processJobs()
-      .catch((error) => logger.error('worker tick failed', { err: error }))
-      .finally(() => {
-        state.ticking = false
-      })
-  }, intervalMs)
-  state.schedulerTimer = setInterval(() => {
-    if (state.schedulerTicking) return
-    state.schedulerTicking = true
-    void deps
-      .schedule()
-      .then(() => recordTick('scheduler'))
-      .catch((error) => logger.error('scheduler tick failed', { err: error }))
-      .finally(() => {
-        state.schedulerTicking = false
-      })
-  }, schedulerIntervalMs)
-
-  if (deps.cleanup) {
-    let cleaning = false
-    const cleanup = () => {
-      if (cleaning) return
-      cleaning = true
-      void deps.cleanup!()
-        .catch((error) =>
-          logger.error('storage cleanup failed', { err: error }),
-        )
-        .finally(() => {
-          cleaning = false
-        })
-    }
-    state.cleanupTimer = setInterval(cleanup, 15_000)
-    cleanup()
-  }
-
-  if (deps.notificationEvents) {
-    let delivering = false
-    state.notificationEventsTimer = setInterval(() => {
-      if (delivering) return
-      delivering = true
-      void deps.notificationEvents!()
-        .catch((error) =>
-          logger.error('notification events tick failed', { err: error }),
-        )
-        .finally(() => {
-          delivering = false
-        })
-    }, MAIL_INTERVAL_MS)
-  }
-
-  if (deps.mail) {
-    let sending = false
-    state.mailTimer = setInterval(() => {
-      if (sending) return
-      sending = true
-      void deps.mail!()
-        .catch((error) =>
-          logger.error('mail outbox tick failed', { err: error }),
-        )
-        .finally(() => {
-          sending = false
-        })
-    }, MAIL_INTERVAL_MS)
-  }
-
-  if (deps.mailCleanup) {
-    let pruning = false
-    const prune = () => {
-      if (pruning) return
-      pruning = true
-      void deps.mailCleanup!()
-        .catch((error) => logger.error('mail cleanup failed', { err: error }))
-        .finally(() => {
-          pruning = false
-        })
-    }
-    state.mailCleanupTimer = setInterval(prune, 60 * 60 * 1000)
-    prune()
-  }
+  const schedule = track('scheduler', deps.schedule)
+  const scheduler = loop(
+    () => schedule().then(() => recordTick('scheduler')),
+    schedulerIntervalMs,
+    'scheduler tick failed',
+  )
+  if (deps.cleanup)
+    loop(track('cleanup', deps.cleanup), 15_000, 'storage cleanup failed')()
+  if (deps.notificationEvents)
+    loop(
+      track('notifications', deps.notificationEvents),
+      MAIL_INTERVAL_MS,
+      'notification events tick failed',
+    )
+  if (deps.mail)
+    loop(track('mail', deps.mail), MAIL_INTERVAL_MS, 'mail outbox tick failed')
+  if (deps.mailCleanup)
+    loop(
+      track('maintenance', deps.mailCleanup),
+      60 * 60 * 1000,
+      'mail cleanup failed',
+    )()
 
   // Boot: recover once, then start processing and scheduling immediately.
-  void deps
-    .recover()
-    .catch((error) => logger.error('stale job recovery failed', { err: error }))
-    .finally(() => {
-      recordTick('worker')
-      void deps
-        .processJobs()
-        .catch((error) => logger.error('worker tick failed', { err: error }))
-        .finally(() => {
-          state.ticking = false
-        })
-    })
-  state.schedulerTicking = true
-  void deps
-    .schedule()
-    .then(() => recordTick('scheduler'))
-    .catch((error) => logger.error('scheduler tick failed', { err: error }))
-    .finally(() => {
-      state.schedulerTicking = false
-    })
+  jobs(() =>
+    recover()
+      .catch((error) =>
+        logger.error('stale job recovery failed', { err: error }),
+      )
+      .finally(() => recordTick('worker'))
+      .then(processJobs),
+  )
+  scheduler()
   return state
 }
 
@@ -1388,13 +1283,7 @@ function raceDeadline<T>(
 }
 
 export function stopWorkerLoops(state: WorkerState) {
-  clearInterval(state.timer)
-  clearInterval(state.recoveryTimer)
-  clearInterval(state.schedulerTimer)
-  clearInterval(state.cleanupTimer)
-  clearInterval(state.mailTimer)
-  clearInterval(state.notificationEventsTimer)
-  clearInterval(state.mailCleanupTimer)
+  for (const stop of state.stops) stop()
   markLoopsStopped()
 }
 
