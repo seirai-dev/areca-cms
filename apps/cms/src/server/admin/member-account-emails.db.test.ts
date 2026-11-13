@@ -344,6 +344,6 @@ describe.skipIf(!hasDb)('member account emails', () => {
       .select({ linkRevealedAt: invitation.linkRevealedAt })
       .from(invitation)
       .where(eq(invitation.id, invitationId))
-    expect(row?.linkRevealedAt).toBeNull()
+    expect(row.linkRevealedAt).toBeNull()
   })
 })
