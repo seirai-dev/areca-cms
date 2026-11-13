@@ -1,15 +1,9 @@
 import { randomUUID } from 'node:crypto'
 
-import { and, eq, or } from 'drizzle-orm'
-
-import { db } from '#/db'
-import { publication } from '#/db/schema'
 import { z } from '#/lib/zod'
 
 import { updateSite } from '#/server/admin/sites'
-import { m } from '#/paraglide/messages'
 import { ConflictError } from '#/server/content/errors'
-import { isDevSite } from '#/server/security/site-visibility'
 import {
   cancelJob,
   getSiteReleaseStatus,
@@ -32,23 +26,6 @@ import { idSchema } from '../schemas'
 import { GO_LIVE_KEY_NOTE, PRODUCTION_ONLY } from '../tool-kit'
 import type { ToolCollector } from '../tool-kit'
 import { isDeploymentConfigured } from './site'
-
-/** True when the site has ever gone live in production (a publication was live). */
-async function everWentLive(siteId: string): Promise<boolean> {
-  const row = (
-    await db
-      .select({ id: publication.id })
-      .from(publication)
-      .where(
-        and(
-          eq(publication.siteId, siteId),
-          or(eq(publication.wasLive, true), eq(publication.status, 'live')),
-        ),
-      )
-      .limit(1)
-  ).at(0)
-  return row !== undefined
-}
 
 type JobLike = {
   id: string
@@ -102,7 +79,7 @@ export function registerPublishingTools(registry: ToolCollector): void {
     name: 'set_publishing_mode',
     title: 'Set publishing mode',
     description:
-      'Agency admin only. Sets how this site publishes. "demo": go_live builds a release that `areca pull` can fetch without a deployment; demo releases never reach visitors. "production": go_live builds and deploys to the live site, which needs a deployment target (a Dokploy application, or a Cloudflare Pages project or Worker) and a health check URL (set in Settings › Deployment). A site that has ever gone live in production cannot switch to demo; change it in Settings › Deployment instead. Setting the mode the site already has changes nothing. Returns publishingMode and deploymentConfigured.',
+      'Agency admin only. Sets how this site publishes. "demo": go_live builds a release that `areca pull` can fetch without a deployment; demo releases never reach visitors. "production": go_live builds and deploys to the live site, which needs a deployment target (a Dokploy application, or a Cloudflare Pages project or Worker) and a health check URL (set in Settings › Deployment). A site that has ever gone live in production cannot switch back to demo. Setting the mode the site already has changes nothing. Returns publishingMode and deploymentConfigured.',
     inputSchema: z.object({
       mode: z
         .enum(['demo', 'production'])
@@ -125,19 +102,6 @@ export function registerPublishingTools(registry: ToolCollector): void {
           publishingMode: current.publishingMode,
           deploymentConfigured: isDeploymentConfigured(current),
         }
-      }
-      if (isDevSite(current) && input.mode === 'production') {
-        throw new ConflictError(m.server_dev_env_stays_demo())
-      }
-      if (input.mode === 'demo' && (await everWentLive(actor.siteId))) {
-        throw new ConflictError(
-          'This site has gone live in production, so it cannot switch to demo mode. Change the publishing mode in Settings › Deployment instead.',
-        )
-      }
-      if (input.mode === 'production' && !isDeploymentConfigured(current)) {
-        throw new ConflictError(
-          'Production publishing needs a deployment target (a Dokploy application, or a Cloudflare Pages project or Worker) and a health check URL. Set them in Settings › Deployment first, or keep demo mode.',
-        )
       }
       await updateSite(
         actor.siteId,

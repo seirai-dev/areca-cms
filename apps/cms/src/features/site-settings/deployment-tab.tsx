@@ -3,6 +3,7 @@ import { CheckCircle, Prohibit } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 import type { CloudflareDeployTarget } from '#/adapters/deployment/cloudflare-targets'
+import { hasCompleteDeploymentTarget } from '#/lib/deployment-target'
 import { errorMessage } from '#/lib/errors'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { Tag } from '#/components/ui/tag'
@@ -111,6 +112,15 @@ function DeploymentForm({ site, meSite, settings }: DeploymentTabProps) {
   const [stopOpen, setStopOpen] = React.useState(false)
   // This tab's own save. The settings mutation is shared with the other tabs.
   const [saving, setSaving] = React.useState(false)
+
+  // A site that has gone live stays in Production (the server refuses Demo too).
+  const demoLocked = site.hasGoneLive && site.publishingMode === 'production'
+  const modeHint = demoLocked
+    ? m.settings_publishing_mode_demo_locked()
+    : mode === 'production' && !hasCompleteDeploymentTarget(saved)
+      ? m.settings_publishing_mode_needs_target()
+      : null
+  const modeHintId = React.useId()
 
   const listed =
     selection && targets.data ? findListed(selection, targets.data) : null
@@ -234,6 +244,7 @@ function DeploymentForm({ site, meSite, settings }: DeploymentTabProps) {
           data-testid="publishing-mode"
           value={mode}
           disabled={locked}
+          aria-describedby={modeHint ? modeHintId : undefined}
           onChange={(event) =>
             setMode(event.target.value as 'production' | 'demo')
           }
@@ -242,8 +253,19 @@ function DeploymentForm({ site, meSite, settings }: DeploymentTabProps) {
           <option value="production">
             {m.settings_publishing_mode_production()}
           </option>
-          <option value="demo">{m.settings_publishing_mode_demo()}</option>
+          <option value="demo" disabled={demoLocked}>
+            {m.settings_publishing_mode_demo()}
+          </option>
         </select>
+        {modeHint ? (
+          <p
+            id={modeHintId}
+            data-testid="publishing-mode-hint"
+            className="text-callout text-text-secondary"
+          >
+            {modeHint}
+          </p>
+        ) : null}
         {site.publishingMode === 'demo' ? (
           <Tag tone="warning">{m.settings_publishing_mode_demo_warning()}</Tag>
         ) : null}

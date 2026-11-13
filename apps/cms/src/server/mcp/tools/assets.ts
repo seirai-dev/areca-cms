@@ -345,16 +345,8 @@ export function registerAssetTools(registry: ToolCollector): void {
           mainLocale: languages?.main ?? null,
         },
         actor.organizationId,
+        { actorId: actor.userId, siteId: actor.siteId },
       )
-      await audit({
-        organizationId: actor.organizationId,
-        siteId: actor.siteId,
-        actorId: actor.userId,
-        action: 'asset.update',
-        targetType: 'asset',
-        targetId: row.id,
-        meta: { filename: row.originalFilename },
-      })
       return {
         ...describeAsset(row),
         ...(target && !target.isMain
@@ -381,16 +373,10 @@ export function registerAssetTools(registry: ToolCollector): void {
       idempotentHint: true,
     },
     run: async (input, actor) => {
-      const row = await requireAsset(actor, input.id)
-      await deleteAsset(input.id, actor.organizationId)
-      await audit({
-        organizationId: actor.organizationId,
-        siteId: actor.siteId,
+      await requireAsset(actor, input.id)
+      await deleteAsset(input.id, actor.organizationId, {
         actorId: actor.userId,
-        action: 'asset.delete',
-        targetType: 'asset',
-        targetId: row.id,
-        meta: { filename: row.originalFilename },
+        siteId: actor.siteId,
       })
       return { deleted: true, assetId: input.id }
     },

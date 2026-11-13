@@ -25,6 +25,11 @@ Each site has a **Publishing mode**, set on **Settings › Deployment**.
 
 Use **Demo** for a site that isn't ready to be deployed, or for local work. Use **Production** for the site the public sees.
 
+Two rules apply to every change of mode, in the Deployment tab and through the MCP tool `set_publishing_mode` alike:
+
+- **Production needs a target.** You can switch to Production only with a deployment target and a health check URL, either already saved or chosen in the same save.
+- **No way back after going live.** Once a release of the site has gone live in production, the site can't switch back to Demo. The Deployment tab disables the Demo option and says why.
+
 ## Connect the client to Dokploy
 
 <Steps>
@@ -146,7 +151,7 @@ Select **Save** to store the changes.
 **Stop deploying…** removes the target and the health check URL from a site. The site stops deploying through its provider. It works for both Dokploy and Cloudflare.
 
 <Callout type="warn" title="A Production site can't go live without a target">
-If the site is still in **Production** mode, Go live is blocked until you choose a target and a health check URL again. To release without deploying, switch the site to **Demo** first.
+If the site is still in **Production** mode, Go live is blocked until you choose a target and a health check URL again. To release without deploying, switch the site to **Demo** first. That works only if the site has never gone live.
 </Callout>
 
 ## Related
