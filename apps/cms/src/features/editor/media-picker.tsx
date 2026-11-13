@@ -352,7 +352,7 @@ function PickerTile({
     >
       {image ? (
         <img
-          {...assetThumbnail(asset.storageKey, '200px')}
+          {...assetThumbnail(asset, '200px')}
           alt=""
           loading="lazy"
           decoding="async"
