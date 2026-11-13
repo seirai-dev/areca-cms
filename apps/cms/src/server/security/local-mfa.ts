@@ -5,6 +5,7 @@ import { db } from '#/db'
 import { session, verification } from '#/db/schema'
 import { env } from '#/env'
 import { MfaRequiredError } from '#/lib/security-errors'
+import { forgetForRequest, memoizeForRequest } from '#/server/http/request-scope.server'
 import { m } from '#/paraglide/messages'
 
 type Principal = {
@@ -17,12 +18,21 @@ type Principal = {
 }
 
 const proofId = (sessionId: string) => `local-mfa:${sessionId}`
+const memoKey = (sessionId: string, userId: string) =>
+  `local-mfa:${sessionId}:${userId}`
 
-/** A provider login or a newly created session is never a local factor proof. */
-export async function localMfaVerifiedAt(
-  principal: Principal,
-  now = new Date(),
-) {
+/**
+ * A provider login or a newly created session is never a local factor proof.
+ * Read once per request: several guards of one request ask.
+ */
+export function localMfaVerifiedAt(principal: Principal, now = new Date()) {
+  return memoizeForRequest(
+    memoKey(principal.session.id, principal.user.id),
+    () => readLocalMfaProof(principal, now),
+  )
+}
+
+async function readLocalMfaProof(principal: Principal, now: Date) {
   const [proof] = await db
     .select({ createdAt: verification.createdAt })
     .from(verification)
@@ -93,4 +103,5 @@ export async function recordLocalMfaForToken(token: string, now = new Date()) {
         expiresAt: verifiedSession.expiresAt,
       },
     })
+  forgetForRequest(memoKey(verifiedSession.id, verifiedSession.userId))
 }
