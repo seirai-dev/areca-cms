@@ -14,7 +14,8 @@ import {
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { assetThumbnail, errorMessage } from '#/lib/content/utils'
+import { assetThumbnail } from '#/lib/content/utils'
+import { errorMessage } from '#/lib/errors'
 import { Button } from '#/components/ui/button'
 import {
   Dialog,
@@ -215,10 +216,8 @@ export function MediaPickerDialog({
             </div>
           ) : assetsQuery.isError ? (
             <QueryError
-              error={assetsQuery.error}
+              query={assetsQuery}
               title={m.editor_could_not_load_media()}
-              onRetry={() => void assetsQuery.refetch()}
-              retrying={assetsQuery.isFetching}
             />
           ) : visible.length === 0 ? (
             <EmptyState

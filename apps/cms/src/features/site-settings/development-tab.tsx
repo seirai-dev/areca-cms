@@ -8,7 +8,7 @@ import {
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { ResetDevEnvConfirm } from '#/features/dev-env/reset-confirm'
@@ -38,13 +38,7 @@ export function DevelopmentTab({ site }: { site: SiteRecord }) {
   const [created, setCreated] = React.useState<CreatedDevEnv | null>(null)
 
   if (dev.status.isError) {
-    return (
-      <QueryError
-        error={dev.status.error}
-        onRetry={() => void dev.status.refetch()}
-        retrying={dev.status.isFetching}
-      />
-    )
+    return <QueryError query={dev.status} />
   }
   if (dev.status.isPending) {
     return <Skeleton className="h-48 rounded-card" />
@@ -103,12 +97,8 @@ export function DevelopmentTab({ site }: { site: SiteRecord }) {
                 devSiteId={status.id}
                 testId="dev-env-reset-dialog"
                 onConfirm={async () => {
-                  try {
-                    await dev.reset.mutateAsync(status.id)
-                    toast.success(m.dev_env_reset_done())
-                  } catch (error) {
-                    toast.error(errorMessage(error))
-                  }
+                  await dev.reset.mutateAsync(status.id)
+                  toast.success(m.dev_env_reset_done())
                 }}
               >
                 <Button
@@ -129,12 +119,8 @@ export function DevelopmentTab({ site }: { site: SiteRecord }) {
                 variant="destructive"
                 testId="dev-env-delete-dialog"
                 onConfirm={async () => {
-                  try {
-                    await dev.remove.mutateAsync(status.id)
-                    toast.success(m.dev_env_deleted())
-                  } catch (error) {
-                    toast.error(errorMessage(error))
-                  }
+                  await dev.remove.mutateAsync(status.id)
+                  toast.success(m.dev_env_deleted())
                 }}
               >
                 <Button

@@ -123,12 +123,7 @@ export function SitePicker({ me }: { me: Me }) {
       />
 
       {overview.isError ? (
-        <QueryError
-          title={m.home_load_error()}
-          error={overview.error}
-          onRetry={() => void overview.refetch()}
-          retrying={overview.isFetching}
-        />
+        <QueryError title={m.home_load_error()} query={overview} />
       ) : null}
 
       {sites.length === 0 ? (

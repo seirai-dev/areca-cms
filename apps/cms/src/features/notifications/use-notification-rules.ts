@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { QueryKey } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import type { MyNotifications, RulesMatrix } from '#/lib/notifications'
 import {
   getAgencyNotificationRulesFn,

@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { invalidateDevSync } from '#/features/dev-env/invalidate'
 import { globalsQueryKey } from '#/features/globals/use-globals'
 import { useSiteLanguages } from '#/features/site-settings/use-site-settings'
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { queryKeys } from '#/lib/content/query-keys'
 import { ROUTE_PATTERN_MAX_LENGTH } from '#/lib/content-limits'
 import { isValidPreviewPath } from '#/lib/globals'
@@ -319,7 +319,7 @@ export function useSchemaEditor({
       onOpenChange(false)
       onDeleted?.()
     },
-    onError: (error) => toast.error(errorMessage(error)),
+    // Only the confirm dialog deletes; it shows the error.
   })
 
   function save() {

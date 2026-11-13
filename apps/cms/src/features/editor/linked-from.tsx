@@ -34,13 +34,7 @@ export function LinkedFrom({
 
   if (query.isPending) return <Skeleton className="h-12" />
   if (query.isError) {
-    return (
-      <QueryError
-        error={query.error}
-        onRetry={() => void query.refetch()}
-        retrying={query.isFetching}
-      />
-    )
+    return <QueryError query={query} />
   }
   const groups = query.data
   if (groups.length === 0) {

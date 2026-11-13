@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
 import { useStepUp } from '#/features/security/step-up'
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { queryKeys } from '#/lib/content/query-keys'
 import { m } from '#/paraglide/messages'
 import {
@@ -84,7 +84,7 @@ export function useAiSettings() {
         queryKey: queryKeys.aiAvailability(),
       })
     },
-    onError: (err) => toast.error(errorMessage(err)),
+    // Only the confirm dialog removes the key; it shows the error.
   })
 
   const removeKey = useMutation({

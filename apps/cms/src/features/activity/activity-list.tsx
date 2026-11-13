@@ -110,14 +110,7 @@ export function ActivityList({
   }, [rows, grouped])
 
   if (query.isError) {
-    return (
-      <QueryError
-        title={m.activity_load_error()}
-        error={query.error}
-        onRetry={() => void query.refetch()}
-        retrying={query.isFetching}
-      />
-    )
+    return <QueryError title={m.activity_load_error()} query={query} />
   }
 
   if (query.isPending) {

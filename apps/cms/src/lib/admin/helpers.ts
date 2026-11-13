@@ -1,5 +1,4 @@
 import type { FieldType, MembershipRole } from '#/lib/types'
-import { stripSecurityCode } from '#/lib/security-errors'
 import { m } from '#/paraglide/messages'
 
 export const FIELD_TYPES: FieldType[] = [
@@ -43,21 +42,8 @@ export const adminQueryKeys = {
   collections: (siteId: string) => ['collections', siteId] as const,
 }
 
-export function errorMessage(err: unknown) {
-  if (err instanceof Error && err.message) {
-    return stripSecurityCode(err.message)
-  }
-  if (
-    typeof err === 'object' &&
-    err !== null &&
-    'message' in err &&
-    typeof err.message === 'string' &&
-    err.message
-  ) {
-    return err.message
-  }
-  return m.admin_error_generic()
-}
+/** @deprecated Import `errorMessage` from `#/lib/errors`. */
+export { errorMessage } from '#/lib/errors'
 
 export function suggestSlug(name: string) {
   return name

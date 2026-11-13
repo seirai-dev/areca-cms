@@ -105,12 +105,7 @@ export function AiSettingsScreen() {
       />
 
       {form.query.isError ? (
-        <QueryError
-          title={m.agency_ai_load_error()}
-          error={form.query.error}
-          onRetry={() => void form.query.refetch()}
-          retrying={form.query.isFetching}
-        />
+        <QueryError title={m.agency_ai_load_error()} query={form.query} />
       ) : !saved ? (
         <div className="grid gap-4" aria-busy="true">
           <Skeleton className="h-48 rounded-card" />
@@ -412,12 +407,7 @@ function ModelCombobox({
   if (models.isError) {
     return (
       <div className="grid gap-3">
-        <QueryError
-          title={m.agency_ai_model_load_error()}
-          error={models.error}
-          onRetry={() => void models.refetch()}
-          retrying={models.isFetching}
-        />
+        <QueryError title={m.agency_ai_model_load_error()} query={models} />
         <Input
           id={id}
           data-testid="ai-model-input"

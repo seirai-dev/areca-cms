@@ -7,7 +7,7 @@ import {
 import { toast } from 'sonner'
 
 import type { MediaAsset } from '#/features/editor/media-upload'
-import { errorMessage } from '#/lib/content/utils'
+import { errorMessage } from '#/lib/errors'
 import { m } from '#/paraglide/messages'
 import { deleteAssetFn, listAssetsFn, updateAssetFn } from '#/server/fn/assets'
 

@@ -169,17 +169,8 @@ export function fieldErrorsFromUnknown(error: unknown): {
   }
 }
 
-export function errorMessage(
-  error: unknown,
-  fallback = m.editor_something_went_wrong(),
-) {
-  if (error instanceof Error && error.message) return error.message
-  if (error && typeof error === 'object' && 'message' in error) {
-    const message = (error as { message?: unknown }).message
-    if (typeof message === 'string' && message) return message
-  }
-  return fallback
-}
+/** @deprecated Import `errorMessage` from `#/lib/errors`. */
+export { errorMessage } from '#/lib/errors'
 
 export function browserTimezone() {
   try {

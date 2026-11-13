@@ -12,7 +12,7 @@ import type { Icon } from '@phosphor-icons/react'
 
 import { Button } from '#/components/ui/button'
 import { AuthError, AuthHeading, AuthShell } from '#/features/auth/auth-shell'
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import type { EventKey, UnsubscribeStatus } from '#/lib/notifications'
 import { m } from '#/paraglide/messages'
 import { confirmUnsubscribeFn } from '#/server/fn/notifications'

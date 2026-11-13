@@ -3,7 +3,7 @@ import { useRouter } from '@tanstack/react-router'
 import { ArrowsClockwise, Plugs, Stack } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { isValidSlug } from '#/lib/slug'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
@@ -212,13 +212,9 @@ export function DeveloperTab({
               variant="destructive"
               testId="rotate-token-dialog"
               onConfirm={async () => {
-                try {
-                  const result = await settings.rotate.mutateAsync('build')
-                  toast.success(m.sites_token_rotated())
-                  setToken(result.token)
-                } catch (error) {
-                  toast.error(errorMessage(error))
-                }
+                const result = await settings.rotate.mutateAsync('build')
+                toast.success(m.sites_token_rotated())
+                setToken(result.token)
               }}
             >
               <Button
@@ -252,12 +248,8 @@ export function DeveloperTab({
             confirmLabel={m.settings_schema_token_rotate()}
             variant="destructive"
             onConfirm={async () => {
-              try {
-                const result = await settings.rotate.mutateAsync('schema')
-                setSchemaToken(result.token)
-              } catch (error) {
-                toast.error(errorMessage(error))
-              }
+              const result = await settings.rotate.mutateAsync('schema')
+              setSchemaToken(result.token)
             }}
           >
             <Button variant="outline" loading={settings.rotate.isPending}>

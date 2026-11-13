@@ -63,12 +63,7 @@ export function SessionsScreen() {
       </div>
 
       {query.isError ? (
-        <QueryError
-          title={m.account_sessions_load_error()}
-          error={query.error}
-          onRetry={() => void query.refetch()}
-          retrying={query.isFetching}
-        />
+        <QueryError title={m.account_sessions_load_error()} query={query} />
       ) : query.isPending ? (
         <div className="grid gap-2" aria-busy="true">
           <Skeleton className="h-[72px] rounded-card" />

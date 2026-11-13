@@ -3,7 +3,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import { adminQueryKeys, errorMessage } from '#/lib/admin/helpers'
+import { adminQueryKeys } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { FormField } from '#/components/ui/form-field'
@@ -50,7 +51,7 @@ function useClientSettings(client: ClientRow) {
       })
       await navigate({ to: '/agency/clients' })
     },
-    onError: (err) => toast.error(errorMessage(err)),
+    // Only the confirm dialog deletes; it shows the error.
   })
 
   return { rename, remove }

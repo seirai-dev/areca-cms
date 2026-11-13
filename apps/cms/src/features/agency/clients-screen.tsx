@@ -4,7 +4,8 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import { Buildings, MagnifyingGlass, Plus } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { adminQueryKeys, errorMessage, suggestSlug } from '#/lib/admin/helpers'
+import { adminQueryKeys, suggestSlug } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { Button } from '#/components/ui/button'
 import { EmptyState } from '#/components/ui/empty-state'
 import { FormField } from '#/components/ui/form-field'
@@ -97,12 +98,7 @@ export function ClientsScreen({
       />
 
       {clients.isError ? (
-        <QueryError
-          title={m.agency_clients_load_error()}
-          error={clients.error}
-          onRetry={() => void clients.refetch()}
-          retrying={clients.isFetching}
-        />
+        <QueryError title={m.agency_clients_load_error()} query={clients} />
       ) : clients.isPending ? (
         <div className="grid gap-3" aria-busy="true">
           <Skeleton className="h-9 w-full max-w-sm" />

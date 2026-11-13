@@ -12,7 +12,7 @@ import {
 import { FormField } from '#/components/ui/form-field'
 import { Textarea } from '#/components/ui/textarea'
 import { usePeopleMutations } from '#/features/agency/use-people-mutations'
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { m } from '#/paraglide/messages'
 
 /** The block dialog's internal note is optional and never shown to the person. */

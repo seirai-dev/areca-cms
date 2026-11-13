@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 
 import { invalidateDevSync } from '#/features/dev-env/invalidate'
 import { globalsQueryKey, useSiteGlobals } from '#/features/globals/use-globals'
-import { errorMessage } from '#/lib/admin/helpers'
+import { errorMessage } from '#/lib/errors'
 import { queryKeys } from '#/lib/content/query-keys'
 import { Tag } from '#/components/ui/tag'
 import { Button } from '#/components/ui/button'
@@ -88,12 +88,7 @@ export function ContentModelTab({ siteId }: { siteId: string }) {
         }
       >
         {query.isError ? (
-          <QueryError
-            title={m.sites_collections_load_error()}
-            error={query.error}
-            onRetry={() => void query.refetch()}
-            retrying={query.isFetching}
-          />
+          <QueryError title={m.sites_collections_load_error()} query={query} />
         ) : query.isLoading ? (
           <div className="overflow-hidden surface-card" aria-busy="true">
             {Array.from({ length: 3 }, (_, index) => (
@@ -151,12 +146,7 @@ export function ContentModelTab({ siteId }: { siteId: string }) {
         }
       >
         {globalsQuery.isError ? (
-          <QueryError
-            title={m.globals_load_error()}
-            error={globalsQuery.error}
-            onRetry={() => void globalsQuery.refetch()}
-            retrying={globalsQuery.isFetching}
-          />
+          <QueryError title={m.globals_load_error()} query={globalsQuery} />
         ) : globalsQuery.isLoading ? (
           <div className="overflow-hidden surface-card" aria-busy="true">
             <div className="flex items-center gap-3 px-4 py-3">

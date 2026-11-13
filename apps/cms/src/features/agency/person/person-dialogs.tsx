@@ -5,7 +5,6 @@ import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { usePeopleMutations } from '#/features/agency/use-people-mutations'
 import { BlockPersonDialog } from './block-person-dialog'
 import type { PersonDetail } from '#/features/agency/queries'
-import { errorMessage } from '#/lib/admin/helpers'
 import { m } from '#/paraglide/messages'
 
 /** Which confirmation is open on the person page. */
@@ -21,7 +20,7 @@ export type PersonDialog =
 /**
  * Every confirmation on the person page. Each destructive or step-up action
  * has one; the mutations handle step-up and refresh the caches. Results are
- * toasts; failures are toasts too, because the dialog closes either way.
+ * toasts; ConfirmDialog shows failures as toasts too.
  */
 export function PersonDialogs({
   person,
@@ -45,12 +44,8 @@ export function PersonDialogs({
   }
 
   async function run(action: () => Promise<unknown>, success: string) {
-    try {
-      await action()
-      toast.success(success)
-    } catch (error) {
-      toast.error(errorMessage(error))
-    }
+    await action()
+    toast.success(success)
   }
 
   return (
@@ -116,22 +111,18 @@ export function PersonDialogs({
         description={m.agency_people_reset_body({ name })}
         confirmLabel={m.agency_people_reset_confirm()}
         onConfirm={async () => {
-          try {
-            const result = await mutations.sendResetLink.mutateAsync(person.id)
-            if (!result.ok) {
-              toast.error(result.message)
-              return
-            }
-            toast.success(
-              result.status === 'sso'
-                ? m.agency_people_reset_sso({ name })
-                : result.status === 'queued'
-                  ? m.agency_people_reset_queued({ email: person.email })
-                  : m.agency_people_reset_sent({ email: person.email }),
-            )
-          } catch (error) {
-            toast.error(errorMessage(error))
+          const result = await mutations.sendResetLink.mutateAsync(person.id)
+          if (!result.ok) {
+            toast.error(result.message)
+            return
           }
+          toast.success(
+            result.status === 'sso'
+              ? m.agency_people_reset_sso({ name })
+              : result.status === 'queued'
+                ? m.agency_people_reset_queued({ email: person.email })
+                : m.agency_people_reset_sent({ email: person.email }),
+          )
         }}
         testId="person-reset-password-dialog"
       />
@@ -201,13 +192,9 @@ export function PersonDialogs({
         align="start"
         variant="destructive"
         onConfirm={async () => {
-          try {
-            await mutations.remove.mutateAsync(person.id)
-            toast.success(m.agency_person_toast_deleted({ name }))
-            void navigate({ to: '/agency/people' })
-          } catch (error) {
-            toast.error(errorMessage(error))
-          }
+          await mutations.remove.mutateAsync(person.id)
+          toast.success(m.agency_person_toast_deleted({ name }))
+          void navigate({ to: '/agency/people' })
         }}
         testId="person-delete-dialog"
       />

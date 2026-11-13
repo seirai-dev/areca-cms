@@ -40,12 +40,7 @@ export function PausedJobsSection() {
       data-testid="paused-jobs"
     >
       {query.isError ? (
-        <QueryError
-          title={m.agency_paused_load_error()}
-          error={query.error}
-          onRetry={() => void query.refetch()}
-          retrying={query.isFetching}
-        />
+        <QueryError title={m.agency_paused_load_error()} query={query} />
       ) : query.isPending ? (
         <Skeleton className="h-16 rounded-card" />
       ) : rows.length === 0 ? (

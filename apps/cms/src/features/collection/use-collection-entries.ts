@@ -10,7 +10,7 @@ import { useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
 import { queryKeys } from '#/lib/content/query-keys'
-import { errorMessage } from '#/lib/content/utils'
+import { errorMessage } from '#/lib/errors'
 import { useInvalidateGoLive } from '#/features/golive/use-go-live'
 import {
   bulkQueryKeys,

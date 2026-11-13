@@ -200,12 +200,7 @@ export function LibraryScreen({
       />
 
       {library.isError ? (
-        <QueryError
-          title={m.sites_media_load_error()}
-          error={library.error}
-          onRetry={() => void library.refetch()}
-          retrying={library.isFetching}
-        />
+        <QueryError title={m.sites_media_load_error()} query={library} />
       ) : library.isPending ? (
         <div className={GRID} aria-hidden="true">
           {Array.from({ length: 12 }).map((_, index) => (

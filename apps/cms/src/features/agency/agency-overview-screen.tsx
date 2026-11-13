@@ -107,12 +107,7 @@ export function AgencyOverviewScreen({ me }: { me: Me }) {
       <GettingStarted />
 
       {overview.isError ? (
-        <QueryError
-          title={m.agency_sites_load_error()}
-          error={overview.error}
-          onRetry={() => void overview.refetch()}
-          retrying={overview.isFetching}
-        />
+        <QueryError title={m.agency_sites_load_error()} query={overview} />
       ) : (
         <>
           <NeedsAttention me={me} />
@@ -318,12 +313,7 @@ function RecentActivity() {
   const entries = useActivityEntries(rows)
   if (activity.isError) {
     return (
-      <QueryError
-        title={m.agency_activity_load_error()}
-        error={activity.error}
-        onRetry={() => void activity.refetch()}
-        retrying={activity.isFetching}
-      />
+      <QueryError title={m.agency_activity_load_error()} query={activity} />
     )
   }
   return (
