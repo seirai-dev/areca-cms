@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { eq } from 'drizzle-orm'
 
 import type { Tx } from '#/db'
@@ -20,11 +19,13 @@ export async function lockOrganizationForMutation(
   organizationId: string,
   options: { mode?: OrganizationLockMode } = {},
 ) {
-  const [found] = await tx
-    .select()
-    .from(organization)
-    .where(eq(organization.id, organizationId))
-    .for(options.mode === 'no-key-update' ? 'no key update' : 'update')
+  const found = (
+    await tx
+      .select()
+      .from(organization)
+      .where(eq(organization.id, organizationId))
+      .for(options.mode === 'no-key-update' ? 'no key update' : 'update')
+  ).at(0)
   if (!found) throw new NotFoundError(m.server_organization_not_found())
   return found
 }

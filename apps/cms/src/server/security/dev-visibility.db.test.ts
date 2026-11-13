@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -101,22 +100,24 @@ describe.skipIf(!runnable)(
       world = await seedWorld()
       const prod = world.X.site
       const suffix = crypto.randomUUID().slice(0, 8)
-      const [row] = await db
-        .insert(site)
-        .values({
-          organizationId: prod.organizationId,
-          name: `Dev site ${suffix} (dev)`,
-          slug: `${prod.slug}-dev`,
-          tokenHash: `h-${crypto.randomUUID()}`,
-          schemaTokenHash: `s-${crypto.randomUUID()}`,
-          productionUrl: 'http://localhost:3000',
-          previewSecret: crypto.randomUUID(),
-          publishingMode: 'demo',
-          deploymentTarget: null,
-          environment: 'development',
-          parentSiteId: prod.id,
-        })
-        .returning()
+      const row = (
+        await db
+          .insert(site)
+          .values({
+            organizationId: prod.organizationId,
+            name: `Dev site ${suffix} (dev)`,
+            slug: `${prod.slug}-dev`,
+            tokenHash: `h-${crypto.randomUUID()}`,
+            schemaTokenHash: `s-${crypto.randomUUID()}`,
+            productionUrl: 'http://localhost:3000',
+            previewSecret: crypto.randomUUID(),
+            publishingMode: 'demo',
+            deploymentTarget: null,
+            environment: 'development',
+            parentSiteId: prod.id,
+          })
+          .returning()
+      ).at(0)
       if (!row) throw new Error('dev site insert failed')
       dev = row
       await createTestCollection(dev.id)
@@ -316,16 +317,18 @@ describe.skipIf(!runnable)(
 
       it('answers an app connection to a dev site NotFound for a client, and serves an admin', async () => {
         const connectionFor = async (userId: string) => {
-          const [row] = await db
-            .insert(mcpConnection)
-            .values({
-              userId,
-              siteId: dev.id,
-              clientId: oauthClientId,
-              clientName: 'Assistant',
-              allowGoLive: false,
-            })
-            .returning()
+          const row = (
+            await db
+              .insert(mcpConnection)
+              .values({
+                userId,
+                siteId: dev.id,
+                clientId: oauthClientId,
+                clientName: 'Assistant',
+                allowGoLive: false,
+              })
+              .returning()
+          ).at(0)
           if (!row) throw new Error('connection insert failed')
           return row
         }
@@ -571,30 +574,34 @@ describe.skipIf(!runnable)(
         const prod = world.Y.site
         // Dev env for the other tenant's production site, so the rename is isolated.
         const suffix = crypto.randomUUID().slice(0, 8)
-        const [otherDev] = await db
-          .insert(site)
-          .values({
-            organizationId: prod.organizationId,
-            name: 'Other dev',
-            slug: `${prod.slug}-dev`,
-            tokenHash: `h-${crypto.randomUUID()}`,
-            schemaTokenHash: `s-${crypto.randomUUID()}`,
-            productionUrl: 'http://localhost:3000',
-            previewSecret: crypto.randomUUID(),
-            publishingMode: 'demo',
-            environment: 'development',
-            parentSiteId: prod.id,
-          })
-          .returning()
+        const otherDev = (
+          await db
+            .insert(site)
+            .values({
+              organizationId: prod.organizationId,
+              name: 'Other dev',
+              slug: `${prod.slug}-dev`,
+              tokenHash: `h-${crypto.randomUUID()}`,
+              schemaTokenHash: `s-${crypto.randomUUID()}`,
+              productionUrl: 'http://localhost:3000',
+              previewSecret: crypto.randomUUID(),
+              publishingMode: 'demo',
+              environment: 'development',
+              parentSiteId: prod.id,
+            })
+            .returning()
+        ).at(0)
         if (!otherDev) throw new Error('dev insert failed')
 
         const renamed = `moved-${suffix}`
         const updatedProd = await changeSiteSlug(prod.id, renamed, actorId)
         expect(updatedProd.slug).toBe(renamed)
-        const [renamedDev] = await db
-          .select({ slug: site.slug })
-          .from(site)
-          .where(eq(site.id, otherDev.id))
+        const renamedDev = (
+          await db
+            .select({ slug: site.slug })
+            .from(site)
+            .where(eq(site.id, otherDev.id))
+        ).at(0)
         expect(renamedDev?.slug).toBe(`${renamed}-dev`)
 
         // Taken: a free production slug whose dev slug is already in use.
@@ -613,10 +620,12 @@ describe.skipIf(!runnable)(
           changeSiteSlug(prod.id, blocker, actorId),
           m.server_dev_env_slug_taken({ slug: `${blocker}-dev` }),
         )
-        const [stillRenamed] = await db
-          .select({ slug: site.slug })
-          .from(site)
-          .where(eq(site.id, prod.id))
+        const stillRenamed = (
+          await db
+            .select({ slug: site.slug })
+            .from(site)
+            .where(eq(site.id, prod.id))
+        ).at(0)
         expect(stillRenamed?.slug).toBe(renamed)
       })
 

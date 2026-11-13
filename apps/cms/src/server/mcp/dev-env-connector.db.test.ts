@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning() are checked defensively */
 import { and, eq, isNull } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -388,29 +387,33 @@ async function insertConnection(
   siteId: string,
   clientId: string,
 ) {
-  const [existing] = await db
-    .select()
-    .from(mcpConnection)
-    .where(
-      and(
-        eq(mcpConnection.userId, userId),
-        eq(mcpConnection.siteId, siteId),
-        eq(mcpConnection.clientId, clientId),
-        isNull(mcpConnection.revokedAt),
-      ),
-    )
-    .limit(1)
+  const existing = (
+    await db
+      .select()
+      .from(mcpConnection)
+      .where(
+        and(
+          eq(mcpConnection.userId, userId),
+          eq(mcpConnection.siteId, siteId),
+          eq(mcpConnection.clientId, clientId),
+          isNull(mcpConnection.revokedAt),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   if (existing) return existing
-  const [row] = await db
-    .insert(mcpConnection)
-    .values({
-      userId,
-      siteId,
-      clientId,
-      clientName: 'Assistant',
-      allowGoLive: false,
-    })
-    .returning()
+  const row = (
+    await db
+      .insert(mcpConnection)
+      .values({
+        userId,
+        siteId,
+        clientId,
+        clientName: 'Assistant',
+        allowGoLive: false,
+      })
+      .returning()
+  ).at(0)
   if (!row) throw new Error('connection insert failed')
   return row
 }

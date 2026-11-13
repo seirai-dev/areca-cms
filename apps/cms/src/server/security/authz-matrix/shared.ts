@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 import { count, eq } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import type { PgTable } from 'drizzle-orm/pg-core'
@@ -51,7 +50,7 @@ export type MatrixFor<TModule> = {
 }
 
 export const rowCount = async (table: PgTable, where: SQL | undefined) => {
-  const [r] = await db.select({ n: count() }).from(table).where(where)
+  const r = (await db.select({ n: count() }).from(table).where(where)).at(0)
   return Number(r?.n ?? 0)
 }
 
@@ -62,7 +61,7 @@ export const absent = (table: PgTable, where: SQL | undefined) => async () =>
 
 export const entryUntouched =
   (id: string, expect: Partial<typeof entry.$inferSelect>) => async () => {
-    const [row] = await db.select().from(entry).where(eq(entry.id, id))
+    const row = (await db.select().from(entry).where(eq(entry.id, id))).at(0)
     if (!row) return false
     return Object.entries(expect).every(
       ([k, v]) => (row as Record<string, unknown>)[k] === v,

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 /**
  * One-click unsubscribe for notification emails. A token names one user, one
  * organization (null for agency-role alerts) and one event, signed with
@@ -152,11 +151,13 @@ async function targetState(
 
 async function organizationName(organizationId: string | null) {
   if (!organizationId) return null
-  const [row] = await db
-    .select({ name: organization.name })
-    .from(organization)
-    .where(eq(organization.id, organizationId))
-    .limit(1)
+  const row = (
+    await db
+      .select({ name: organization.name })
+      .from(organization)
+      .where(eq(organization.id, organizationId))
+      .limit(1)
+  ).at(0)
   return row?.name ?? null
 }
 

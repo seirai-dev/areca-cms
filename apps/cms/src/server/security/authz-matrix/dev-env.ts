@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 import type * as devEnvFns from '#/server/fn/dev-env'
 import { eq } from 'drizzle-orm'
 import { db } from '#/db'
@@ -31,17 +30,21 @@ export const devEnvRows = {
     prepare: async (w) => {
       const s = await w.fresh.site()
       const dev = await forkDevEnvironment(w.users.adminMfa, s.id)
-      const [before] = await db
-        .select({ updatedAt: site.updatedAt })
-        .from(site)
-        .where(eq(site.id, dev.id))
+      const before = (
+        await db
+          .select({ updatedAt: site.updatedAt })
+          .from(site)
+          .where(eq(site.id, dev.id))
+      ).at(0)
       return {
         data: { devSiteId: dev.id },
         untouched: async () => {
-          const [now] = await db
-            .select({ updatedAt: site.updatedAt })
-            .from(site)
-            .where(eq(site.id, dev.id))
+          const now = (
+            await db
+              .select({ updatedAt: site.updatedAt })
+              .from(site)
+              .where(eq(site.id, dev.id))
+          ).at(0)
           return now?.updatedAt.getTime() === before?.updatedAt.getTime()
         },
       }
@@ -95,10 +98,12 @@ export const devEnvRows = {
           goLive: false,
         },
         untouched: async () => {
-          const [row] = await db
-            .select({ lastPushedAt: site.lastPushedAt })
-            .from(site)
-            .where(eq(site.id, dev.id))
+          const row = (
+            await db
+              .select({ lastPushedAt: site.lastPushedAt })
+              .from(site)
+              .where(eq(site.id, dev.id))
+          ).at(0)
           return row?.lastPushedAt == null
         },
       }
@@ -119,10 +124,12 @@ export const devEnvRows = {
           overwrite: false,
         },
         untouched: async () => {
-          const [row] = await db
-            .select({ lastPushedAt: site.lastPushedAt })
-            .from(site)
-            .where(eq(site.id, dev.id))
+          const row = (
+            await db
+              .select({ lastPushedAt: site.lastPushedAt })
+              .from(site)
+              .where(eq(site.id, dev.id))
+          ).at(0)
           return row?.lastPushedAt == null
         },
       }

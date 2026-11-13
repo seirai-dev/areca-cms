@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import type * as MailConfig from '#/server/mail/config'
 
 import { and, eq, inArray } from 'drizzle-orm'
@@ -47,30 +46,36 @@ afterEach(async () => {
 /** An organization with an owner (the actor) and one editor (the member). */
 async function fixture() {
   const suffix = crypto.randomUUID()
-  const [org] = await db
-    .insert(organization)
-    .values({ name: `Harbour ${suffix}`, slug: `harbour-${suffix}` })
-    .returning()
-  const [owner] = await db
-    .insert(user)
-    .values({
-      id: crypto.randomUUID(),
-      name: 'Owen Owner',
-      email: `owner-${suffix}@areca.local`,
-      emailVerified: true,
-      locale: 'en',
-    })
-    .returning()
-  const [member] = await db
-    .insert(user)
-    .values({
-      id: crypto.randomUUID(),
-      name: 'Edith Editor',
-      email: `editor-${suffix}@areca.local`,
-      emailVerified: false,
-      locale: 'nl',
-    })
-    .returning()
+  const org = (
+    await db
+      .insert(organization)
+      .values({ name: `Harbour ${suffix}`, slug: `harbour-${suffix}` })
+      .returning()
+  ).at(0)
+  const owner = (
+    await db
+      .insert(user)
+      .values({
+        id: crypto.randomUUID(),
+        name: 'Owen Owner',
+        email: `owner-${suffix}@areca.local`,
+        emailVerified: true,
+        locale: 'en',
+      })
+      .returning()
+  ).at(0)
+  const member = (
+    await db
+      .insert(user)
+      .values({
+        id: crypto.randomUUID(),
+        name: 'Edith Editor',
+        email: `editor-${suffix}@areca.local`,
+        emailVerified: false,
+        locale: 'nl',
+      })
+      .returning()
+  ).at(0)
   if (!org || !owner || !member) throw new Error('fixture failed')
   await db.insert(membership).values([
     { userId: owner.id, organizationId: org.id, role: 'owner' },
@@ -99,7 +104,7 @@ describe.skipIf(!hasDb)('member account emails', () => {
 
     await removeMember(org.id, member.id, owner.id)
 
-    const [row] = await outboxFor(member.id, 'membership_removed')
+    const row = (await outboxFor(member.id, 'membership_removed')).at(0)
     expect(row).toMatchObject({ status: 'queued', locale: 'nl' })
     expect(row?.params).toEqual({
       userId: member.id,
@@ -148,7 +153,7 @@ describe.skipIf(!hasDb)('member account emails', () => {
     )
 
     await updateMemberRole(org.id, member.id, 'owner', owner.id)
-    const [row] = await outboxFor(member.id, 'membership_role_changed')
+    const row = (await outboxFor(member.id, 'membership_role_changed')).at(0)
     expect(row?.params).toEqual({
       userId: member.id,
       organizationId: org.id,
@@ -179,7 +184,7 @@ describe.skipIf(!hasDb)('member account emails', () => {
         emailVerified: false,
       })
       .returning()
-    const person = invitee[0]
+    const person = invitee.at(0)
     if (!person) throw new Error('fixture failed')
     cleanups.push(async () => {
       await db.delete(user).where(eq(user.id, person.id))
@@ -196,10 +201,12 @@ describe.skipIf(!hasDb)('member account emails', () => {
 
     await acceptInvitation({ token, userId: person.id })
 
-    const [after] = await db
-      .select({ emailVerified: user.emailVerified })
-      .from(user)
-      .where(eq(user.id, person.id))
+    const after = (
+      await db
+        .select({ emailVerified: user.emailVerified })
+        .from(user)
+        .where(eq(user.id, person.id))
+    ).at(0)
     expect(after?.emailVerified).toBe(true)
   })
 
@@ -215,7 +222,7 @@ describe.skipIf(!hasDb)('member account emails', () => {
         emailVerified: false,
       })
       .returning()
-    const person = invitee[0]
+    const person = invitee.at(0)
     if (!person) throw new Error('fixture failed')
     cleanups.push(async () => {
       await db.delete(user).where(eq(user.id, person.id))
@@ -232,51 +239,59 @@ describe.skipIf(!hasDb)('member account emails', () => {
 
     await acceptInvitation({ token, userId: person.id })
 
-    const [after] = await db
-      .select({ emailVerified: user.emailVerified })
-      .from(user)
-      .where(eq(user.id, person.id))
+    const after = (
+      await db
+        .select({ emailVerified: user.emailVerified })
+        .from(user)
+        .where(eq(user.id, person.id))
+    ).at(0)
     expect(after?.emailVerified).toBe(false)
   })
   /** An unverified person with a delivered invitation, and its raw token. */
   async function deliveredInvite(linkRevealedAt: Date | null) {
     const { org, owner } = await fixture()
     const suffix = crypto.randomUUID()
-    const [person] = await db
-      .insert(user)
-      .values({
-        id: crypto.randomUUID(),
-        name: 'Linked Person',
-        email: `linked-${suffix}@areca.local`,
-        emailVerified: false,
-      })
-      .returning()
+    const person = (
+      await db
+        .insert(user)
+        .values({
+          id: crypto.randomUUID(),
+          name: 'Linked Person',
+          email: `linked-${suffix}@areca.local`,
+          emailVerified: false,
+        })
+        .returning()
+    ).at(0)
     if (!person) throw new Error('fixture failed')
     cleanups.push(async () => {
       await db.delete(user).where(eq(user.id, person.id))
     })
     const token = `tok-${suffix}`
-    const [row] = await db
-      .insert(invitation)
-      .values({
-        email: person.email,
-        organizationId: org.id,
-        role: 'editor',
-        tokenHash: hashToken(token),
-        expiresAt: new Date(Date.now() + 60_000),
-        deliveryStatus: 'sent',
-        linkRevealedAt,
-      })
-      .returning()
+    const row = (
+      await db
+        .insert(invitation)
+        .values({
+          email: person.email,
+          organizationId: org.id,
+          role: 'editor',
+          tokenHash: hashToken(token),
+          expiresAt: new Date(Date.now() + 60_000),
+          deliveryStatus: 'sent',
+          linkRevealedAt,
+        })
+        .returning()
+    ).at(0)
     if (!row) throw new Error('fixture failed')
     return { person, token, invitationId: row.id, owner }
   }
 
   async function emailVerifiedOf(userId: string) {
-    const [after] = await db
-      .select({ emailVerified: user.emailVerified })
-      .from(user)
-      .where(eq(user.id, userId))
+    const after = (
+      await db
+        .select({ emailVerified: user.emailVerified })
+        .from(user)
+        .where(eq(user.id, userId))
+    ).at(0)
     return after?.emailVerified
   }
 

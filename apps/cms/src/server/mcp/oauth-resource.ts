@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .select() are checked defensively */
 import { eq } from 'drizzle-orm'
 
 import { db } from '#/db'
@@ -110,11 +109,13 @@ export async function ensureMcpSiteResource(
 ): Promise<string | null> {
   const slug = siteSlugFromMcpResource(resource)
   if (!slug) return null
-  const [found] = await db
-    .select({ name: site.name })
-    .from(site)
-    .where(eq(site.slug, slug))
-    .limit(1)
+  const found = (
+    await db
+      .select({ name: site.name })
+      .from(site)
+      .where(eq(site.slug, slug))
+      .limit(1)
+  ).at(0)
   if (!found) return null
 
   await registerResource(resource, `${found.name} (Areca CMS)`)
@@ -158,11 +159,13 @@ export async function siteIdForAuthorizationQuery(
   for (const resource of new URLSearchParams(query).getAll('resource')) {
     const slug = siteSlugFromMcpResource(resource)
     if (!slug) continue
-    const [found] = await db
-      .select({ id: site.id })
-      .from(site)
-      .where(eq(site.slug, slug))
-      .limit(1)
+    const found = (
+      await db
+        .select({ id: site.id })
+        .from(site)
+        .where(eq(site.slug, slug))
+        .limit(1)
+    ).at(0)
     if (found) return found.id
   }
   return undefined

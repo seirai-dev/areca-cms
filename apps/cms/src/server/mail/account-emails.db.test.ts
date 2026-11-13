@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import type * as MailConfig from '#/server/mail/config'
 
 import { and, eq, inArray } from 'drizzle-orm'
@@ -120,7 +119,7 @@ describe.skipIf(!hasDb)('account emails', () => {
       .where(eq(verification.identifier, `reset-password:${token}`))
     expect(left).toBeUndefined()
 
-    const [row] = await outboxFor(person.id, 'password_reset_sso')
+    const row = (await outboxFor(person.id, 'password_reset_sso')).at(0)
     expect(row).toMatchObject({
       status: 'sent',
       template: 'password_reset_sso',
@@ -139,7 +138,7 @@ describe.skipIf(!hasDb)('account emails', () => {
     const result = await deliverPasswordReset({ user: person, token })
     expect(result).toMatchObject({ status: 'sent' })
 
-    const [row] = await outboxFor(person.id, 'password_reset')
+    const row = (await outboxFor(person.id, 'password_reset')).at(0)
     expect(row).toBeDefined()
     expect(JSON.stringify(row)).not.toContain(token)
     expect(row?.params.token).toBeUndefined()
@@ -182,7 +181,7 @@ describe.skipIf(!hasDb)('account emails', () => {
       renderParams: { token },
     })
     expect(queued).toEqual({ status: 'queued', id: expect.any(String) })
-    const [row] = await outboxFor(person.id, 'password_reset')
+    const row = (await outboxFor(person.id, 'password_reset')).at(0)
     expect(JSON.stringify(row)).not.toContain(token)
     expect(row?.subject).toBe('Stel je wachtwoord opnieuw in')
   })
@@ -217,7 +216,7 @@ describe.skipIf(!hasDb)('account emails', () => {
       .where(eq(verification.value, person.id))
     expect(tokenRow).toBeDefined()
     // Stored hashed, the way Better Auth stores its own reset tokens.
-    expect(tokenRow?.identifier.startsWith('reset-password:')).toBe(false)
+    expect(tokenRow.identifier.startsWith('reset-password:')).toBe(false)
     expect(tokenRow.expiresAt.getTime() - Date.now()).toBeGreaterThan(
       50 * 60_000,
     )
@@ -228,15 +227,17 @@ describe.skipIf(!hasDb)('account emails', () => {
     const ssoReset = await sendPasswordResetLink(ssoOnly.id, actor.id)
     expect(ssoReset).toMatchObject({ sso: true, result: { status: 'sent' } })
 
-    const [audit] = await db
-      .select()
-      .from(auditLog)
-      .where(
-        and(
-          eq(auditLog.action, 'user.password_reset_link_sent'),
-          eq(auditLog.targetId, person.id),
-        ),
-      )
+    const audit = (
+      await db
+        .select()
+        .from(auditLog)
+        .where(
+          and(
+            eq(auditLog.action, 'user.password_reset_link_sent'),
+            eq(auditLog.targetId, person.id),
+          ),
+        )
+    ).at(0)
     expect(audit).toMatchObject({
       organizationId: null,
       actorId: actor.id,

@@ -1,7 +1,6 @@
 import type * as MailConfig from '#/server/mail/config'
 import type * as MailTransport from '#/server/mail/transport'
 import type * as ReleaseDiff from '#/server/publishing/release-diff'
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -98,6 +97,7 @@ describe.skipIf(!runnable)(
       w = await seedWorld()
     }, 60_000)
     afterAll(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unset when beforeAll failed
       await w?.destroy()
     })
 
@@ -167,6 +167,7 @@ describe.skipIf(!runnable)(
       w = await seedWorld()
     }, 60_000)
     afterAll(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unset when beforeAll failed
       await w?.destroy()
     })
 
@@ -248,10 +249,9 @@ describe.skipIf(!runnable)(
         expect(classify(out.error), label).toBe('not-found')
         expect(out.result, `${label} leaked data`).toBeUndefined()
       }
-      const [row] = await db
-        .select()
-        .from(entry)
-        .where(eq(entry.id, w.Y.entry.id))
+      const row = (
+        await db.select().from(entry).where(eq(entry.id, w.Y.entry.id))
+      ).at(0)
       expect(row?.draftVersion).toBe(w.Y.entry.draftVersion)
       expect(row?.status).toBe('draft')
     })
@@ -323,10 +323,9 @@ describe.skipIf(!runnable)(
         )
         expect(out.result, `${label} leaked data`).toBeUndefined()
       }
-      const [a] = await db
-        .select()
-        .from(asset)
-        .where(eq(asset.id, w.Y.asset.id))
+      const a = (
+        await db.select().from(asset).where(eq(asset.id, w.Y.asset.id))
+      ).at(0)
       expect(a?.altText).toBe('original alt')
       expect(
         await db.select().from(invitation).where(eq(invitation.id, invite.id)),
@@ -432,10 +431,9 @@ describe.skipIf(!runnable)(
         'ownerX',
       )
       expect(classify(del.error)).toBe('forbidden')
-      const [row] = await db
-        .select()
-        .from(collection)
-        .where(eq(collection.id, c.id))
+      const row = (
+        await db.select().from(collection).where(eq(collection.id, c.id))
+      ).at(0)
       expect(row?.label).toBe('Articles')
     })
 
@@ -810,6 +808,7 @@ describe.skipIf(!runnable)('disabled site content reached by entry id', () => {
     w = await seedWorld()
   }, 60_000)
   afterAll(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unset when beforeAll failed
     await w?.destroy()
   })
 
@@ -858,6 +857,7 @@ describe.skipIf(!runnable)('error shape that reaches the client', () => {
   }, 60_000)
   afterAll(async () => {
     vi.restoreAllMocks()
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unset when beforeAll failed
     await w?.destroy()
   })
 
@@ -953,6 +953,7 @@ describe.skipIf(!runnable)(
     }, 60_000)
     afterAll(async () => {
       releaseDiffHook.beforeDiff = null
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unset when beforeAll failed
       await w?.destroy()
     })
 
@@ -989,6 +990,7 @@ describe.skipIf(!runnable)(
       w = await seedWorld()
     }, 60_000)
     afterAll(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unset when beforeAll failed
       await w?.destroy()
     })
 
@@ -1034,6 +1036,7 @@ describe.skipIf(!runnable)(
       w = await seedWorld()
     }, 60_000)
     afterAll(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unset when beforeAll failed
       await w?.destroy()
     })
 

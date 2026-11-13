@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import type * as MailConfig from '#/server/mail/config'
 import type * as MailTransport from '#/server/mail/transport'
 
@@ -192,12 +191,14 @@ describe('notify: fan-out', () => {
       payload: payloadFor(site.id, org.id),
     })
 
-    const [row] = await db
-      .select()
-      .from(notification)
-      .where(
-        eq(notification.dedupeKey, `release.failed:${subjectId}:${owner.id}`),
-      )
+    const row = (
+      await db
+        .select()
+        .from(notification)
+        .where(
+          eq(notification.dedupeKey, `release.failed:${subjectId}:${owner.id}`),
+        )
+    ).at(0)
     expect(row?.payload).toMatchObject({
       recipientRole: 'owner',
       lockedBy: 'organization',
@@ -374,10 +375,12 @@ describe('notify: fan-out', () => {
       recipients: [{ userId: owner.id, role: 'owner' }],
       payload: payloadFor(site.id, org.id),
     })
-    const [queued] = await db
-      .select()
-      .from(emailOutbox)
-      .where(eq(emailOutbox.userId, owner.id))
+    const queued = (
+      await db
+        .select()
+        .from(emailOutbox)
+        .where(eq(emailOutbox.userId, owner.id))
+    ).at(0)
     expect(queued).toBeTruthy()
 
     await processOutbox({ only: [queued?.id ?? ''] })
@@ -396,29 +399,33 @@ describe('notify: retention', () => {
   it('deletes rows older than 30 days and keeps recent ones', async () => {
     const { site, org, owner } = await setup()
     const day = 24 * 60 * 60 * 1000
-    const [old] = await db
-      .insert(notification)
-      .values({
-        userId: owner.id,
-        organizationId: org.id,
-        siteId: site.id,
-        event: 'release.live',
-        payload: {},
-        dedupeKey: `release.live:old:${owner.id}`,
-        createdAt: new Date(Date.now() - 31 * day),
-      })
-      .returning({ id: notification.id })
-    const [recent] = await db
-      .insert(notification)
-      .values({
-        userId: owner.id,
-        organizationId: org.id,
-        siteId: site.id,
-        event: 'release.live',
-        payload: {},
-        dedupeKey: `release.live:recent:${owner.id}`,
-      })
-      .returning({ id: notification.id })
+    const old = (
+      await db
+        .insert(notification)
+        .values({
+          userId: owner.id,
+          organizationId: org.id,
+          siteId: site.id,
+          event: 'release.live',
+          payload: {},
+          dedupeKey: `release.live:old:${owner.id}`,
+          createdAt: new Date(Date.now() - 31 * day),
+        })
+        .returning({ id: notification.id })
+    ).at(0)
+    const recent = (
+      await db
+        .insert(notification)
+        .values({
+          userId: owner.id,
+          organizationId: org.id,
+          siteId: site.id,
+          event: 'release.live',
+          payload: {},
+          dedupeKey: `release.live:recent:${owner.id}`,
+        })
+        .returning({ id: notification.id })
+    ).at(0)
 
     const removed = await cleanupNotifications()
 

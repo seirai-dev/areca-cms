@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { APIError } from 'better-auth/api'
 import { and, eq, gt, isNull, sql } from 'drizzle-orm'
 
@@ -42,7 +41,7 @@ export async function assertEmailMayRegister(
   if (
     await hasPendingInvitation(
       normalized,
-      proof?.passwordSignup ? proof.invitationToken : undefined,
+      proof.passwordSignup ? proof.invitationToken : undefined,
     )
   ) {
     return

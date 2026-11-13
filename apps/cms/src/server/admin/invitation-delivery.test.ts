@@ -3,7 +3,6 @@ import { createHash } from 'node:crypto'
 import type * as MailConfig from '#/server/mail/config'
 import type * as SecretsKey from '#/server/security/secrets-key'
 import type * as MailTransport from '#/server/mail/transport'
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import { eq, inArray } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -123,19 +122,23 @@ function latestInviteToken() {
 
 async function fixture() {
   const suffix = crypto.randomUUID()
-  const [org] = await db
-    .insert(organization)
-    .values({ name: `Invites ${suffix}`, slug: `invites-${suffix}` })
-    .returning()
-  const [actor] = await db
-    .insert(user)
-    .values({
-      id: crypto.randomUUID(),
-      name: 'Inviter',
-      email: `inviter-${suffix}@test.local`,
-      emailVerified: true,
-    })
-    .returning()
+  const org = (
+    await db
+      .insert(organization)
+      .values({ name: `Invites ${suffix}`, slug: `invites-${suffix}` })
+      .returning()
+  ).at(0)
+  const actor = (
+    await db
+      .insert(user)
+      .values({
+        id: crypto.randomUUID(),
+        name: 'Inviter',
+        email: `inviter-${suffix}@test.local`,
+        emailVerified: true,
+      })
+      .returning()
+  ).at(0)
   if (!org || !actor) throw new Error('fixture failed')
   return {
     org,
@@ -207,10 +210,9 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
       const [row] = await listInvitations(f.org.id)
       expect(row).toMatchObject({ email: f.email, deliveryStatus: 'queued' })
       const firstToken = latestInviteToken()
-      const [stored] = await db
-        .select()
-        .from(invitation)
-        .where(eq(invitation.id, row.id))
+      const stored = (
+        await db.select().from(invitation).where(eq(invitation.id, row.id))
+      ).at(0)
       expect(stored?.lastDeliveryError).toContain(
         "Couldn't reach localhost on port 1",
       )
@@ -233,10 +235,9 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
       )
       const secondToken = latestInviteToken()
       expect(secondToken).not.toBe(firstToken)
-      const [afterFailedResend] = await db
-        .select()
-        .from(invitation)
-        .where(eq(invitation.id, row.id))
+      const afterFailedResend = (
+        await db.select().from(invitation).where(eq(invitation.id, row.id))
+      ).at(0)
       expect(afterFailedResend?.deliveryStatus).toBe('queued')
       expect(await getInvitation(firstToken)).toBeNull()
       expect(await getInvitation(secondToken)).toMatchObject({ id: row.id })
@@ -254,10 +255,12 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
       expect(resentToken).not.toBe(secondToken)
       expect(resent.deliveryStatus).toBe('sent')
       expect(resent.lastSentAt).toBeInstanceOf(Date)
-      const [sentRow] = await db
-        .select({ lastDeliveryError: invitation.lastDeliveryError })
-        .from(invitation)
-        .where(eq(invitation.id, row.id))
+      const sentRow = (
+        await db
+          .select({ lastDeliveryError: invitation.lastDeliveryError })
+          .from(invitation)
+          .where(eq(invitation.id, row.id))
+      ).at(0)
       expect(sentRow?.lastDeliveryError).toBeNull()
       expect(resent.expiresAt.getTime()).toBeGreaterThan(
         Date.now() + 6 * 86_400_000,
@@ -306,10 +309,9 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
       const third = await sendNow(queued.id)
       expect(third.status).toBe('failed')
 
-      const [stored] = await db
-        .select()
-        .from(invitation)
-        .where(eq(invitation.id, row.id))
+      const stored = (
+        await db.select().from(invitation).where(eq(invitation.id, row.id))
+      ).at(0)
       expect(stored).toMatchObject({ deliveryStatus: 'failed' })
       expect(stored?.lastDeliveryError).toContain(
         "Couldn't reach localhost on port 1",
@@ -473,7 +475,7 @@ describe.skipIf(!hasDb)('invitation links at rest', () => {
         .select()
         .from(invitation)
         .where(eq(invitation.organizationId, f.org.id))
-      expect(stored?.tokenHash).toBe(
+      expect(stored.tokenHash).toBe(
         createHash('sha256').update(token).digest('hex'),
       )
       expect(JSON.stringify(stored)).not.toContain(token)
@@ -483,7 +485,7 @@ describe.skipIf(!hasDb)('invitation links at rest', () => {
       expect(listed).not.toHaveProperty('tokenHash')
       expect(JSON.stringify(listed)).not.toContain(token)
 
-      const [queued] = await outboxFor(stored.id)
+      const queued = (await outboxFor(stored.id)).at(0)
       expect(JSON.stringify(queued)).not.toContain(token)
       expect(queued?.params).not.toHaveProperty('token')
       expect(queued?.params.encryptedToken).toEqual(expect.any(String))
@@ -508,7 +510,7 @@ describe.skipIf(!hasDb)('invitation links at rest', () => {
       const token = latestInviteToken()
       const [row] = await listInvitations(f.org.id)
       const [queued] = await outboxFor(row.id)
-      expect(queued?.params).not.toHaveProperty('encryptedToken')
+      expect(queued.params).not.toHaveProperty('encryptedToken')
       expect(JSON.stringify(queued)).not.toContain(token)
 
       // The worker has only the stored params, so it cannot rebuild the link.

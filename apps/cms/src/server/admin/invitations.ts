@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 /**
  * Invitations to a client: invite, resend, regenerate the link, revoke,
  * accept, and the lists of open invitations.
@@ -77,11 +76,13 @@ export async function inviteMember(input: {
   role: MembershipRole
   actorId: string
 }) {
-  const [org] = await db
-    .select()
-    .from(organization)
-    .where(eq(organization.id, input.organizationId))
-    .limit(1)
+  const org = (
+    await db
+      .select()
+      .from(organization)
+      .where(eq(organization.id, input.organizationId))
+      .limit(1)
+  ).at(0)
   if (!org) {
     throw new NotFoundError(m.server_organization_not_found())
   }
@@ -92,39 +93,45 @@ export async function inviteMember(input: {
     await tx.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify(['invitation', input.organizationId, email])}, 0))`,
     )
-    const [existingUser] = await tx
-      .select({ id: user.id })
-      .from(user)
-      .where(eq(user.email, email))
-      .limit(1)
-    if (existingUser) {
-      const [existingMember] = await tx
-        .select({ id: membership.id })
-        .from(membership)
-        .where(
-          and(
-            eq(membership.userId, existingUser.id),
-            eq(membership.organizationId, input.organizationId),
-          ),
-        )
+    const existingUser = (
+      await tx
+        .select({ id: user.id })
+        .from(user)
+        .where(eq(user.email, email))
         .limit(1)
+    ).at(0)
+    if (existingUser) {
+      const existingMember = (
+        await tx
+          .select({ id: membership.id })
+          .from(membership)
+          .where(
+            and(
+              eq(membership.userId, existingUser.id),
+              eq(membership.organizationId, input.organizationId),
+            ),
+          )
+          .limit(1)
+      ).at(0)
       if (existingMember) {
         throw new ConflictError(m.server_email_already_member())
       }
     }
 
-    const [pending] = await tx
-      .select({ id: invitation.id })
-      .from(invitation)
-      .where(
-        and(
-          eq(invitation.organizationId, input.organizationId),
-          eq(invitation.email, email),
-          isNull(invitation.acceptedAt),
-          gt(invitation.expiresAt, new Date()),
-        ),
-      )
-      .limit(1)
+    const pending = (
+      await tx
+        .select({ id: invitation.id })
+        .from(invitation)
+        .where(
+          and(
+            eq(invitation.organizationId, input.organizationId),
+            eq(invitation.email, email),
+            isNull(invitation.acceptedAt),
+            gt(invitation.expiresAt, new Date()),
+          ),
+        )
+        .limit(1)
+    ).at(0)
     if (pending) {
       throw new ConflictError(m.server_invitation_pending())
     }
@@ -134,17 +141,19 @@ export async function inviteMember(input: {
 
     // Queued in the same transaction, so the invitation and its email are
     // stored together. A crash before the send leaves a row the worker sends.
-    const [row] = await tx
-      .insert(invitation)
-      .values({
-        email,
-        organizationId: input.organizationId,
-        role: input.role,
-        tokenHash,
-        expiresAt,
-        deliveryStatus: 'queued',
-      })
-      .returning()
+    const row = (
+      await tx
+        .insert(invitation)
+        .values({
+          email,
+          organizationId: input.organizationId,
+          role: input.role,
+          tokenHash,
+          expiresAt,
+          deliveryStatus: 'queued',
+        })
+        .returning()
+    ).at(0)
     if (!row) {
       throw new Error(m.server_failed_to_create_invitation())
     }
@@ -225,11 +234,13 @@ async function sendInvitation(
   if (result.status !== 'sent') {
     throw new InvitationDeliveryError(mailFailureMessage(result.failure))
   }
-  const [row] = await db
-    .select(INVITATION_COLUMNS)
-    .from(invitation)
-    .where(eq(invitation.id, invitationId))
-    .limit(1)
+  const row = (
+    await db
+      .select(INVITATION_COLUMNS)
+      .from(invitation)
+      .where(eq(invitation.id, invitationId))
+      .limit(1)
+  ).at(0)
   if (!row) throw new NotFoundError(m.server_invitation_not_found())
   return row
 }
@@ -251,11 +262,13 @@ export async function getInvitationById(id: string) {
 
 export async function revokeInvitation(id: string, actorId: string) {
   await db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select()
-      .from(invitation)
-      .where(eq(invitation.id, id))
-      .for('update')
+    const existing = (
+      await tx
+        .select()
+        .from(invitation)
+        .where(eq(invitation.id, id))
+        .for('update')
+    ).at(0)
     if (!existing) throw new NotFoundError(m.server_invitation_not_found())
     if (existing.acceptedAt)
       throw new ConflictError(m.server_invitation_already_accepted())
@@ -319,11 +332,13 @@ async function reissueInvitation(
   action: 'invitation.resend' | 'invitation.regenerate_link',
 ) {
   return db.transaction(async (tx) => {
-    const [locked] = await tx
-      .select()
-      .from(invitation)
-      .where(eq(invitation.id, id))
-      .for('update')
+    const locked = (
+      await tx
+        .select()
+        .from(invitation)
+        .where(eq(invitation.id, id))
+        .for('update')
+    ).at(0)
     if (!locked) {
       throw new NotFoundError(m.server_invitation_not_found())
     }
@@ -331,43 +346,49 @@ async function reissueInvitation(
       throw new ConflictError(m.server_invitation_already_accepted())
     }
 
-    const [org] = await tx
-      .select({ id: organization.id })
-      .from(organization)
-      .where(eq(organization.id, locked.organizationId))
-      .limit(1)
+    const org = (
+      await tx
+        .select({ id: organization.id })
+        .from(organization)
+        .where(eq(organization.id, locked.organizationId))
+        .limit(1)
+    ).at(0)
     if (!org) {
       throw new NotFoundError(m.server_organization_not_found())
     }
 
-    const [alreadyMember] = await tx
-      .select({ id: membership.id })
-      .from(membership)
-      .innerJoin(user, eq(membership.userId, user.id))
-      .where(
-        and(
-          eq(membership.organizationId, locked.organizationId),
-          eq(user.email, locked.email),
-        ),
-      )
-      .limit(1)
+    const alreadyMember = (
+      await tx
+        .select({ id: membership.id })
+        .from(membership)
+        .innerJoin(user, eq(membership.userId, user.id))
+        .where(
+          and(
+            eq(membership.organizationId, locked.organizationId),
+            eq(user.email, locked.email),
+          ),
+        )
+        .limit(1)
+    ).at(0)
     if (alreadyMember) {
       throw new ConflictError(m.server_email_already_member())
     }
 
     const { token, tokenHash } = newInvitationToken()
-    const [updated] = await tx
-      .update(invitation)
-      .set({
-        tokenHash,
-        expiresAt: new Date(Date.now() + INVITE_TTL_MS),
-        deliveryStatus: 'queued',
-        ...(action === 'invitation.regenerate_link'
-          ? { linkRevealedAt: new Date() }
-          : {}),
-      })
-      .where(eq(invitation.id, id))
-      .returning()
+    const updated = (
+      await tx
+        .update(invitation)
+        .set({
+          tokenHash,
+          expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+          deliveryStatus: 'queued',
+          ...(action === 'invitation.regenerate_link'
+            ? { linkRevealedAt: new Date() }
+            : {}),
+        })
+        .where(eq(invitation.id, id))
+        .returning()
+    ).at(0)
     if (!updated) {
       throw new NotFoundError(m.server_invitation_not_found())
     }
@@ -390,17 +411,19 @@ async function reissueInvitation(
 }
 
 export async function getInvitation(token: string) {
-  const [row] = await db
-    .select()
-    .from(invitation)
-    .where(
-      and(
-        eq(invitation.tokenHash, hashToken(token)),
-        isNull(invitation.acceptedAt),
-        gt(invitation.expiresAt, new Date()),
-      ),
-    )
-    .limit(1)
+  const row = (
+    await db
+      .select()
+      .from(invitation)
+      .where(
+        and(
+          eq(invitation.tokenHash, hashToken(token)),
+          isNull(invitation.acceptedAt),
+          gt(invitation.expiresAt, new Date()),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   return row ?? null
 }
 
@@ -411,14 +434,16 @@ export async function acceptInvitation(input: {
   const tokenHash = hashToken(input.token)
   // Read only the tuple identity first. Re-read the invitation under both
   // locks, so revocation/acceptance cannot make this snapshot authoritative.
-  const [identity] = await db
-    .select({
-      organizationId: invitation.organizationId,
-      email: invitation.email,
-    })
-    .from(invitation)
-    .where(eq(invitation.tokenHash, tokenHash))
-    .limit(1)
+  const identity = (
+    await db
+      .select({
+        organizationId: invitation.organizationId,
+        email: invitation.email,
+      })
+      .from(invitation)
+      .where(eq(invitation.tokenHash, tokenHash))
+      .limit(1)
+  ).at(0)
   if (!identity) throw new NotFoundError(m.server_invitation_not_found())
   // Set only when this call accepted the invitation (replays notify nobody).
   const newlyAccepted = { invitationId: null as string | null }
@@ -426,37 +451,43 @@ export async function acceptInvitation(input: {
     await tx.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify(['invitation', identity.organizationId, normalizeEmail(identity.email)])}, 0))`,
     )
-    const [invite] = await tx
-      .select()
-      .from(invitation)
-      .where(eq(invitation.tokenHash, tokenHash))
-      .for('update')
+    const invite = (
+      await tx
+        .select()
+        .from(invitation)
+        .where(eq(invitation.tokenHash, tokenHash))
+        .for('update')
+    ).at(0)
     if (
       !invite ||
       (!invite.acceptedAt && invite.expiresAt.getTime() <= Date.now())
     )
       throw new NotFoundError(m.server_invitation_not_found())
-    const [invitee] = await tx
-      .select({ email: user.email })
-      .from(user)
-      .where(eq(user.id, input.userId))
-      .limit(1)
+    const invitee = (
+      await tx
+        .select({ email: user.email })
+        .from(user)
+        .where(eq(user.id, input.userId))
+        .limit(1)
+    ).at(0)
     if (!invitee) throw new NotFoundError(m.server_user_not_found())
     if (normalizeEmail(invitee.email) !== normalizeEmail(invite.email)) {
       if (invite.acceptedAt)
         throw new NotFoundError(m.server_invitation_not_found())
       throw new ConflictError(m.server_invite_email_mismatch())
     }
-    const [existingMember] = await tx
-      .select()
-      .from(membership)
-      .where(
-        and(
-          eq(membership.userId, input.userId),
-          eq(membership.organizationId, invite.organizationId),
-        ),
-      )
-      .limit(1)
+    const existingMember = (
+      await tx
+        .select()
+        .from(membership)
+        .where(
+          and(
+            eq(membership.userId, input.userId),
+            eq(membership.organizationId, invite.organizationId),
+          ),
+        )
+        .limit(1)
+    ).at(0)
     // A consumed link can reopen an existing membership, never restore one
     // that an owner removed later.
     if (invite.acceptedAt) {
@@ -480,16 +511,18 @@ export async function acceptInvitation(input: {
       .onConflictDoNothing({
         target: [membership.userId, membership.organizationId],
       })
-    const [member] = await tx
-      .select()
-      .from(membership)
-      .where(
-        and(
-          eq(membership.userId, input.userId),
-          eq(membership.organizationId, invite.organizationId),
-        ),
-      )
-      .limit(1)
+    const member = (
+      await tx
+        .select()
+        .from(membership)
+        .where(
+          and(
+            eq(membership.userId, input.userId),
+            eq(membership.organizationId, invite.organizationId),
+          ),
+        )
+        .limit(1)
+    ).at(0)
     if (!member) throw new NotFoundError(m.server_member_not_found())
     await tx
       .update(invitation)

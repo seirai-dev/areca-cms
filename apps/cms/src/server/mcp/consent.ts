@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .select() are checked defensively */
 import { verifyOAuthQueryParams } from '@better-auth/oauth-provider'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { and, asc, eq, inArray } from 'drizzle-orm'
@@ -72,13 +71,18 @@ export async function readSignedConsentQuery(
 
 /** The registered app behind a client id, or null. */
 export async function findOAuthClient(clientId: string) {
-  const [client] = await db
-    .select()
-    .from(oauthClient)
-    .where(
-      and(eq(oauthClient.clientId, clientId), eq(oauthClient.disabled, false)),
-    )
-    .limit(1)
+  const client = (
+    await db
+      .select()
+      .from(oauthClient)
+      .where(
+        and(
+          eq(oauthClient.clientId, clientId),
+          eq(oauthClient.disabled, false),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   return client ?? null
 }
 
@@ -259,11 +263,13 @@ export async function describeConsentRequest(
   }
   const siteSlug = parsed.target.slug
 
-  const [target] = await db
-    .select(siteCoreColumns)
-    .from(site)
-    .where(eq(site.slug, siteSlug))
-    .limit(1)
+  const target = (
+    await db
+      .select(siteCoreColumns)
+      .from(site)
+      .where(eq(site.slug, siteSlug))
+      .limit(1)
+  ).at(0)
   // A dev env is not offered to anyone but an agency admin (Decision 3).
   if (
     !target ||

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 /** Agency → Mail read models: recent emails and the failure streak. */
 import { and, desc, eq, gt, max, ne, or } from 'drizzle-orm'
 
@@ -81,14 +80,18 @@ const STREAK_SAMPLE = 50
 export async function getMailHealth(): Promise<MailHealth> {
   // Test emails use unsaved settings, so they say nothing about live sending.
   const live = ne(emailOutbox.kind, 'test')
-  const [latest] = await db
-    .select({ sentAt: max(emailOutbox.sentAt) })
-    .from(emailOutbox)
-    .where(live)
-  const [settings] = await db
-    .select({ updatedAt: mailSettings.updatedAt })
-    .from(mailSettings)
-    .limit(1)
+  const latest = (
+    await db
+      .select({ sentAt: max(emailOutbox.sentAt) })
+      .from(emailOutbox)
+      .where(live)
+  ).at(0)
+  const settings = (
+    await db
+      .select({ updatedAt: mailSettings.updatedAt })
+      .from(mailSettings)
+      .limit(1)
+  ).at(0)
   // Failures count from the last success, or from the last settings change
   // (a new server deserves a fresh start).
   const since = healthWindowStart(

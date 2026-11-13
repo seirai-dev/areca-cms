@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import { describe, expect, it } from 'vitest'
 
 import { db } from '#/db'
@@ -8,15 +7,17 @@ import { EMPTY_LOGIN_TAGLINES, loginTaglineFor } from '#/lib/branding'
 import { getBranding, resetBranding, updateBranding } from './branding'
 
 async function createActor() {
-  const [actor] = await db
-    .insert(user)
-    .values({
-      id: crypto.randomUUID(),
-      name: 'Branding admin',
-      email: `branding-${crypto.randomUUID()}@test.local`,
-      emailVerified: true,
-    })
-    .returning({ id: user.id })
+  const actor = (
+    await db
+      .insert(user)
+      .values({
+        id: crypto.randomUUID(),
+        name: 'Branding admin',
+        email: `branding-${crypto.randomUUID()}@test.local`,
+        emailVerified: true,
+      })
+      .returning({ id: user.id })
+  ).at(0)
   if (!actor) throw new Error('actor insert failed')
   return actor.id
 }

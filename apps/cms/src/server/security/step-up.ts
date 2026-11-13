@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { and, eq, gt, like } from 'drizzle-orm'
 
 import { withFactorLock } from './factor-lock'
@@ -42,16 +41,18 @@ export async function assertFreshSession(
     : session.session.createdAt
   if (isFresh([factorAt], now)) return
 
-  const [marker] = await db
-    .select({ createdAt: verification.createdAt })
-    .from(verification)
-    .where(
-      and(
-        eq(verification.identifier, markerId(session.session.id)),
-        gt(verification.expiresAt, now),
-      ),
-    )
-    .limit(1)
+  const marker = (
+    await db
+      .select({ createdAt: verification.createdAt })
+      .from(verification)
+      .where(
+        and(
+          eq(verification.identifier, markerId(session.session.id)),
+          gt(verification.expiresAt, now),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   if (isFresh([marker?.createdAt], now)) return
 
   throw new ReauthRequiredError()
@@ -79,16 +80,18 @@ export async function recordStepUp(
 }
 
 async function failureCount(userId: string, now: Date) {
-  const [row] = await db
-    .select({ value: verification.value })
-    .from(verification)
-    .where(
-      and(
-        eq(verification.identifier, failureId(userId)),
-        gt(verification.expiresAt, now),
-      ),
-    )
-    .limit(1)
+  const row = (
+    await db
+      .select({ value: verification.value })
+      .from(verification)
+      .where(
+        and(
+          eq(verification.identifier, failureId(userId)),
+          gt(verification.expiresAt, now),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   return row ? Number(row.value) || 0 : 0
 }
 

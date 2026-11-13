@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .select() are checked defensively */
 import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -52,7 +51,7 @@ async function fixture() {
         emailVerified: true,
       })
       .returning()
-  )[0]
+  ).at(0)
   if (!owner) throw new Error('fixture failed')
   const clientId = `app-${crypto.randomUUID()}`
   await db.insert(oauthClient).values({
@@ -60,16 +59,18 @@ async function fixture() {
     clientId,
     redirectUris: ['http://localhost/callback'],
   })
-  const [connection] = await db
-    .insert(mcpConnection)
-    .values({
-      userId: owner.id,
-      siteId: ctx.site.id,
-      clientId,
-      clientName: 'Assistant',
-      allowGoLive: false,
-    })
-    .returning()
+  const connection = (
+    await db
+      .insert(mcpConnection)
+      .values({
+        userId: owner.id,
+        siteId: ctx.site.id,
+        clientId,
+        clientName: 'Assistant',
+        allowGoLive: false,
+      })
+      .returning()
+  ).at(0)
   await db
     .insert(membership)
     .values({ userId: owner.id, organizationId: ctx.org.id, role: 'editor' })
@@ -124,10 +125,12 @@ describe.skipIf(!hasDb)('suspended people and their app connections', () => {
     expect(blocked.headers.get('www-authenticate')).toContain('invalid_token')
 
     // Suspended, not revoked: the connection row is still usable.
-    const [row] = await db
-      .select()
-      .from(mcpConnection)
-      .where(eq(mcpConnection.id, fx.connection.id))
+    const row = (
+      await db
+        .select()
+        .from(mcpConnection)
+        .where(eq(mcpConnection.id, fx.connection.id))
+    ).at(0)
     expect(row?.revokedAt).toBeNull()
 
     await unblockUser({ actorId: fx.actor.id, userId: fx.owner.id })
@@ -141,7 +144,9 @@ describe.skipIf(!hasDb)('suspended people and their app connections', () => {
   it('live role lookup treats a blocked person as having no access, whatever their role', async () => {
     const fx = await fixture()
     await blockUser({ actorId: fx.actor.id, userId: fx.owner.id })
-    const [owner] = await db.select().from(user).where(eq(user.id, fx.owner.id))
+    const owner = (
+      await db.select().from(user).where(eq(user.id, fx.owner.id))
+    ).at(0)
     expect(
       await liveRoleFor(
         {

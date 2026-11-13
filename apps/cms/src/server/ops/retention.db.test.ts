@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import { eq, inArray } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -44,17 +43,19 @@ async function finishedJob(
     dispatchUncertain?: boolean
   },
 ) {
-  const [row] = await db
-    .insert(buildJob)
-    .values({
-      siteId,
-      publicationId,
-      status: input.status ?? 'succeeded',
-      dispatchUncertain: input.dispatchUncertain ?? false,
-      finishedAt: daysAgo(input.finishedDaysAgo),
-      createdAt: daysAgo(input.createdDaysAgo),
-    })
-    .returning()
+  const row = (
+    await db
+      .insert(buildJob)
+      .values({
+        siteId,
+        publicationId,
+        status: input.status ?? 'succeeded',
+        dispatchUncertain: input.dispatchUncertain ?? false,
+        finishedAt: daysAgo(input.finishedDaysAgo),
+        createdAt: daysAgo(input.createdDaysAgo),
+      })
+      .returning()
+  ).at(0)
   if (!row) throw new Error('fixture failed')
   return row
 }
@@ -318,10 +319,12 @@ describe.skipIf(!hasDb)('retention', () => {
 
     await runRetention(NOW)
 
-    const [still] = await db
-      .select({ id: publication.id })
-      .from(publication)
-      .where(eq(publication.id, pub.id))
+    const still = (
+      await db
+        .select({ id: publication.id })
+        .from(publication)
+        .where(eq(publication.id, pub.id))
+    ).at(0)
     expect(still?.id).toBe(pub.id)
   })
 })

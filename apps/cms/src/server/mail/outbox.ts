@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 /**
  * Email outbox: every email is a row in `email_outbox`. User-triggered sends
  * try immediately (`sendNow`); the worker loop retries the rest.
@@ -130,32 +129,34 @@ export async function enqueueEmail(
 ): Promise<EnqueuedEmail> {
   const locale = mailLocale(input.locale)
   const subject = await renderSubject(input, locale, executor)
-  const [row] = await executor
-    .insert(emailOutbox)
-    .values({
-      kind: input.kind,
-      toAddress: input.to,
-      userId: input.userId ?? null,
-      organizationId: input.organizationId ?? null,
-      notificationId: input.notificationId ?? null,
-      subject,
-      template: input.template,
-      params: input.params,
-      locale,
-      ...(input.immediate
-        ? {
-            status: 'sending' as const,
-            attempts: IMMEDIATE_ATTEMPT,
-            leaseUntil: leaseFromNow(),
-            nextAttemptAt: null,
-          }
-        : {
-            status: 'queued' as const,
-            attempts: 0,
-            nextAttemptAt: new Date(),
-          }),
-    })
-    .returning({ id: emailOutbox.id })
+  const row = (
+    await executor
+      .insert(emailOutbox)
+      .values({
+        kind: input.kind,
+        toAddress: input.to,
+        userId: input.userId ?? null,
+        organizationId: input.organizationId ?? null,
+        notificationId: input.notificationId ?? null,
+        subject,
+        template: input.template,
+        params: input.params,
+        locale,
+        ...(input.immediate
+          ? {
+              status: 'sending' as const,
+              attempts: IMMEDIATE_ATTEMPT,
+              leaseUntil: leaseFromNow(),
+              nextAttemptAt: null,
+            }
+          : {
+              status: 'queued' as const,
+              attempts: 0,
+              nextAttemptAt: new Date(),
+            }),
+      })
+      .returning({ id: emailOutbox.id })
+  ).at(0)
   if (!row) throw new Error('Failed to queue email')
   return input.immediate
     ? { id: row.id, claimedAttempt: IMMEDIATE_ATTEMPT }
@@ -197,37 +198,39 @@ export async function sendNow(
   } = {},
 ): Promise<SendResult> {
   if (opts.claimedAttempt !== undefined) {
-    const [owned] = await db
-      .select()
-      .from(emailOutbox)
-      .where(
-        and(
-          eq(emailOutbox.id, id),
-          eq(emailOutbox.attempts, opts.claimedAttempt),
-          eq(emailOutbox.status, 'sending'),
-        ),
-      )
-      .limit(1)
+    const owned = (
+      await db
+        .select()
+        .from(emailOutbox)
+        .where(
+          and(
+            eq(emailOutbox.id, id),
+            eq(emailOutbox.attempts, opts.claimedAttempt),
+            eq(emailOutbox.status, 'sending'),
+          ),
+        )
+        .limit(1)
+    ).at(0)
     if (owned) return sendClaimed(owned, opts.renderParams)
   } else {
-    const [claimed] = await db
-      .update(emailOutbox)
-      .set({
-        status: 'sending',
-        leaseUntil: new Date(Date.now() + LEASE_MS),
-        attempts: sql`${emailOutbox.attempts} + 1`,
-      })
-      .where(and(eq(emailOutbox.id, id), eq(emailOutbox.status, 'queued')))
-      .returning()
+    const claimed = (
+      await db
+        .update(emailOutbox)
+        .set({
+          status: 'sending',
+          leaseUntil: new Date(Date.now() + LEASE_MS),
+          attempts: sql`${emailOutbox.attempts} + 1`,
+        })
+        .where(and(eq(emailOutbox.id, id), eq(emailOutbox.status, 'queued')))
+        .returning()
+    ).at(0)
     if (claimed) return sendClaimed(claimed, opts.renderParams)
   }
 
   // Already sent, being sent by the worker, or failed: report that state.
-  const [current] = await db
-    .select()
-    .from(emailOutbox)
-    .where(eq(emailOutbox.id, id))
-    .limit(1)
+  const current = (
+    await db.select().from(emailOutbox).where(eq(emailOutbox.id, id)).limit(1)
+  ).at(0)
   if (!current) throw new Error(`Email ${id} not found`)
   return resultOf(current)
 }
@@ -297,29 +300,33 @@ export async function sendTestEmail(input: {
   userId: string
 }): Promise<SendResult> {
   const locale = mailLocale(input.locale)
-  const [sender] = await db
-    .select({ email: user.email })
-    .from(user)
-    .where(eq(user.id, input.userId))
-    .limit(1)
+  const sender = (
+    await db
+      .select({ email: user.email })
+      .from(user)
+      .where(eq(user.id, input.userId))
+      .limit(1)
+  ).at(0)
   const brand = await getBranding()
   const host = input.draft.host.trim()
   const params = { host, sentBy: sender?.email ?? '' }
   const rendered = await renderTemplate('test', params, { locale, brand })
-  const [row] = await db
-    .insert(emailOutbox)
-    .values({
-      kind: 'test',
-      toAddress: input.to,
-      userId: input.userId,
-      subject: rendered.subject,
-      template: 'test',
-      params,
-      locale,
-      status: 'sending',
-      attempts: 1,
-    })
-    .returning()
+  const row = (
+    await db
+      .insert(emailOutbox)
+      .values({
+        kind: 'test',
+        toAddress: input.to,
+        userId: input.userId,
+        subject: rendered.subject,
+        template: 'test',
+        params,
+        locale,
+        status: 'sending',
+        attempts: 1,
+      })
+      .returning()
+  ).at(0)
   if (!row) throw new Error('Failed to record test email')
 
   let config: MailConfig | null = null
@@ -469,15 +476,17 @@ async function dueCandidates(only?: readonly string[]): Promise<string[]> {
  * replicas cannot both win, because the loser's WHERE sees the new lease.
  */
 async function claimById(id: string): Promise<OutboxRow | null> {
-  const [row] = await db
-    .update(emailOutbox)
-    .set({
-      status: 'sending',
-      leaseUntil: leaseFromNow(),
-      attempts: sql`${emailOutbox.attempts} + 1`,
-    })
-    .where(and(eq(emailOutbox.id, id), claimable()))
-    .returning()
+  const row = (
+    await db
+      .update(emailOutbox)
+      .set({
+        status: 'sending',
+        leaseUntil: leaseFromNow(),
+        attempts: sql`${emailOutbox.attempts} + 1`,
+      })
+      .where(and(eq(emailOutbox.id, id), claimable()))
+      .returning()
+  ).at(0)
   return row ?? null
 }
 
@@ -749,11 +758,13 @@ async function staleOutcome(row: OutboxRow): Promise<SendResult> {
     outboxId: row.id,
     attempt: row.attempts,
   })
-  const [current] = await db
-    .select()
-    .from(emailOutbox)
-    .where(eq(emailOutbox.id, row.id))
-    .limit(1)
+  const current = (
+    await db
+      .select()
+      .from(emailOutbox)
+      .where(eq(emailOutbox.id, row.id))
+      .limit(1)
+  ).at(0)
   if (!current) throw new Error(`Email ${row.id} not found`)
   return resultOf(current)
 }

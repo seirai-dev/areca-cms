@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 /**
  * Memberships: who belongs to a client and with which role. Invitations live
  * in `invitations.ts`, the agency admin role in `agency-admins.ts` and the
@@ -77,16 +76,18 @@ export async function applyMemberRole(
 ) {
   const { organizationId, userId, role, actorId } = input
   await lockOrganizationForMutation(tx, organizationId)
-  const [existing] = await tx
-    .select()
-    .from(membership)
-    .where(
-      and(
-        eq(membership.organizationId, organizationId),
-        eq(membership.userId, userId),
-      ),
-    )
-    .limit(1)
+  const existing = (
+    await tx
+      .select()
+      .from(membership)
+      .where(
+        and(
+          eq(membership.organizationId, organizationId),
+          eq(membership.userId, userId),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   if (!existing) {
     throw new NotFoundError(m.server_member_not_found())
   }
@@ -101,22 +102,26 @@ export async function applyMemberRole(
     }
   }
 
-  const [updated] = await tx
-    .update(membership)
-    .set({ role })
-    .where(eq(membership.id, existing.id))
-    .returning()
+  const updated = (
+    await tx
+      .update(membership)
+      .set({ role })
+      .where(eq(membership.id, existing.id))
+      .returning()
+  ).at(0)
   if (!updated) {
     throw new NotFoundError(m.server_member_not_found())
   }
 
   // The name is kept in the row, so the activity log still names the person
   // after they are renamed or deleted.
-  const [person] = await tx
-    .select({ name: user.name })
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1)
+  const person = (
+    await tx
+      .select({ name: user.name })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1)
+  ).at(0)
   await audit(
     {
       organizationId,
@@ -153,11 +158,13 @@ export async function applyMemberRole(
 }
 
 async function organizationName(tx: Tx, organizationId: string) {
-  const [org] = await tx
-    .select({ name: organization.name })
-    .from(organization)
-    .where(eq(organization.id, organizationId))
-    .limit(1)
+  const org = (
+    await tx
+      .select({ name: organization.name })
+      .from(organization)
+      .where(eq(organization.id, organizationId))
+      .limit(1)
+  ).at(0)
   return org?.name ?? ''
 }
 
@@ -182,16 +189,18 @@ export async function applyMemberRemoval(
 ) {
   const { organizationId, userId, actorId } = input
   await lockOrganizationForMutation(tx, organizationId)
-  const [existing] = await tx
-    .select()
-    .from(membership)
-    .where(
-      and(
-        eq(membership.organizationId, organizationId),
-        eq(membership.userId, userId),
-      ),
-    )
-    .limit(1)
+  const existing = (
+    await tx
+      .select()
+      .from(membership)
+      .where(
+        and(
+          eq(membership.organizationId, organizationId),
+          eq(membership.userId, userId),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   if (!existing) {
     throw new NotFoundError(m.server_member_not_found())
   }
@@ -207,16 +216,20 @@ export async function applyMemberRemoval(
   }
 
   // Read before the delete so the email can still name the organization.
-  const [org] = await tx
-    .select({ name: organization.name })
-    .from(organization)
-    .where(eq(organization.id, organizationId))
-    .limit(1)
-  const [actor] = await tx
-    .select({ name: user.name })
-    .from(user)
-    .where(eq(user.id, actorId))
-    .limit(1)
+  const org = (
+    await tx
+      .select({ name: organization.name })
+      .from(organization)
+      .where(eq(organization.id, organizationId))
+      .limit(1)
+  ).at(0)
+  const actor = (
+    await tx
+      .select({ name: user.name })
+      .from(user)
+      .where(eq(user.id, actorId))
+      .limit(1)
+  ).at(0)
 
   await tx.delete(membership).where(eq(membership.id, existing.id))
 

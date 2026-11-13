@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 import type * as mcpKeysFns from '#/server/fn/mcp-keys'
 import { and, eq, isNull } from 'drizzle-orm'
 import { db } from '#/db'
@@ -41,17 +40,19 @@ export const mcpKeysRows = {
     note: 'Owners and agency admins revoke any key on the site; editors only their own. Other keys answer NotFound.',
     override: { editorX: 'not-found' },
     prepare: async (w) => {
-      const [key] = await db
-        .insert(mcpKey)
-        .values({
-          userId: w.users.ownerX.id,
-          siteId: w.X.site.id,
-          name: `authz-revoke-${uniq()}`,
-          tokenPrefix: 'areca_mcp_authz',
-          tokenHash: `authz-${crypto.randomUUID()}`,
-          expiresAt: new Date(Date.now() + 86_400_000),
-        })
-        .returning()
+      const key = (
+        await db
+          .insert(mcpKey)
+          .values({
+            userId: w.users.ownerX.id,
+            siteId: w.X.site.id,
+            name: `authz-revoke-${uniq()}`,
+            tokenPrefix: 'areca_mcp_authz',
+            tokenHash: `authz-${crypto.randomUUID()}`,
+            expiresAt: new Date(Date.now() + 86_400_000),
+          })
+          .returning()
+      ).at(0)
       if (!key) throw new Error('mcp key insert failed')
       return {
         data: { id: key.id },
@@ -85,18 +86,20 @@ export const mcpKeysRows = {
     note: "An agency admin revokes their own agency key; another admin's key answers NotFound.",
     override: { adminStale: 'not-found' },
     prepare: async (w) => {
-      const [key] = await db
-        .insert(mcpKey)
-        .values({
-          userId: w.users.adminMfa.id,
-          scope: 'agency',
-          siteId: null,
-          name: `authz-agency-revoke-${uniq()}`,
-          tokenPrefix: 'areca_mcp_agcy',
-          tokenHash: `authz-${crypto.randomUUID()}`,
-          expiresAt: new Date(Date.now() + 86_400_000),
-        })
-        .returning()
+      const key = (
+        await db
+          .insert(mcpKey)
+          .values({
+            userId: w.users.adminMfa.id,
+            scope: 'agency',
+            siteId: null,
+            name: `authz-agency-revoke-${uniq()}`,
+            tokenPrefix: 'areca_mcp_agcy',
+            tokenHash: `authz-${crypto.randomUUID()}`,
+            expiresAt: new Date(Date.now() + 86_400_000),
+          })
+          .returning()
+      ).at(0)
       if (!key) throw new Error('agency mcp key insert failed')
       return {
         data: { id: key.id },

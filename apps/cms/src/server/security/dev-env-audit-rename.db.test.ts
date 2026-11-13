@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .select() are checked defensively */
 import { and, eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -63,11 +62,13 @@ async function productionWithDev(world: World, actorId: string) {
 }
 
 async function siteSlug(siteId: string) {
-  const [row] = await db
-    .select({ slug: site.slug })
-    .from(site)
-    .where(eq(site.id, siteId))
-    .limit(1)
+  const row = (
+    await db
+      .select({ slug: site.slug })
+      .from(site)
+      .where(eq(site.id, siteId))
+      .limit(1)
+  ).at(0)
   return row?.slug
 }
 

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .select() are checked defensively */
 import { createMcpHandler } from '@modelcontextprotocol/server'
 import type { McpRequestContext } from '@modelcontextprotocol/server'
 import { eq } from 'drizzle-orm'
@@ -213,11 +212,13 @@ export async function handleSiteMcpRequest(
   request: Request,
   siteSlug: string,
 ): Promise<Response> {
-  const [found] = await db
-    .select(siteCoreColumns)
-    .from(site)
-    .where(eq(site.slug, siteSlug))
-    .limit(1)
+  const found = (
+    await db
+      .select(siteCoreColumns)
+      .from(site)
+      .where(eq(site.slug, siteSlug))
+      .limit(1)
+  ).at(0)
   if (!found) return unknownSite()
   const devEnv = isDevSite(found)
   const { challenge401, insufficientScope } = mcpChallenges(
@@ -292,17 +293,19 @@ export async function handleSiteMcpRequest(
   const { userId, clientId, connectionId, resources, scopes } = verdict.token
   const dpop = authorization?.scheme === 'DPoP'
 
-  const [owner] = await db
-    .select({
-      id: user.id,
-      name: user.name,
-      isAgencyAdmin: user.isAgencyAdmin,
-      twoFactorEnabled: user.twoFactorEnabled,
-      blockedAt: user.blockedAt,
-    })
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1)
+  const owner = (
+    await db
+      .select({
+        id: user.id,
+        name: user.name,
+        isAgencyAdmin: user.isAgencyAdmin,
+        twoFactorEnabled: user.twoFactorEnabled,
+        blockedAt: user.blockedAt,
+      })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1)
+  ).at(0)
   if (!owner) {
     return challenge401({ error: 'invalid_token', dpop })
   }

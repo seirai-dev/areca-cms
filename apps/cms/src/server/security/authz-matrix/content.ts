@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 import type * as contentFns from '#/server/fn/content'
 import { and, eq } from 'drizzle-orm'
 import { db } from '#/db'
@@ -155,11 +154,13 @@ export const contentRows = {
     policy: 'org-owner',
     prepare: async (w) => {
       const e = await w.fresh.entry('X')
-      const [rev] = await db
-        .select()
-        .from(entryRevision)
-        .where(eq(entryRevision.entryId, e.id))
-        .limit(1)
+      const rev = (
+        await db
+          .select()
+          .from(entryRevision)
+          .where(eq(entryRevision.entryId, e.id))
+          .limit(1)
+      ).at(0)
       return {
         data: {
           entryId: e.id,

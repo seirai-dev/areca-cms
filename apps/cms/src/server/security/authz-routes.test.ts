@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
-
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -127,6 +125,7 @@ describe.skipIf(!runnable)('API routes: session-authenticated uploads', () => {
     w = await seedWorld()
   }, 60_000)
   afterAll(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unset when beforeAll failed
     await w?.destroy()
   })
 
@@ -236,6 +235,7 @@ describe.skipIf(!runnable)('API routes: site token authentication', () => {
     w = await seedWorld()
   }, 60_000)
   afterAll(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unset when beforeAll failed
     await w?.destroy()
   })
 
@@ -491,6 +491,7 @@ describe.skipIf(!runnable)('API routes: live preview authorization', () => {
     w = await seedWorld()
   }, 60_000)
   afterAll(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unset when beforeAll failed
     await w?.destroy()
   })
 
@@ -512,7 +513,7 @@ describe.skipIf(!runnable)('API routes: live preview authorization', () => {
         .select()
         .from(entry)
         .where(eq(entry.id, w.X.entry.id))
-        .then((rows) => rows[0])
+        .then((rows) => rows.at(0))
       const res = await postLivePreview(
         new Request('http://cms.test/api/editor/live-preview', {
           method: 'POST',
@@ -531,7 +532,7 @@ describe.skipIf(!runnable)('API routes: live preview authorization', () => {
         .select()
         .from(entry)
         .where(eq(entry.id, w.X.entry.id))
-        .then((rows) => rows[0])
+        .then((rows) => rows.at(0))
       expect(after?.draftVersion).toBe(before?.draftVersion)
       expect(after?.draftData).toEqual(before?.draftData)
     })

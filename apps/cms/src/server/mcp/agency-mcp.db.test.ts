@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 import { and, eq, inArray } from 'drizzle-orm'
 import {
   Client,
@@ -834,15 +833,17 @@ describe.skipIf(!runnable)(
           fields: { title: 'Per site', slug: 'per-site-one', body: 'Text' },
         })
         expect(created.isError, created.text).toBe(false)
-        const [row] = await db
-          .select()
-          .from(auditLog)
-          .where(
-            and(
-              eq(auditLog.targetId, String(created.data?.id)),
-              eq(auditLog.action, 'entry.create'),
-            ),
-          )
+        const row = (
+          await db
+            .select()
+            .from(auditLog)
+            .where(
+              and(
+                eq(auditLog.targetId, String(created.data?.id)),
+                eq(auditLog.action, 'entry.create'),
+              ),
+            )
+        ).at(0)
         expect(row?.meta).toMatchObject({
           via: 'mcp',
           mcpKeyName: 'admin site',
@@ -865,15 +866,17 @@ describe.skipIf(!runnable)(
           },
         })
         expect(created.isError, created.text).toBe(false)
-        const [row] = await db
-          .select()
-          .from(auditLog)
-          .where(
-            and(
-              eq(auditLog.targetId, String(created.data?.id)),
-              eq(auditLog.action, 'entry.create'),
-            ),
-          )
+        const row = (
+          await db
+            .select()
+            .from(auditLog)
+            .where(
+              and(
+                eq(auditLog.targetId, String(created.data?.id)),
+                eq(auditLog.action, 'entry.create'),
+              ),
+            )
+        ).at(0)
         expect(row?.meta).toMatchObject({
           via: 'mcp-agency',
           mcpKeyName: 'Agency test key',
@@ -900,12 +903,14 @@ describe.skipIf(!runnable)(
         // Another admin demotes this one: the roster's admin, so the invariant holds.
         await setAgencyAdmin(demoted, false, admin)
 
-        const [keyRow] = await db
-          .select()
-          .from(mcpKey)
-          .where(
-            and(eq(mcpKey.userId, demoted), eq(mcpKey.name, 'Soon revoked')),
-          )
+        const keyRow = (
+          await db
+            .select()
+            .from(mcpKey)
+            .where(
+              and(eq(mcpKey.userId, demoted), eq(mcpKey.name, 'Soon revoked')),
+            )
+        ).at(0)
         expect(keyRow?.revokedAt).not.toBeNull()
         const after = await handleAgencyMcpRequest(
           pingRequest(AGENCY_URL, token),

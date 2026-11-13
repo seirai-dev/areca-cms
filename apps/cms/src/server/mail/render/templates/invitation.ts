@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import { eq } from 'drizzle-orm'
 
 import { db } from '#/db'
@@ -71,16 +70,18 @@ export async function loadInvitationMail(
 ): Promise<InvitationMailData> {
   const executor = connection ?? db
   const invitationId = String(params.invitationId ?? '')
-  const [row] = await executor
-    .select({
-      organizationId: invitation.organizationId,
-      role: invitation.role,
-      expiresAt: invitation.expiresAt,
-      acceptedAt: invitation.acceptedAt,
-    })
-    .from(invitation)
-    .where(eq(invitation.id, invitationId))
-    .limit(1)
+  const row = (
+    await executor
+      .select({
+        organizationId: invitation.organizationId,
+        role: invitation.role,
+        expiresAt: invitation.expiresAt,
+        acceptedAt: invitation.acceptedAt,
+      })
+      .from(invitation)
+      .where(eq(invitation.id, invitationId))
+      .limit(1)
+  ).at(0)
   if (!row) throw new MailRenderError('the invitation no longer exists')
   if (row.acceptedAt) {
     throw new MailRenderError('the invitation was already accepted')
@@ -88,11 +89,13 @@ export async function loadInvitationMail(
   if (row.expiresAt.getTime() <= Date.now()) {
     throw new MailRenderError('the invitation has expired')
   }
-  const [org] = await executor
-    .select({ name: organization.name })
-    .from(organization)
-    .where(eq(organization.id, row.organizationId))
-    .limit(1)
+  const org = (
+    await executor
+      .select({ name: organization.name })
+      .from(organization)
+      .where(eq(organization.id, row.organizationId))
+      .limit(1)
+  ).at(0)
   if (!org) throw new MailRenderError('the organization no longer exists')
   return {
     orgName: org.name,

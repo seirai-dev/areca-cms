@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 /**
  * Notification fan-out. One call stores a `notification` row per recipient
  * whose preference resolves on, and queues the email for verified addresses
@@ -140,22 +139,24 @@ async function deliver(input: NotifyInput): Promise<{ notified: string[] }> {
 
   await db.transaction(async (tx) => {
     for (const item of planned) {
-      const [created] = await tx
-        .insert(notification)
-        .values({
-          userId: item.row.id,
-          organizationId,
-          siteId: payload.siteId ?? null,
-          event,
-          payload: {
-            ...payload,
-            recipientRole: item.role,
-            lockedBy: item.lockedBy,
-          },
-          dedupeKey: item.dedupeKey,
-        })
-        .onConflictDoNothing({ target: notification.dedupeKey })
-        .returning({ id: notification.id })
+      const created = (
+        await tx
+          .insert(notification)
+          .values({
+            userId: item.row.id,
+            organizationId,
+            siteId: payload.siteId ?? null,
+            event,
+            payload: {
+              ...payload,
+              recipientRole: item.role,
+              lockedBy: item.lockedBy,
+            },
+            dedupeKey: item.dedupeKey,
+          })
+          .onConflictDoNothing({ target: notification.dedupeKey })
+          .returning({ id: notification.id })
+      ).at(0)
       if (!created) continue
       // Only verified addresses get email. The in-app row is kept either way.
       if (!item.row.emailVerified || !mailReady) continue

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import { and, eq } from 'drizzle-orm'
 import { verifyPassword } from 'better-auth/crypto'
 
@@ -27,16 +26,18 @@ export async function verifySelfDeletion(input: {
   kind?: 'totp' | 'backup'
   headers: Headers
 }) {
-  const [credential] = await db
-    .select({ password: account.password })
-    .from(account)
-    .where(
-      and(
-        eq(account.userId, input.userId),
-        eq(account.providerId, 'credential'),
-      ),
-    )
-    .limit(1)
+  const credential = (
+    await db
+      .select({ password: account.password })
+      .from(account)
+      .where(
+        and(
+          eq(account.userId, input.userId),
+          eq(account.providerId, 'credential'),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   if (credential?.password) {
     if (!input.password) {
       throw new ForbiddenError(m.server_self_delete_password_required())

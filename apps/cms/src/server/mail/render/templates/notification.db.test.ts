@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { db } from '#/db'
@@ -45,17 +44,19 @@ async function insertNotification(input: {
     entries: [{ title: 'Hello world', collection: 'Blog', change: 'added' }],
     ...input.payload,
   }
-  const [row] = await db
-    .insert(notification)
-    .values({
-      userId: input.userId,
-      organizationId: input.organizationId,
-      siteId: input.siteId,
-      event: input.event,
-      payload,
-      dedupeKey: `${input.event}:${crypto.randomUUID()}:${input.userId}`,
-    })
-    .returning()
+  const row = (
+    await db
+      .insert(notification)
+      .values({
+        userId: input.userId,
+        organizationId: input.organizationId,
+        siteId: input.siteId,
+        event: input.event,
+        payload,
+        dedupeKey: `${input.event}:${crypto.randomUUID()}:${input.userId}`,
+      })
+      .returning()
+  ).at(0)
   if (!row) throw new Error('notification insert failed')
   return row
 }

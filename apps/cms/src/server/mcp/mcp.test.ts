@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 import { and, eq, inArray } from 'drizzle-orm'
 import {
   Client,
@@ -154,7 +153,7 @@ async function call(
   args: Record<string, unknown> = {},
 ): Promise<CallOutcome> {
   const result = await client.callTool({ name, arguments: args })
-  const first = result.content[0]
+  const first = result.content.at(0)
   const text = first?.type === 'text' ? first.text : ''
   let data: Record<string, unknown> | null = null
   if (!result.isError) {
@@ -177,7 +176,9 @@ async function toolNames(client: Client): Promise<string[]> {
 }
 
 async function storedEntry(id: string) {
-  const [row] = await db.select().from(entry).where(eq(entry.id, id)).limit(1)
+  const row = (
+    await db.select().from(entry).where(eq(entry.id, id)).limit(1)
+  ).at(0)
   if (!row) throw new Error('entry missing')
   return row
 }
@@ -247,7 +248,7 @@ describe.skipIf(!hasDb)('MCP server', () => {
       }),
     )
     expect(revoked.status).toBe(401)
-    const [row] = await db.select().from(mcpKey).where(eq(mcpKey.id, id))
+    const row = (await db.select().from(mcpKey).where(eq(mcpKey.id, id))).at(0)
     expect(row?.revokedAt).not.toBeNull()
   })
 
@@ -396,21 +397,23 @@ describe.skipIf(!hasDb)('MCP server', () => {
       name: 'Editor direct',
     })
     const client = await connect(token)
-    const [draft] = await db
-      .insert(entry)
-      .values({
-        siteId: world.ctx.site.id,
-        collectionId: world.col.id,
-        slug: 'editor-cannot-publish',
-        draftData: {
-          title: 'Ready?',
+    const draft = (
+      await db
+        .insert(entry)
+        .values({
+          siteId: world.ctx.site.id,
+          collectionId: world.col.id,
           slug: 'editor-cannot-publish',
-          body: sampleRichText,
-        },
-        createdBy: world.editor,
-        updatedBy: world.editor,
-      })
-      .returning()
+          draftData: {
+            title: 'Ready?',
+            slug: 'editor-cannot-publish',
+            body: sampleRichText,
+          },
+          createdBy: world.editor,
+          updatedBy: world.editor,
+        })
+        .returning()
+    ).at(0)
     if (!draft) throw new Error('insert failed')
 
     let outcome: CallOutcome | Error
@@ -803,19 +806,21 @@ describe.skipIf(!hasDb)('MCP server', () => {
     expect(blocked.isError).toBe(true)
     expect(blocked.text).toContain('private or local')
 
-    const [row] = await db
-      .insert(asset)
-      .values({
-        organizationId: world.ctx.org.id,
-        originSiteId: world.ctx.site.id,
-        storageKey: `${world.ctx.org.id}/mcp-test.png`,
-        originalFilename: 'loaf.png',
-        mimeType: 'image/png',
-        size: 10,
-        altText: 'A loaf',
-        createdBy: world.editor,
-      })
-      .returning()
+    const row = (
+      await db
+        .insert(asset)
+        .values({
+          organizationId: world.ctx.org.id,
+          originSiteId: world.ctx.site.id,
+          storageKey: `${world.ctx.org.id}/mcp-test.png`,
+          originalFilename: 'loaf.png',
+          mimeType: 'image/png',
+          size: 10,
+          altText: 'A loaf',
+          createdBy: world.editor,
+        })
+        .returning()
+    ).at(0)
     if (!row) throw new Error('asset insert failed')
     vi.mocked(uploadAssetFromUrl).mockResolvedValueOnce(row)
 
@@ -959,15 +964,17 @@ describe.skipIf(!hasDb)('MCP server', () => {
     expect(refused.text).toMatch(/content/)
     expect(refused.text).toMatch(/schema was not changed/)
 
-    const [row] = await db
-      .select()
-      .from(collection)
-      .where(
-        and(
-          eq(collection.siteId, world.ctx.site.id),
-          eq(collection.key, 'posts'),
-        ),
-      )
+    const row = (
+      await db
+        .select()
+        .from(collection)
+        .where(
+          and(
+            eq(collection.siteId, world.ctx.site.id),
+            eq(collection.key, 'posts'),
+          ),
+        )
+    ).at(0)
     expect(row?.fields.map((field) => field.key)).toContain('excerpt')
   })
 
@@ -1023,7 +1030,7 @@ describe.skipIf(!hasDb)('MCP server', () => {
       name: 'write_post',
       arguments: { collection: 'posts', topic: 'sourdough' },
     })
-    const first = prompt.messages[0]?.content
+    const first = prompt.messages.at(0)?.content
     expect(first?.type === 'text' && first.text).toContain(
       'get_collection_schema for "posts"',
     )
@@ -1077,7 +1084,7 @@ describe.skipIf(!hasDb)('MCP server', () => {
     const create = tools.find((tool) => tool.name === 'create_entry')
     const props = create?.inputSchema.properties as Record<
       string,
-      Record<string, unknown>
+      Record<string, unknown> | undefined
     >
     expect(props.fields?.type).toBe('object')
     expect(
@@ -1370,35 +1377,39 @@ type GlobalSeed = {
 }
 
 async function seedGlobal(w: World, seed: GlobalSeed) {
-  const [row] = await db
-    .insert(collection)
-    .values({
-      siteId: w.ctx.site.id,
-      key: seed.key,
-      label: seed.label,
-      routePattern: '',
-      fields: seed.fields ?? COMPANY_FIELDS,
-      enabled: seed.enabled ?? true,
-      kind: 'global',
-      seoEnabled: seed.seoEnabled ?? false,
-      previewPath: seed.previewPath ?? null,
-    })
-    .returning()
+  const row = (
+    await db
+      .insert(collection)
+      .values({
+        siteId: w.ctx.site.id,
+        key: seed.key,
+        label: seed.label,
+        routePattern: '',
+        fields: seed.fields ?? COMPANY_FIELDS,
+        enabled: seed.enabled ?? true,
+        kind: 'global',
+        seoEnabled: seed.seoEnabled ?? false,
+        previewPath: seed.previewPath ?? null,
+      })
+      .returning()
+  ).at(0)
   if (!row) throw new Error('global insert failed')
-  const [created] = await db
-    .insert(entry)
-    .values({
-      siteId: w.ctx.site.id,
-      collectionId: row.id,
-      slug: GLOBAL_ENTRY_SLUG,
-      status: seed.status ?? 'draft',
-      draftData: seed.draftData ?? {},
-      publishedData: seed.publishedData ?? null,
-      publishedAt: seed.publishedData ? new Date() : null,
-      createdBy: w.owner,
-      updatedBy: w.owner,
-    })
-    .returning()
+  const created = (
+    await db
+      .insert(entry)
+      .values({
+        siteId: w.ctx.site.id,
+        collectionId: row.id,
+        slug: GLOBAL_ENTRY_SLUG,
+        status: seed.status ?? 'draft',
+        draftData: seed.draftData ?? {},
+        publishedData: seed.publishedData ?? null,
+        publishedAt: seed.publishedData ? new Date() : null,
+        createdBy: w.owner,
+        updatedBy: w.owner,
+      })
+      .returning()
+  ).at(0)
   if (!created) throw new Error('global entry insert failed')
   return { collectionId: row.id, entryId: created.id }
 }
@@ -1451,7 +1462,7 @@ async function callArray(
 ): Promise<Record<string, unknown>[]> {
   const result = await client.callTool({ name, arguments: args })
   expect(result.isError).toBeFalsy()
-  const first = result.content[0]
+  const first = result.content.at(0)
   const parsed: unknown = JSON.parse(
     first?.type === 'text' ? first.text : 'null',
   )

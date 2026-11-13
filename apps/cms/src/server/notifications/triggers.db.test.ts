@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -67,11 +66,11 @@ async function setup() {
 }
 
 async function rowFor(event: EventKey, subjectId: string, userId: string) {
-  const [row] = await db
+  const rows = await db
     .select()
     .from(notification)
     .where(eq(notification.dedupeKey, `${event}:${subjectId}:${userId}`))
-  return row
+  return rows.at(0)
 }
 
 async function setOrgRule(
@@ -389,17 +388,19 @@ describe('never fails the caller', () => {
 
 /** An accepted invitation, with its send recorded in the audit log the way `inviteMember` writes it. */
 async function createInvitation(orgId: string, senderId: string | null) {
-  const [row] = await db
-    .insert(invitation)
-    .values({
-      email: `invitee-${crypto.randomUUID()}@test.local`,
-      organizationId: orgId,
-      role: 'editor',
-      tokenHash: hashToken(crypto.randomUUID()),
-      expiresAt: new Date(Date.now() + 86_400_000),
-      acceptedAt: new Date(),
-    })
-    .returning()
+  const row = (
+    await db
+      .insert(invitation)
+      .values({
+        email: `invitee-${crypto.randomUUID()}@test.local`,
+        organizationId: orgId,
+        role: 'editor',
+        tokenHash: hashToken(crypto.randomUUID()),
+        expiresAt: new Date(Date.now() + 86_400_000),
+        acceptedAt: new Date(),
+      })
+      .returning()
+  ).at(0)
   if (!row) throw new Error('Failed to create invitation')
   if (senderId) {
     await db.insert(auditLog).values({

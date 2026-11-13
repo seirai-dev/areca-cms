@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { eq } from 'drizzle-orm'
 
 import { m } from '#/paraglide/messages'
@@ -15,11 +14,9 @@ export async function resetAdminFactorLockout(userId: string, actorId: string) {
     throw new ForbiddenError(m.server_factor_lockout_self_reset())
   await withFactorLock(userId, () =>
     db.transaction(async (tx) => {
-      const [target] = await tx
-        .select()
-        .from(user)
-        .where(eq(user.id, userId))
-        .limit(1)
+      const target = (
+        await tx.select().from(user).where(eq(user.id, userId)).limit(1)
+      ).at(0)
       if (!target?.isAgencyAdmin)
         throw new NotFoundError(m.server_user_not_found())
       await clearFactorLockout(tx, userId)

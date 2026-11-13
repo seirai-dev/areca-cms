@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays and fake responses are checked defensively in tests. */
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
@@ -49,7 +48,7 @@ function fakeCloudflare(behaviour: Behaviour = {}) {
     const url = new URL(String(input))
     authorizations.push(new Headers(init?.headers).get('authorization') ?? '')
     const account = /^\/client\/v4\/accounts\/([^/]+)\//.exec(url.pathname)
-    if (account) accounts.push(account[1] ?? '')
+    if (account) accounts.push(account[1])
     const envelope = (status: number, body: unknown) =>
       new Response(JSON.stringify(body), {
         status,
