@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
+import { useReducedMotion } from 'motion/react'
+import * as motion from 'motion/react-m'
 
 import { EASE_STANDARD } from '#/lib/motion'
 

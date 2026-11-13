@@ -1,5 +1,6 @@
 import * as React from 'react'
-import { motion, useReducedMotion } from 'motion/react'
+import { useReducedMotion } from 'motion/react'
+import * as motion from 'motion/react-m'
 
 import { EASE_STANDARD } from '#/lib/motion'
 
@@ -39,6 +40,8 @@ export function Stagger({
   )
 }
 
+const ITEM_TAGS = { div: motion.div, li: motion.li, article: motion.article }
+
 export function StaggerItem({
   as = 'div',
   className,
@@ -58,7 +61,7 @@ export function StaggerItem({
   const reduce = useReducedMotion()
   const ctx = React.useContext(StaggerIndex)
   const [position] = React.useState(() => index ?? ctx?.register() ?? 0)
-  const Comp = motion[as]
+  const Comp = ITEM_TAGS[as]
   if (reduce) {
     const Plain = as
     return (

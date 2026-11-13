@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Dialog as DialogPrimitive } from 'radix-ui'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { AnimatePresence, useReducedMotion } from 'motion/react'
+import * as motion from 'motion/react-m'
 import { X } from '@phosphor-icons/react'
 
 import { useRegisterOverlay } from '#/components/ui/overlay-registry'

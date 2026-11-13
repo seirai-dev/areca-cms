@@ -1,5 +1,6 @@
 import * as React from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { AnimatePresence, useReducedMotion } from 'motion/react'
+import * as motion from 'motion/react-m'
 import { CaretRight, RocketLaunch } from '@phosphor-icons/react'
 import { Link } from '@tanstack/react-router'
 

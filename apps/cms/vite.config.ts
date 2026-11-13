@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite'
-import type { Plugin } from 'vite'
+import type { Plugin, UserConfig } from 'vite'
 import { devtools } from '@tanstack/devtools-vite'
 import { paraglideVitePlugin } from '@inlang/paraglide-js'
 
@@ -8,6 +8,12 @@ import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import viteReact from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { nitro } from 'nitro/vite'
+
+import {
+  motionFeaturesGroup,
+  motionShellModules,
+} from './src/build/motion-chunks'
+import { phosphorWeights } from './src/build/phosphor-weights'
 
 const ASSET_FILE_PREFIX = '/api/assets/file/'
 
@@ -30,7 +36,7 @@ function arecaAssetFileDevPlugin(): Plugin {
   }
 }
 
-const config = defineConfig(({ command }) => ({
+const config = defineConfig(async ({ command }): Promise<UserConfig> => ({
   resolve: { tsconfigPaths: true },
   // E2E runs (scripts/e2e-isolated.mjs, playwright.config.ts) set
   // VITE_FREEZE=true: no file watching and no HMR, so the server keeps
@@ -41,8 +47,50 @@ const config = defineConfig(({ command }) => ({
     process.env.VITE_FREEZE === 'true'
       ? { hmr: false, watch: null }
       : undefined,
+  environments: {
+    client: {
+      build: {
+        rolldownOptions: {
+          output: {
+            chunkFileNames: (chunk) =>
+              chunk.name.startsWith('icons~')
+                ? 'assets/icons-[hash].js'
+                : 'assets/[name]-[hash].js',
+            codeSplitting: {
+              groups:
+                command === 'build'
+                  ? [
+                      motionFeaturesGroup(
+                        await motionShellModules(import.meta.dirname),
+                      ),
+                      // Icons used before sign-in stay with the entry; the
+                      // rest share one chunk instead of one tiny chunk per
+                      // icon.
+                      {
+                        name: 'icons-initial',
+                        test: /@phosphor-icons[\\/]react[\\/]/,
+                        tags: ['$initial'],
+                        priority: 1,
+                        includeDependenciesRecursively: false,
+                      },
+                      {
+                        name: 'icons',
+                        test: /@phosphor-icons[\\/]react[\\/]/,
+                        entriesAware: true,
+                        entriesAwareMergeThreshold: 6_000,
+                        includeDependenciesRecursively: false,
+                      },
+                    ]
+                  : [],
+            },
+          },
+        },
+      },
+    },
+  },
   plugins: [
     arecaAssetFileDevPlugin(),
+    phosphorWeights(),
     devtools(),
     paraglideVitePlugin({
       project: './project.inlang',

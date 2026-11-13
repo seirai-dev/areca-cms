@@ -1,4 +1,5 @@
 import { Outlet, createFileRoute, redirect } from '@tanstack/react-router'
+import { LazyMotion } from 'motion/react'
 
 import { AppShell } from '#/components/shell/app-shell'
 import { NotFoundCard } from '#/components/shell/not-found'
@@ -43,14 +44,19 @@ export const Route = createFileRoute('/_app')({
   component: AppLayout,
 })
 
+const loadMotionFeatures = () =>
+  import('#/lib/motion-features').then((mod) => mod.default)
+
 /** Signed-in frame: the shell (sidebar, mobile bars, panels, palette). */
 function AppLayout() {
   const { me } = Route.useRouteContext()
   return (
-    <StepUpProvider>
-      <AppShell me={me}>
-        <Outlet />
-      </AppShell>
-    </StepUpProvider>
+    <LazyMotion features={loadMotionFeatures}>
+      <StepUpProvider>
+        <AppShell me={me}>
+          <Outlet />
+        </AppShell>
+      </StepUpProvider>
+    </LazyMotion>
   )
 }
