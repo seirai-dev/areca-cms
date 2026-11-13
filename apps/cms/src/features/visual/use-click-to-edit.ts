@@ -1,11 +1,11 @@
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
 
-import { SEO_KEY } from '#/lib/seo'
 import { resolvePreviewOwnersFn } from '#/server/fn/content'
 import type { ResolvedOwner } from '#/server/content/preview-owners'
 import { m } from '#/paraglide/messages'
 
+import type { ClickField } from './click-fields'
 import { buildTargets, markerForField, otherOwners } from './click-to-edit'
 import type { SelfIdentity } from './click-to-edit'
 import { highlightMessage, markerKey, modeMessage, ownerKey } from './protocol'
@@ -17,11 +17,10 @@ import type {
   SiteMessage,
 } from './protocol'
 
+export type { ClickField }
+
 /** Outline colour when the theme's accent cannot be read as `#rrggbb`. */
 const FALLBACK_COLOR = '#5856d6'
-
-/** A field the preview can open: its key and the label its chip shows. */
-export type ClickField = { key: string; label: string }
 
 /** A click on an element owned by another entry or section, for the "Open" popover. */
 export type OwnerSelection = {
@@ -210,27 +209,4 @@ export function useClickToEdit(options: ClickToEditOptions): ClickToEdit {
     targetCount: built.targets.length,
     pageUrl,
   }
-}
-
-/** The SEO fields a page can mark (`$seo.title`), with the editor's labels. */
-export function seoClickFields(): ClickField[] {
-  const labels: Record<string, string> = {
-    title: m.editor_seo_title(),
-    description: m.editor_seo_description(),
-    focusKeyphrase: m.editor_seo_keyphrase(),
-    ogTitle: m.editor_seo_og_title(),
-    ogDescription: m.editor_seo_og_description(),
-    ogImage: m.editor_seo_og_image(),
-    summary: m.editor_seo_summary(),
-    keyTakeaways: m.editor_seo_takeaways(),
-    faq: m.editor_seo_faq(),
-    about: m.editor_seo_about(),
-    author: m.editor_seo_author(),
-    canonicalUrl: m.editor_seo_canonical(),
-    jsonLd: m.editor_seo_jsonld(),
-  }
-  return Object.entries(labels).map(([key, label]) => ({
-    key: `${SEO_KEY}.${key}`,
-    label,
-  }))
 }

@@ -13,7 +13,7 @@ import { SharedMarker, translateProps, useLocaleFields } from './locale-fields'
 import type { LocaleFields } from './locale-fields'
 import type { LinkContext } from './rich-text/link-picker'
 import { RichTextEditor } from './rich-text/rich-text-editor'
-import { RichTextPreview } from './rich-text/rich-text-preview'
+import { LazyRichTextPreview } from './lazy-parts'
 
 /** Main-language reference under a translatable field, when not on main. */
 function referenceFor(
@@ -227,7 +227,7 @@ export function EditorCanvas({
                   compact={compact}
                   preview={
                     previewing ? (
-                      <RichTextPreview value={data[field.key]} />
+                      <LazyRichTextPreview value={data[field.key]} />
                     ) : undefined
                   }
                 />

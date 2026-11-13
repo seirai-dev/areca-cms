@@ -15,7 +15,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '#/components/ui/popover'
-import { isSupportedCodeLanguage, CODE_LANGUAGES } from '#/lib/highlight'
+import { isSupportedCodeLanguage, CODE_LANGUAGES } from '#/lib/code-languages'
 import { m } from '#/paraglide/messages'
 
 /** The stored value for "no language". Plain text is stored as null. */

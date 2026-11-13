@@ -45,7 +45,7 @@ import { getAiAvailabilityFn } from '#/server/fn/ai'
 import { listCollectionsFn, listInboundReferencesFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 
-import { AiSeoDialog } from './ai-seo-dialog'
+import { LazyAiSeoDialog } from './lazy-parts'
 import { TranslateLanguageButton } from './translate-language-button'
 import { useAiTranslation } from './use-ai-translation'
 
@@ -75,11 +75,11 @@ import { conflictReadyBlock, EditorConflictNotice } from './conflict-notice'
 import { SeoPanel, plainTextOf } from './seo-panel'
 import { useContentLanguage } from './use-content-language'
 import { useEntryEditor } from './use-entry-editor'
-import { PreviewPane } from '#/features/visual/preview-pane'
+import { LazyPreviewPane } from '#/features/visual/lazy-preview-pane'
 import { VisualEditorLayout } from '#/features/visual/visual-editor-layout'
 import { VisualFullScreenProvider } from '#/features/visual/visual-context'
 import { VisualShortcuts } from '#/features/visual/visual-shortcuts'
-import { seoClickFields } from '#/features/visual/use-click-to-edit'
+import { seoClickFields } from '#/features/visual/click-fields'
 import type { ClickSource } from '#/features/visual/preview-pane'
 import { announceReveal, pulseField } from './reveal-field'
 import {
@@ -952,7 +952,7 @@ function EntryEditorView({
                 </>
               }
               preview={
-                <PreviewPane
+                <LazyPreviewPane
                   previewUrl={editor.previewUrl}
                   title={title}
                   lastSavedAt={editor.lastSavedAt}
@@ -1028,7 +1028,7 @@ function EntryEditorView({
 
           {translate.dialog}
 
-          <AiSeoDialog
+          <LazyAiSeoDialog
             open={aiOpen}
             onOpenChange={setAiOpen}
             siteId={siteId}

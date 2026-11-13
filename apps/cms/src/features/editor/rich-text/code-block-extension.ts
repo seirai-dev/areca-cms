@@ -5,7 +5,7 @@ import type { NodeType } from '@tiptap/pm/model'
 import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
 import { ReactNodeViewRenderer } from '@tiptap/react'
 
-import { normalizeCodeLanguage } from '#/lib/highlight'
+import { normalizeCodeLanguage } from '#/lib/code-languages'
 
 import { CodeBlockView } from './code-block-view'
 import { codeHighlightPlugin } from './code-highlight'

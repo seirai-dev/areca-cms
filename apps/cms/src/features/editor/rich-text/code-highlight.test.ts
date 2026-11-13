@@ -2,14 +2,17 @@ import { getSchema } from '@tiptap/core'
 import type { Decoration } from '@tiptap/pm/view'
 import { DecorationSet } from '@tiptap/pm/view'
 import { Node as ProseMirrorNode } from '@tiptap/pm/model'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 
 import { richTextExtensions } from '#/server/richtext/extensions'
 
 import { editorExtensions } from './code-block-extension'
+import { loadCodeGrammar } from './code-grammars'
 import { buildCodeDecorations, codeTokenRanges } from './code-highlight'
 
 const schema = getSchema(editorExtensions(richTextExtensions))
+
+beforeAll(() => loadCodeGrammar('ts'))
 
 /** The class of an inline decoration (prosemirror-view keeps it on `type`). */
 function classOf(decoration: Decoration): string | undefined {

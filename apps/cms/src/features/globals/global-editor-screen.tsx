@@ -61,12 +61,12 @@ import { previewOrigin } from '#/lib/preview-url'
 import { getAiAvailabilityFn } from '#/server/fn/ai'
 import { getGlobalFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
-import { PreviewPane } from '#/features/visual/preview-pane'
+import { LazyPreviewPane } from '#/features/visual/lazy-preview-pane'
 import type { ClickSource } from '#/features/visual/preview-pane'
 import { VisualEditorLayout } from '#/features/visual/visual-editor-layout'
 import { VisualFullScreenProvider } from '#/features/visual/visual-context'
 import { VisualShortcuts } from '#/features/visual/visual-shortcuts'
-import { seoClickFields } from '#/features/visual/use-click-to-edit'
+import { seoClickFields } from '#/features/visual/click-fields'
 import {
   VISUAL_TOKEN_REFRESH_MS,
   useVisualMode,
@@ -677,7 +677,7 @@ function GlobalEditorView({
                 </LanguageFade>
               }
               preview={
-                <PreviewPane
+                <LazyPreviewPane
                   previewUrl={editor.previewUrl}
                   title={global.label}
                   lastSavedAt={editor.lastSavedAt}
