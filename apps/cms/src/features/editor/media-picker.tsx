@@ -14,7 +14,7 @@ import {
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { assetFileUrl, errorMessage } from '#/lib/content/utils'
+import { assetThumbnail, errorMessage } from '#/lib/content/utils'
 import { Button } from '#/components/ui/button'
 import {
   Dialog,
@@ -348,9 +348,10 @@ function PickerTile({
     >
       {image ? (
         <img
-          src={assetFileUrl(asset.storageKey)}
+          {...assetThumbnail(asset.storageKey, '200px')}
           alt=""
           loading="lazy"
+          decoding="async"
           draggable={false}
           className="size-full object-cover transition-transform duration-300 ease-(--ease-standard) group-hover/tile:scale-[1.03] motion-reduce:group-hover/tile:scale-100"
         />
