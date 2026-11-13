@@ -18,8 +18,20 @@ const meQueryOptions = queryOptions({
   staleTime: 30_000,
 })
 
+/** The user each query client last loaded data for (null: signed out). */
+const cacheOwner = new WeakMap<QueryClient, string | null>()
+
 export async function loadMe(queryClient: QueryClient) {
   const me = await queryClient.fetchQuery(meQueryOptions)
+  // Cached queries belong to whoever was signed in when they ran. When that
+  // changes without a page load (sign-out, another account), drop them all.
+  const userId = me?.user.id ?? null
+  if (cacheOwner.has(queryClient) && cacheOwner.get(queryClient) !== userId) {
+    queryClient.removeQueries({
+      predicate: (query) => query.queryKey[0] !== ME_QUERY_KEY[0],
+    })
+  }
+  cacheOwner.set(queryClient, userId)
   // Never remember "signed out": the next check after signing in must ask.
   if (!me) {
     queryClient.removeQueries({ queryKey: ME_QUERY_KEY })

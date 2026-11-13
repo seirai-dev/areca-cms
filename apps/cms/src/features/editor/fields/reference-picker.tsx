@@ -121,6 +121,8 @@ export function ReferencePicker({
     queryKey: queryKeys.entry(selectedId),
     queryFn: () => getEntryFn({ data: { id: selectedId } }),
     enabled: Boolean(selectedId) && !inList,
+    // A full entry read just for a title; it reloads when the field mounts.
+    refetchOnWindowFocus: false,
   })
   // The chosen entry's title: from the page when it is there, else from the
   // full record fetched for it.

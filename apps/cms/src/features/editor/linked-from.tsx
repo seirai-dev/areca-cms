@@ -30,6 +30,8 @@ export function LinkedFrom({
   const query = useQuery({
     queryKey: queryKeys.linkedFrom(entryId),
     queryFn: () => listLinkedFromFn({ data: { id: entryId } }),
+    // Reloads when the editor opens and after an explicit save.
+    refetchOnWindowFocus: false,
   })
 
   if (query.isPending) return <Skeleton className="h-12" />

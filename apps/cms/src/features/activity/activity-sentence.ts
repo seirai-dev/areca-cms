@@ -399,22 +399,35 @@ export type ActivityGroup<T extends ActivityLike> = {
   count: number
 }
 
+/** When a shared autosave row (see `auditAutosave`) took its last save. */
+export function lastSavedAt(row: ActivityLike) {
+  const value = metaOf(row)?.lastSavedAt
+  if (typeof value !== 'string') return null
+  return Number.isNaN(new Date(value).getTime()) ? null : value
+}
+
 /**
- * Autosaves share one row (see `auditAutosave`): `meta.saves` counts them and
- * `meta.firstSavedAt` keeps when the first one happened. Other rows are one
- * event at `createdAt`.
+ * Autosaves share one row (see `auditAutosave`): `meta.saves` counts them,
+ * `createdAt` is the first one and `meta.lastSavedAt` the newest. Rows written
+ * before that moved `createdAt` to the newest save and kept the first in
+ * `meta.firstSavedAt`. Other rows are one event at `createdAt`.
  */
 function repeatsOf(row: ActivityLike) {
   const meta = metaOf(row)
-  const at = new Date(row.createdAt).getTime()
+  const created = new Date(row.createdAt).getTime()
   const saves = meta?.saves
   if (typeof saves !== 'number' || saves < 1)
-    return { count: 1, at, firstAt: at }
+    return { count: 1, at: created, firstAt: created }
+  const last = lastSavedAt(row)
   const first =
     typeof meta?.firstSavedAt === 'string'
       ? new Date(meta.firstSavedAt).getTime()
       : NaN
-  return { count: saves, at, firstAt: Number.isNaN(first) ? at : first }
+  return {
+    count: saves,
+    at: last ? new Date(last).getTime() : created,
+    firstAt: Number.isNaN(first) ? created : Math.min(first, created),
+  }
 }
 
 /** Collapses consecutive repeats in a newest-first list. */

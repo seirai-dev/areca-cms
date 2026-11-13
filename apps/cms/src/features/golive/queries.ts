@@ -98,8 +98,6 @@ export function jobsQuery(siteId: string) {
     queryKey: [...queryKeys.buildJobs(siteId), 'all'] as const,
     queryFn: async () =>
       (await listBuildJobsFn({ data: { siteId, limit: 50 } })) as JobRow[],
-    // Live build state: refetch whenever the panel opens.
-    staleTime: 0,
     refetchInterval: (query) =>
       query.state.data?.some((job) => isActiveJobStatus(job.status))
         ? 2000
@@ -118,7 +116,6 @@ export function publicationsQuery(siteId: string, pages: number) {
       (await listPublicationsFn({
         data: { siteId, limit: Math.min(limit + 1, 100), offset: 0 },
       })) as PublicationRow[],
-    staleTime: 0,
     refetchInterval: (query) =>
       query.state.data?.some(
         (row) => row.status === 'pending' || row.status === 'building',
@@ -134,7 +131,6 @@ export function buildJobQuery(jobId: string) {
     queryFn: async () =>
       (await getBuildJobFn({ data: { id: jobId } })) as JobRow,
     enabled: Boolean(jobId),
-    staleTime: 0,
     refetchInterval: (query) => {
       const status = query.state.data?.status
       return status && isActiveJobStatus(status) ? 3000 : false
