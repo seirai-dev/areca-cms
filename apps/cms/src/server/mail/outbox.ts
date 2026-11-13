@@ -7,21 +7,7 @@
  * Mail tab (task B) codes against these signatures. Do not change them
  * without updating both.
  */
-import {
-  and,
-  desc,
-  eq,
-  gt,
-  gte,
-  inArray,
-  isNotNull,
-  lt,
-  lte,
-  max,
-  ne,
-  or,
-  sql,
-} from 'drizzle-orm'
+import { and, eq, gte, inArray, isNotNull, lt, lte, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import type { DbExecutor } from '#/db'
@@ -29,7 +15,6 @@ import {
   emailDeliveryAttempt,
   emailOutbox,
   invitation,
-  mailSettings,
   user,
 } from '#/db/schema'
 import { getBranding } from '#/server/admin/branding'
@@ -45,12 +30,7 @@ import {
 } from './errors.ts'
 import type { MailLogContext } from './errors.ts'
 import { formatFrom } from './headers.ts'
-import {
-  failureStreak,
-  healthWindowStart,
-  invitationDeliveryPatch,
-  nextStep,
-} from './outbox-policy.ts'
+import { invitationDeliveryPatch, nextStep } from './outbox-policy.ts'
 import type { InvitationDeliveryStatus } from './outbox-policy.ts'
 import { mailLocale, MailRenderError, renderTemplate } from './render/index.ts'
 import type { MailLocale } from './render/index.ts'
@@ -125,29 +105,6 @@ export type SendResult =
       nextAttemptAt: Date
     }
   | { status: 'failed'; id: string; failure: MailFailure }
-/** Recent emails row for Agency → Mail. Error message is localized. */
-export type RecentEmail = {
-  id: string
-  kind: string
-  to: string
-  subject: string
-  status: OutboxStatus
-  /** True while queued after at least one failed attempt. */
-  retrying: boolean
-  attempts: number
-  createdAt: Date
-  sentAt: Date | null
-  nextAttemptAt: Date | null
-  error: { code: MailFailureCode; message: string } | null
-}
-
-export type MailHealth = {
-  /** Failed attempts since the last successful send (any row). */
-  consecutiveFailures: number
-  lastFailureAt: Date | null
-  lastFailure: { code: MailFailureCode; message: string } | null
-}
-
 type OutboxRow = typeof emailOutbox.$inferSelect
 
 const log = createLogger('mail')
@@ -160,8 +117,6 @@ const IMMEDIATE_ATTEMPT = 1
 const BATCH_SIZE = 20
 /** 5 sends per second. */
 const SEND_INTERVAL_MS = 200
-const RECENT_LIMIT = 50
-const RECENT_LIMIT_MAX = 200
 
 /**
  * Inserts a row. Pass a transaction to enqueue atomically. With `immediate`,
@@ -329,97 +284,6 @@ export async function cleanupOutbox(): Promise<number> {
   return deleted.length
 }
 
-export async function listRecentEmails(opts: {
-  limit?: number
-  status?: 'failed'
-}): Promise<RecentEmail[]> {
-  const limit = Math.min(
-    Math.max(opts.limit ?? RECENT_LIMIT, 1),
-    RECENT_LIMIT_MAX,
-  )
-  // "Failed" includes rows still retrying: they need attention too.
-  const filter =
-    opts.status === 'failed'
-      ? or(
-          eq(emailOutbox.status, 'failed'),
-          and(eq(emailOutbox.status, 'queued'), gt(emailOutbox.attempts, 0)),
-        )
-      : undefined
-  const rows = await db
-    .select()
-    .from(emailOutbox)
-    .where(filter)
-    .orderBy(desc(emailOutbox.createdAt))
-    .limit(limit)
-  return rows.map((row) => ({
-    id: row.id,
-    kind: row.kind,
-    to: row.toAddress,
-    subject: row.subject,
-    status: row.status,
-    retrying: row.status === 'queued' && row.attempts > 0,
-    attempts: row.attempts,
-    createdAt: row.createdAt,
-    sentAt: row.sentAt,
-    nextAttemptAt: row.nextAttemptAt,
-    error: errorOf(row),
-  }))
-}
-
-/** Attempts read for the failure streak. Longer streaks read the same as this. */
-const STREAK_SAMPLE = 50
-
-export async function getMailHealth(): Promise<MailHealth> {
-  // Test emails use unsaved settings, so they say nothing about live sending.
-  const live = ne(emailOutbox.kind, 'test')
-  const [latest] = await db
-    .select({ sentAt: max(emailOutbox.sentAt) })
-    .from(emailOutbox)
-    .where(live)
-  const [settings] = await db
-    .select({ updatedAt: mailSettings.updatedAt })
-    .from(mailSettings)
-    .limit(1)
-  // Failures count from the last success, or from the last settings change
-  // (a new server deserves a fresh start).
-  const since = healthWindowStart(
-    latest?.sentAt ?? null,
-    settings?.updatedAt ?? null,
-  )
-  // Counted per delivery attempt, so one row that failed three times counts
-  // three times, and a row that has not been tried yet counts nothing.
-  const recent = await db
-    .select({
-      outcome: emailDeliveryAttempt.outcome,
-      createdAt: emailDeliveryAttempt.createdAt,
-      errorCode: emailDeliveryAttempt.errorCode,
-      errorParams: emailDeliveryAttempt.errorParams,
-    })
-    .from(emailDeliveryAttempt)
-    .where(gt(emailDeliveryAttempt.createdAt, since))
-    .orderBy(
-      desc(emailDeliveryAttempt.createdAt),
-      desc(emailDeliveryAttempt.attempt),
-    )
-    .limit(STREAK_SAMPLE)
-  const { consecutiveFailures, last } = failureStreak(recent)
-  return {
-    consecutiveFailures,
-    lastFailureAt: last?.createdAt ?? null,
-    lastFailure:
-      last?.errorCode && last.errorParams
-        ? errorOfAttempt(last.errorCode, last.errorParams)
-        : null,
-  }
-}
-
-function errorOfAttempt(code: string, params: Record<string, string>) {
-  return {
-    code: code as MailFailureCode,
-    message: mailFailureMessage({ code: code as MailFailureCode, params }),
-  }
-}
-
 /**
  * Sends the 'test' template to `to` using unsaved form values (not the active
  * config), and records the attempt as a `kind: 'test'` outbox row with its
@@ -485,26 +349,16 @@ export async function sendTestEmail(input: {
     }
     // Test sends are never retried, so the failure is reported as final.
     const failure = { ...toMailFailure(error, context), retryable: false }
-    logMailFailure(log, failure, context)
-    await db
-      .update(emailOutbox)
-      .set({ status: 'failed', ...errorColumns(failure) })
-      .where(eq(emailOutbox.id, row.id))
-    return { status: 'failed', id: row.id, failure }
+    return recordFailure(row, failure, context, TEST_SEND)
   }
-  await db
-    .update(emailOutbox)
-    .set({
-      status: 'sent',
-      sentAt: new Date(),
-      providerMessageId: messageId,
-      lastErrorCode: null,
-      lastErrorParams: null,
-      lastError: null,
-    })
-    .where(eq(emailOutbox.id, row.id))
-  return { status: 'sent', id: row.id }
+  return recordSent(row, messageId, TEST_SEND)
 }
+
+/**
+ * Test sends use unsaved settings, so they are not delivery attempts of the
+ * live config: no attempt record, and `getMailHealth` does not see them.
+ */
+const TEST_SEND: OutcomeOptions = { recordAttempt: false }
 
 /**
  * Cancels queued invitation emails for one invitation. A resend creates a new
@@ -772,9 +626,12 @@ function renderFailure(row: OutboxRow, error: MailRenderError): MailFailure {
  * Records a successful send. Only the claim that still owns the row may write;
  * a stale sender (its lease expired and another claim took over) is ignored.
  */
+type OutcomeOptions = { recordAttempt?: boolean }
+
 async function recordSent(
   row: OutboxRow,
   providerMessageId: string,
+  options: OutcomeOptions = {},
 ): Promise<SendResult> {
   const now = new Date()
   const written = await writeOutcome(
@@ -789,7 +646,7 @@ async function recordSent(
       lastErrorParams: null,
       lastError: null,
     },
-    { outcome: 'sent' },
+    options.recordAttempt === false ? null : { outcome: 'sent' },
   )
   if (!written) return staleOutcome(row)
   await syncInvitation(row, invitationDeliveryPatch('sent', null, now))
@@ -800,16 +657,20 @@ async function recordFailure(
   row: OutboxRow,
   failure: MailFailure,
   context: MailLogContext,
+  options: OutcomeOptions = {},
 ): Promise<SendResult> {
   logMailFailure(log, failure, context)
   const now = new Date()
   const message = mailFailureMessage(failure)
   const step = nextStep(failure, row.attempts, now)
-  const attempt = {
-    outcome: step.retry ? ('retrying' as const) : ('failed' as const),
-    errorCode: failure.code,
-    errorParams: failure.params,
-  }
+  const attempt =
+    options.recordAttempt === false
+      ? null
+      : {
+          outcome: step.retry ? ('retrying' as const) : ('failed' as const),
+          errorCode: failure.code,
+          errorParams: failure.params,
+        }
   if (step.retry) {
     const written = await writeOutcome(
       row,
@@ -846,8 +707,9 @@ async function recordFailure(
 }
 
 /**
- * Writes the row's new state and its attempt record in one transaction. Returns
- * false, and writes nothing, when this claim no longer owns the row.
+ * Writes the row's new state and its attempt record (unless `attempt` is null)
+ * in one transaction. Returns false, and writes nothing, when this claim no
+ * longer owns the row.
  */
 async function writeOutcome(
   row: OutboxRow,
@@ -856,7 +718,7 @@ async function writeOutcome(
     outcome: 'sent' | 'retrying' | 'failed'
     errorCode?: string
     errorParams?: Record<string, string>
-  },
+  } | null,
 ): Promise<boolean> {
   return db.transaction(async (tx) => {
     const owned = await tx
@@ -865,6 +727,7 @@ async function writeOutcome(
       .where(ownedBy(row))
       .returning({ id: emailOutbox.id })
     if (owned.length === 0) return false
+    if (!attempt) return true
     await tx.insert(emailDeliveryAttempt).values({
       outboxId: row.id,
       attempt: row.attempts,
@@ -914,15 +777,6 @@ function errorColumns(failure: MailFailure) {
     lastErrorCode: failure.code,
     lastErrorParams: failure.params,
     lastError: failure.detail,
-  }
-}
-
-function errorOf(row: OutboxRow) {
-  if (!row.lastErrorCode) return null
-  const code = row.lastErrorCode as MailFailureCode
-  return {
-    code,
-    message: mailFailureMessage({ code, params: row.lastErrorParams ?? {} }),
   }
 }
 

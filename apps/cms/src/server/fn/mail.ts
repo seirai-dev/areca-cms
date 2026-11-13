@@ -9,11 +9,8 @@ import { m } from '#/paraglide/messages'
 import { getLocale } from '#/paraglide/runtime'
 import { allowUserAction } from '#/server/http/rate-limit.server'
 import { mailFailureMessage } from '#/server/mail/errors'
-import {
-  getMailHealth,
-  listRecentEmails,
-  sendTestEmail,
-} from '#/server/mail/outbox'
+import { sendTestEmail } from '#/server/mail/outbox'
+import { getMailHealth, listRecentEmails } from '#/server/mail/outbox-views'
 import {
   getMailSettingsStatus,
   saveMailSettings,

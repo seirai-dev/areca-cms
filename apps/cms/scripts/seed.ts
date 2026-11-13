@@ -13,7 +13,7 @@ import {
 } from '#/db/schema'
 import { auth } from '#/lib/auth'
 import type { Field, MembershipRole } from '#/lib/types'
-import { acceptInvitation } from '#/server/admin/members'
+import { acceptInvitation } from '#/server/admin/invitations'
 import { hashToken } from '#/server/security/token-hash'
 
 const ADMIN_EMAIL = 'admin@areca.local'

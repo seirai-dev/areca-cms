@@ -13,11 +13,11 @@ import { getBranding } from '#/server/admin/branding'
 import {
   cleanupOutbox,
   enqueueEmail,
-  listRecentEmails,
   processOutbox,
   sendNow,
   sendTestEmail,
 } from './outbox.ts'
+import { listRecentEmails } from './outbox-views.ts'
 
 // `override` undefined: the environment's SMTP (Mailpit). null: not configured.
 // An object: that host and port (port 1 refuses connections).
@@ -453,6 +453,13 @@ describe.skipIf(!hasDb)('email outbox', () => {
         status: 'failed',
         attempts: 1,
       })
+
+      // Unsaved settings say nothing about live sending: no attempt records.
+      const attempts = await db
+        .select({ id: emailDeliveryAttempt.id })
+        .from(emailDeliveryAttempt)
+        .where(inArray(emailDeliveryAttempt.outboxId, [sent.id, failed.id]))
+      expect(attempts).toEqual([])
     } finally {
       await db.delete(user).where(inArray(user.id, [sender.id]))
     }

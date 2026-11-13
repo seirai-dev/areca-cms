@@ -22,7 +22,7 @@ import {
 } from '#/server/auth/own-sessions'
 import { allowUserAction } from '#/server/http/rate-limit.server'
 import { ForbiddenError, ConflictError } from '#/server/content/errors'
-import { LastAgencyAdminError } from '#/server/admin/members'
+import { LastAgencyAdminError } from '#/server/admin/agency-admin-roster'
 import { verifySelfDeletion } from '#/server/admin/self-delete-verification'
 import {
   PERSON_NAME_MAX_LENGTH,

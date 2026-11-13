@@ -26,12 +26,10 @@ import { notificationStillEligible } from '#/server/notifications/eligibility'
 import { generateMcpKey, resolveMcpActorResult } from '#/server/mcp/keys'
 import { hashedVerificationIdentifier } from '#/server/security/verification-identifiers'
 
-import {
-  LastAgencyAdminError,
-  listPendingInvitations,
-  listUsers,
-  setAgencyAdmin,
-} from './members.ts'
+import { LastAgencyAdminError } from './agency-admin-roster.ts'
+import { listPendingInvitations } from './invitations.ts'
+import { listUsers } from './user-directory.ts'
+import { setAgencyAdmin } from './agency-admins.ts'
 import {
   blockUser,
   bulkBlockUsers,

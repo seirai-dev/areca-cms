@@ -25,7 +25,7 @@ import {
 import { env } from '#/env'
 import { auth } from '#/lib/auth'
 import { MfaRequiredError, ReauthRequiredError } from '#/lib/security-errors'
-import { setAgencyAdmin } from '#/server/admin/members'
+import { setAgencyAdmin } from '#/server/admin/agency-admins'
 import { cleanupTestSite, createTestSite } from '#/server/content/test-utils'
 import { recordStepUp } from '#/server/security/step-up'
 

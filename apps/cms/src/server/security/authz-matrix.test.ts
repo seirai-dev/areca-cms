@@ -21,15 +21,15 @@ import { NotFoundError } from '#/server/content/errors'
 
 import { ALL_FN_MODULES, ROWS } from './authz-matrix'
 import {
-  ACTORS,
-  POLICY_EXPECTATIONS,
   callServerFn,
   classify,
   isServerFn,
   outcomeLabel,
   seedWorld,
 } from './authz-harness'
-import type { ActorName, World } from './authz-harness'
+import type { World } from './authz-harness'
+import { ACTORS, POLICY_EXPECTATIONS } from './authz-policies'
+import type { ActorName } from './authz-policies'
 import { sanitizeServerError } from '#/server/http/safe-error'
 import { setLogSink } from '#/server/log'
 import { setCurrentSession } from './authz-state'

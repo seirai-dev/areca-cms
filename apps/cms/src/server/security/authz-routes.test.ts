@@ -17,8 +17,10 @@ import { getSitesSnapshotCurrent } from '#/routes/api/sites/snapshot/current'
 import { signPreviewToken } from '#/server/content/preview-token'
 import { handleMetricsRequest } from '#/server/ops/metrics'
 
-import { ACTORS, seedWorld } from './authz-harness'
-import type { ActorName, World } from './authz-harness'
+import { seedWorld } from './authz-harness'
+import type { World } from './authz-harness'
+import { ACTORS } from './authz-policies'
+import type { ActorName } from './authz-policies'
 import { setCurrentSession } from './authz-state'
 import type { TestSession } from './authz-state'
 

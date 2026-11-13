@@ -19,7 +19,7 @@ import {
   user,
 } from '#/db/schema'
 import { deleteSite } from '#/server/admin/sites'
-import { setAgencyAdmin } from '#/server/admin/members'
+import { setAgencyAdmin } from '#/server/admin/agency-admins'
 import { forkDevEnvironment } from '#/server/dev-env/fork'
 import {
   cleanupTestSite,

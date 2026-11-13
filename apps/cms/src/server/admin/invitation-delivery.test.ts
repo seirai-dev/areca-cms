@@ -28,7 +28,7 @@ import {
   regenerateInvitationLink,
   resendInvitation,
   revokeInvitation,
-} from './members.ts'
+} from './invitations.ts'
 
 // A fixed 32-byte key, so the outbox keeps the link encrypted as it does in
 // production. Tests that need "no key" set `secrets.key` to null.

@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
-import { and, eq, gt } from 'drizzle-orm'
+import { and, eq, gt, like } from 'drizzle-orm'
 
 import { withFactorLock } from './factor-lock'
 import { env } from '#/env'
 import { localMfaVerifiedAt } from './local-mfa'
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import { verification } from '#/db/schema'
 import { ReauthRequiredError } from '#/lib/security-errors'
 import { STEP_UP_WINDOW_MS, isFresh } from '#/lib/step-up'
@@ -123,5 +124,37 @@ export async function clearStepUpFailures(userId: string) {
     db
       .delete(verification)
       .where(eq(verification.identifier, failureId(userId))),
+  )
+}
+
+/** Deletes the failure budget in the caller's transaction; the caller holds `withFactorLock`. */
+export async function clearFactorLockout(tx: Tx, userId: string) {
+  await tx
+    .delete(verification)
+    .where(eq(verification.identifier, failureId(userId)))
+}
+
+/** Users whose step-up is locked right now, with the time each lock ends. */
+export async function activeFactorLockouts(now: Date = new Date()) {
+  const rows = await db
+    .select({
+      identifier: verification.identifier,
+      value: verification.value,
+      expiresAt: verification.expiresAt,
+    })
+    .from(verification)
+    .where(
+      and(
+        like(verification.identifier, failureId('%')),
+        gt(verification.expiresAt, now),
+      ),
+    )
+  return new Map(
+    rows
+      .filter((row) => Number(row.value) >= MAX_FAILED_ATTEMPTS)
+      .map((row) => [
+        row.identifier.slice(failureId('').length),
+        row.expiresAt,
+      ]),
   )
 }

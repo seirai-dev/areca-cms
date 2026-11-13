@@ -20,7 +20,7 @@ import {
   acceptInvitation,
   inviteMember,
   revokeInvitation,
-} from '#/server/admin/members'
+} from '#/server/admin/invitations'
 import { completeSetup } from '#/server/admin/setup'
 import { deleteOrganization } from '#/server/admin/organizations'
 import { createTestSite } from '#/server/content/test-utils'

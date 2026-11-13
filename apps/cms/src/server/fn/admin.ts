@@ -27,16 +27,18 @@ import {
   getInvitationById,
   inviteMember,
   listInvitations,
-  listMembers,
   listPendingInvitations,
-  listUsers,
   regenerateInvitationLink,
-  removeMember,
   resendInvitation,
   revokeInvitation,
-  setAgencyAdmin,
+} from '#/server/admin/invitations'
+import {
+  listMembers,
+  removeMember,
   updateMemberRole,
 } from '#/server/admin/members'
+import { listUsers } from '#/server/admin/user-directory'
+import { setAgencyAdmin } from '#/server/admin/agency-admins'
 import {
   createOrganization,
   deleteOrganization,

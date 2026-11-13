@@ -28,12 +28,10 @@ import { previewBaseUrl } from '#/lib/preview-url'
 import {
   acceptInvitation,
   inviteMember,
-  listMembers,
-  listUsers,
   regenerateInvitationLink,
-  removeMember,
-  updateMemberRole,
-} from './members.ts'
+} from './invitations.ts'
+import { listMembers, removeMember, updateMemberRole } from './members.ts'
+import { listUsers } from './user-directory.ts'
 import {
   createOrganization,
   deleteOrganization,

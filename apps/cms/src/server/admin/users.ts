@@ -41,7 +41,8 @@ import {
   countActiveAgencyAdmins,
   lockAgencyAdminRoster,
 } from './agency-admin-roster.ts'
-import { countOwners, lockOrganization } from './members.ts'
+import { countOwners } from './members.ts'
+import { lockOrganizationForMutation } from './organization-lock.ts'
 
 /** Longest internal block note an agency admin can write. */
 export const BLOCK_REASON_MAX_LENGTH = 500
@@ -124,7 +125,7 @@ async function selfDeleteBlockersIn(
     .orderBy(membership.organizationId)
   const soleOwnerClients: Array<{ organizationId: string; name: string }> = []
   for (const row of owned) {
-    if (lock) await lockOrganization(tx, row.organizationId)
+    if (lock) await lockOrganizationForMutation(tx, row.organizationId)
     if ((await countOwners(tx, row.organizationId)) <= 1) {
       soleOwnerClients.push({
         organizationId: row.organizationId,

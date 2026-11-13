@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type * as DbModule from '#/db'
 import { hashToken } from '#/server/security/token-hash'
 
-import { getInvitation, listInvitations } from './members.ts'
+import { getInvitation, listInvitations } from './invitations.ts'
 
 // Records what the invitation lookups select and filter by, without a database.
 const calls = vi.hoisted(() => ({
