@@ -5,7 +5,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { entryLinkTargets } from '#/server/richtext/entry-links'
 import { richTextExtensions } from '#/server/richtext/extensions'
 
-import { entryLinkAttrs, plainLinkAttrs, setLinkMark } from './link-mark'
+import {
+  entryLinkAttrs,
+  plainLinkAttrs,
+  readLinkMarkAttrs,
+  setLinkMark,
+} from './link-mark'
 
 /** A headless editor with the real rich text extensions, holding one entry link. */
 function editorWithEntryLink(): Editor {
@@ -87,5 +92,49 @@ describe('replacing an entry link with a plain link', () => {
       collection: 'articles',
       anchor: null,
     })
+  })
+})
+
+describe('readLinkMarkAttrs', () => {
+  it('reads the entry link under the selection', () => {
+    editor = editorWithEntryLink()
+    editor.commands.setTextSelection(3)
+    expect(readLinkMarkAttrs(editor)).toEqual({
+      href: '/blog/coffee-ethiopia',
+      entryId: 'entry-1',
+      collection: 'articles',
+      anchor: 'origin',
+    })
+  })
+
+  it('reads a plain link with null entry attributes, and an empty anchor as none', () => {
+    editor = editorWithEntryLink()
+    setLinkMark(
+      editor,
+      range,
+      { ...plainLinkAttrs('https://example.com'), anchor: '' },
+      'Visit us',
+    )
+    editor.commands.setTextSelection(3)
+    expect(readLinkMarkAttrs(editor)).toEqual(
+      plainLinkAttrs('https://example.com'),
+    )
+  })
+
+  it('is null without a link under the selection', () => {
+    editor = new Editor({
+      extensions: richTextExtensions,
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [{ type: 'text', text: 'No links here' }],
+          },
+        ],
+      },
+    })
+    editor.commands.setTextSelection(3)
+    expect(readLinkMarkAttrs(editor)).toBeNull()
   })
 })

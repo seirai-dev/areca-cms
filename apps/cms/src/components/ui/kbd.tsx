@@ -44,15 +44,43 @@ export function modifierLabels(platform: string) {
 }
 
 /**
+ * A shortcut written with Apple glyphs ("⌘⌥2"), as the platform shows it:
+ * unchanged on Apple platforms, "Ctrl+Alt+2" elsewhere.
+ */
+export function shortcutLabel(shortcut: string, platform: string) {
+  if (/Mac|iPhone|iPad/.test(platform)) return shortcut
+  const { mod, shift, alt } = modifierLabels(platform)
+  return shortcut
+    .replace(/⌘/g, `${mod}+`)
+    .replace(/⌥/g, `${alt}+`)
+    .replace(/⇧/g, `${shift}+`)
+}
+
+/** `navigator.platform`, read after mount (SSR-safe); empty before. */
+function usePlatform() {
+  const [platform, setPlatform] = React.useState('')
+  React.useEffect(() => {
+    setPlatform(navigator.platform)
+  }, [])
+  return platform
+}
+
+/**
  * "⌘" and "⇧" on Apple platforms, "Ctrl" and "Shift" elsewhere. Resolved
  * after mount (SSR-safe), so the first render shows the non-Apple captions.
  */
 export function useModifierKeys() {
-  const [labels, setLabels] = React.useState(() => modifierLabels(''))
-  React.useEffect(() => {
-    setLabels(modifierLabels(navigator.platform))
-  }, [])
-  return labels
+  const platform = usePlatform()
+  return React.useMemo(() => modifierLabels(platform), [platform])
+}
+
+/** `shortcutLabel` for this platform, resolved after mount (SSR-safe). */
+export function useShortcutLabel() {
+  const platform = usePlatform()
+  return React.useCallback(
+    (shortcut: string) => shortcutLabel(shortcut, platform),
+    [platform],
+  )
 }
 
 /** "⌘" on Apple platforms, "Ctrl" elsewhere. Resolved after mount (SSR-safe). */

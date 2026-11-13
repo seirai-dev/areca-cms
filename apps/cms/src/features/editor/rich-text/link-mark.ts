@@ -41,6 +41,25 @@ export function entryLinkAttrs(
 }
 
 /**
+ * The link under the selection, or null when there is none. An empty anchor
+ * reads as none (the whole page).
+ */
+export function readLinkMarkAttrs(editor: Editor): LinkMarkAttrs | null {
+  const attrs = editor.getAttributes('link') as Record<string, unknown>
+  const href = typeof attrs.href === 'string' ? attrs.href : ''
+  if (!href) return null
+  return {
+    href,
+    entryId: typeof attrs.entryId === 'string' ? attrs.entryId : null,
+    collection: typeof attrs.collection === 'string' ? attrs.collection : null,
+    anchor:
+      typeof attrs.anchor === 'string' && attrs.anchor !== ''
+        ? attrs.anchor
+        : null,
+  }
+}
+
+/**
  * Puts the link on `range`. With nothing selected and no link under the cursor,
  * inserts `text` as the link and returns the range it now covers; otherwise
  * returns null. Does not focus the editor (focusing closes the popover).
