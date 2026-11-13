@@ -703,7 +703,9 @@ async function latestPublicationSummary(
     await db
       .select(publicationSummary)
       .from(publication)
-      .where(and(eq(publication.siteId, siteId), eq(publication.status, status)))
+      .where(
+        and(eq(publication.siteId, siteId), eq(publication.status, status)),
+      )
       .orderBy(desc(publication.createdAt))
       .limit(1)
   ).at(0)
