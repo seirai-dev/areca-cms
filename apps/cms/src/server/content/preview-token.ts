@@ -1,5 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
+import { previewBaseUrl } from '#/lib/preview-url'
+
 /** A token previews one entry (`collection` + `slug`) or one site content section (`global`). */
 export type PreviewTokenPayload = {
   siteId: string
@@ -149,6 +151,52 @@ export function buildGlobalPreviewUrl(
 ) {
   const base = productionUrl.replace(/\/+$/, '')
   return `${base}${previewPath}?arecaPreview=${encodeURIComponent(token)}${localeParam(locale)}`
+}
+
+/** What a preview link opens: a collection entry, or a site content section on its page. */
+export type PreviewLinkSource =
+  | { kind: 'collection'; key: string; slug: string }
+  | { kind: 'global'; key: string; previewPath: string | null }
+
+/**
+ * A signed preview link for `source` on the site's preview origin, or null for
+ * a site content section without a preview path.
+ */
+export function previewLinkFor(
+  site: {
+    id: string
+    previewSecret: string
+    previewUrl?: string | null
+    productionUrl: string
+  },
+  source: PreviewLinkSource,
+  locale?: string,
+): { token: string; url: string } | null {
+  const base = previewBaseUrl(site)
+  if (source.kind === 'global') {
+    if (!source.previewPath) return null
+    const token = signPreviewToken({
+      siteId: site.id,
+      global: source.key,
+      secret: site.previewSecret,
+      locale,
+    })
+    return {
+      token,
+      url: buildGlobalPreviewUrl(base, source.previewPath, token, locale),
+    }
+  }
+  const token = signPreviewToken({
+    siteId: site.id,
+    collection: source.key,
+    slug: source.slug,
+    secret: site.previewSecret,
+    locale,
+  })
+  return {
+    token,
+    url: buildPreviewUrl(base, source.key, source.slug, token, locale),
+  }
 }
 
 function safeEqual(a: string, b: string) {

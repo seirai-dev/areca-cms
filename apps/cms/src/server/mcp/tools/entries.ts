@@ -27,11 +27,7 @@ import { ValidationError } from '#/server/content/errors'
 import { loadSiteLanguages } from '#/server/content/locale-validation'
 import { resolveMarkdownLinkTargets } from '#/server/content/link-targets'
 import { McpNotFoundError } from '../errors'
-import {
-  signPreviewToken,
-  buildPreviewUrl,
-  buildGlobalPreviewUrl,
-} from '#/server/content/preview-token'
+import { previewLinkFor } from '#/server/content/preview-token'
 import {
   applyLocaleWrite,
   localeView,
@@ -191,27 +187,14 @@ async function previewUrlFor(
   slug: string,
   locale?: string,
 ): Promise<string | null> {
-  const siteRow = await loadSiteRow(actor)
-  const base = previewBaseUrl(siteRow)
-  if (!base) return null
-  if (source.kind === 'global') {
-    if (!source.previewPath) return null
-    const token = signPreviewToken({
-      siteId: siteRow.id,
-      global: source.key,
-      secret: siteRow.previewSecret,
-      locale,
-    })
-    return buildGlobalPreviewUrl(base, source.previewPath, token, locale)
-  }
-  const token = signPreviewToken({
-    siteId: siteRow.id,
-    collection: source.key,
-    slug,
-    secret: siteRow.previewSecret,
+  const link = previewLinkFor(
+    await loadSiteRow(actor),
+    source.kind === 'global'
+      ? { kind: 'global', key: source.key, previewPath: source.previewPath }
+      : { kind: 'collection', key: source.key, slug },
     locale,
-  })
-  return buildPreviewUrl(base, source.key, slug, token, locale)
+  )
+  return link?.url ?? null
 }
 
 /** The live version of an entry as the production site serves it now, if it is live. */
