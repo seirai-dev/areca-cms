@@ -82,11 +82,7 @@ export function sectionChangesOf(input: {
   fields: Field[]
   languages: SiteLanguages | null
 }): { changes: SectionChange[]; next: SectionSnapshots } {
-  const next = sectionSnapshotsOf(
-    input.nextData,
-    input.fields,
-    input.languages,
-  )
+  const next = sectionSnapshotsOf(input.nextData, input.fields, input.languages)
   const before =
     input.baseline ??
     sectionSnapshotsOf(input.previousData, input.fields, input.languages)

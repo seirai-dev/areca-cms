@@ -15,7 +15,7 @@ import { remapSectionLinks } from '#/server/richtext/entry-links'
 import type { SectionChange } from '#/server/richtext/section-diff'
 import { localeOf } from '#/server/richtext/section-diff'
 
-import { writeRevision } from './entries.ts'
+import { writeRevision } from './entry-commit.ts'
 import { lockSiteLinkIndex, syncEntryLinkIndex } from './entry-link-index.ts'
 import { mapRichTextValues } from './entry-links.ts'
 import { NotFoundError, ValidationError } from './errors.ts'
@@ -352,12 +352,7 @@ export async function applySectionLinkUpdates(input: {
     const owner = input.viewer.isOwner
     for (const source of sources) {
       if (!visibleTo(source, input.viewer)) continue
-      const draft = remapData(
-        source.draftData,
-        source,
-        input.targetId,
-        updates,
-      )
+      const draft = remapData(source.draftData, source, input.targetId, updates)
       // An editor's change reaches the draft only (see `needsApproval`).
       const published = owner
         ? remapData(source.publishedData, source, input.targetId, updates)
