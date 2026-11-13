@@ -147,6 +147,8 @@ Status: planned (5 stacked PRs). The code and the [docs site](https://docs.areca
     update goes into the entry's history as "Section link updated by …".
 22. **MCP rename.** `update_entry` returns a warning naming the entries whose
     links point to a section that no longer exists, so the AI can update them.
+    `update_global` is an explicit save too and reports the same way; it has
+    nothing to report while sections cannot be targets (decision 7).
 
 ### Releases, docs and skills
 

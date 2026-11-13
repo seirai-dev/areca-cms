@@ -291,6 +291,37 @@ describe('applyLocaleWrite', () => {
     })
     expect(data.$seo).toBeUndefined()
   })
+
+  it('merges into the declared fields on a site without languages', () => {
+    const { data, sharedFieldsUpdated } = applyLocaleWrite({
+      fields,
+      languages: null,
+      locale: null,
+      stored: { ...stored, stray: 'dropped' },
+      converted: { title: 'New title' },
+      seo: { description: 'D', title: null },
+    })
+    expect(data).toEqual({
+      title: 'New title',
+      slug: 'backend-ontwikkelaar',
+      body: { type: 'doc', content: [] },
+      salary: 4000,
+      $seo: { description: 'D' },
+    })
+    expect(sharedFieldsUpdated).toEqual([])
+  })
+
+  it('drops SEO for a section without SEO on a site without languages', () => {
+    const { data } = applyLocaleWrite({
+      fields,
+      languages: null,
+      locale: null,
+      stored,
+      converted: {},
+      seoEnabled: false,
+    })
+    expect(data.$seo).toBeUndefined()
+  })
 })
 
 describe('translationStatuses', () => {
