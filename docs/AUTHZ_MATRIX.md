@@ -94,6 +94,7 @@ unchanged (each row carries a side-effect probe).
 | `listCollectionsFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `listEntriesFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `getEntryFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `getEntryTitleFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `listInboundReferencesFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `createEntryFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `updateDraftFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |

@@ -19,6 +19,7 @@ import {
   SLUG_MAX_LENGTH,
 } from '#/lib/content-limits'
 import { createServerFn } from '@tanstack/react-start'
+import { entryTitle } from '#/lib/content/utils'
 import { z } from '#/lib/zod'
 
 import { db } from '#/db'
@@ -281,6 +282,17 @@ export const getEntryFn = createServerFn({ method: 'GET', ...entryFn })
       data.id,
     )
     return { ...withoutBaselines(entry), createdByName, updatedByName }
+  })
+
+/** What a reference field shows for its chosen entry: the title, not the record. */
+export const getEntryTitleFn = createServerFn({ method: 'GET', ...entryFn })
+  .validator(z.object({ id: z.string().min(1).max(ID_MAX_LENGTH) }))
+  .handler(async ({ data }) => {
+    const { entry, collection } = await requireEntryAccess(data.id)
+    return {
+      id: entry.id,
+      title: entryTitle(entry.draftData, collection.fields, entry.slug),
+    }
   })
 
 export const createEntryFn = createServerFn({ method: 'POST', ...entryFn })
