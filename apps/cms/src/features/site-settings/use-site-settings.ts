@@ -5,7 +5,7 @@ import { useServerFn } from '@tanstack/react-start'
 
 import { invalidateDevSync } from '#/features/dev-env/invalidate'
 import { useStepUp } from '#/features/security/step-up'
-import { adminQueryKeys } from '#/lib/admin/helpers'
+import { queryKeys } from '#/lib/query-keys'
 import { cloudflareStatusQuery } from '#/features/agency/queries'
 import {
   changeSiteSlugFn,
@@ -40,14 +40,14 @@ export function useSiteSettings(siteId: string) {
   const stepUp = useStepUp()
 
   const site = useQuery({
-    queryKey: adminQueryKeys.site(siteId),
+    queryKey: queryKeys.site(siteId),
     queryFn: () => getSite({ data: { id: siteId } }),
   })
 
   const refresh = React.useCallback(async () => {
     await Promise.all([
       queryClient.invalidateQueries({
-        queryKey: adminQueryKeys.site(siteId),
+        queryKey: queryKeys.site(siteId),
       }),
       // Languages and name changes on a development site change its unpushed count.
       invalidateDevSync(queryClient, siteId),
@@ -95,14 +95,11 @@ export function useDokployApplications(organizationId: string) {
   const getStatus = useServerFn(getDokployCredentialStatusFn)
   const verify = useServerFn(verifyDokployCredentialsFn)
   const status = useQuery({
-    queryKey: adminQueryKeys.dokployCredentials(organizationId),
+    queryKey: queryKeys.dokployCredentials(organizationId),
     queryFn: () => getStatus({ data: { organizationId } }),
   })
   const applications = useQuery({
-    queryKey: [
-      ...adminQueryKeys.dokployCredentials(organizationId),
-      'applications',
-    ],
+    queryKey: queryKeys.dokployApplications(organizationId),
     queryFn: () => verify({ data: { organizationId } }),
     enabled: status.data?.configured === true,
     staleTime: 60_000,
@@ -122,10 +119,7 @@ export function useCloudflareDeployTargets(
 ) {
   const list = useServerFn(listCloudflareDeployTargetsFn)
   return useQuery({
-    queryKey: [
-      ...adminQueryKeys.cloudflareCredentials(organizationId),
-      'deploy-targets',
-    ],
+    queryKey: queryKeys.cloudflareDeployTargets(organizationId),
     queryFn: () => list({ data: { organizationId } }),
     enabled,
     staleTime: 60_000,
@@ -146,7 +140,7 @@ export function useCloudflareConnection(organizationId: string) {
 export function useSiteLanguages(siteId: string, enabled = true) {
   const getSite = useServerFn(getSiteFn)
   const query = useQuery({
-    queryKey: adminQueryKeys.site(siteId),
+    queryKey: queryKeys.site(siteId),
     queryFn: () => getSite({ data: { id: siteId } }),
     enabled,
   })

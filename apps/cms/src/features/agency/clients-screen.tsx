@@ -4,7 +4,8 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import { Buildings, MagnifyingGlass, Plus } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { adminQueryKeys, suggestSlug } from '#/lib/admin/helpers'
+import { suggestSlug } from '#/lib/admin/helpers'
+import { queryKeys } from '#/lib/query-keys'
 import { errorMessage } from '#/lib/errors'
 import { Button } from '#/components/ui/button'
 import { EmptyState } from '#/components/ui/empty-state'
@@ -214,9 +215,11 @@ function useCreateClient(onCreated: () => void) {
       toast.success(m.agency_client_created())
       onCreated()
       await queryClient.invalidateQueries({
-        queryKey: adminQueryKeys.organizations,
+        queryKey: queryKeys.organizations(),
       })
-      void queryClient.invalidateQueries({ queryKey: ['sites-overview'] })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.sitesOverview(),
+      })
       await navigate({
         to: '/agency/clients/$orgId',
         params: { orgId: client.id },

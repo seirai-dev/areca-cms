@@ -10,7 +10,7 @@ import {
   Trash,
 } from '@phosphor-icons/react'
 
-import { queryKeys } from '#/lib/content/query-keys'
+import { queryKeys } from '#/lib/query-keys'
 import {
   AlertDialog,
   AlertDialogAction,

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 
-import { adminQueryKeys } from '#/lib/admin/helpers'
+import { queryKeys } from '#/lib/query-keys'
 import { useStepUp } from '#/features/security/step-up'
 import {
   getDevSiteSyncStatusFn,
@@ -20,7 +20,7 @@ import { invalidateQueryKeys, writeQueryKeys } from './invalidate'
 export function usePushPlan(devSiteId: string) {
   const getPlan = useServerFn(getPushPlanFn)
   return useQuery({
-    queryKey: adminQueryKeys.pushPlan(devSiteId),
+    queryKey: queryKeys.pushPlan(devSiteId),
     queryFn: () => getPlan({ data: { devSiteId } }),
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -32,7 +32,7 @@ export function usePushPlan(devSiteId: string) {
 export function useDevSyncStatus(devSiteId: string, { enabled = true } = {}) {
   const getSync = useServerFn(getDevSiteSyncStatusFn)
   return useQuery({
-    queryKey: adminQueryKeys.devSync(devSiteId),
+    queryKey: queryKeys.devSync(devSiteId),
     queryFn: () => getSync({ data: { devSiteId } }),
     enabled,
   })

@@ -1,9 +1,10 @@
 import { queryOptions } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
 
+import { queryKeys } from '#/lib/query-keys'
 import { getMeFn } from '#/server/fn/me'
 
-export const ME_QUERY_KEY = ['me'] as const
+export const ME_QUERY_KEY = queryKeys.me()
 
 /**
  * The signed-in user, cached briefly so clicking around the app (pages, tabs,

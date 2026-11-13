@@ -11,7 +11,7 @@ import {
   Stack,
 } from '@phosphor-icons/react'
 
-import { queryKeys } from '#/lib/content/query-keys'
+import { queryKeys } from '#/lib/query-keys'
 import { draftsByOthersQuery, recentEntriesQuery } from '#/lib/content/queries'
 import { EntryThumb } from '#/features/collection/entry-cover'
 import { useShell } from '#/components/shell/shell-context'

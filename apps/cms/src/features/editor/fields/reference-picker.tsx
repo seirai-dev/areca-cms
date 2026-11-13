@@ -6,7 +6,7 @@ import {
 } from '@tanstack/react-query'
 import { CaretUpDown, Check, LinkSimple, X } from '@phosphor-icons/react'
 
-import { queryKeys } from '#/lib/content/query-keys'
+import { queryKeys } from '#/lib/query-keys'
 import { Button } from '#/components/ui/button'
 import {
   Command,

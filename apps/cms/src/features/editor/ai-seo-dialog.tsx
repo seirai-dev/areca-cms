@@ -15,7 +15,7 @@ import {
 import { Spinner } from '#/components/ui/spinner'
 import type { AiSeoSuggestion } from '#/lib/ai-seo'
 import { errorMessage } from '#/lib/errors'
-import { queryKeys } from '#/lib/content/query-keys'
+import { queryKeys } from '#/lib/query-keys'
 import type { EntrySeo } from '#/lib/seo'
 import type { EntryData } from '#/lib/types'
 import { cn } from '#/lib/utils'

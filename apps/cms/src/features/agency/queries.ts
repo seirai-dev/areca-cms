@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
 
-import { adminQueryKeys } from '#/lib/admin/helpers'
+import { queryKeys } from '#/lib/query-keys'
 import {
   getCloudflareCredentialStatusFn,
   getDokployCredentialStatusFn,
@@ -15,7 +15,7 @@ import { getHomeActivityFn } from '#/server/fn/home'
 
 /**
  * Query options for the Agency workspace. Keys are shared with the rest of
- * the app (`adminQueryKeys`, `sites-overview` from the shell) so every screen
+ * the app (`queryKeys`, `sites-overview` from the shell) so every screen
  * reads and invalidates the same cache.
  */
 
@@ -30,21 +30,21 @@ export type HomeActivity = Awaited<ReturnType<typeof getHomeActivityFn>>
 
 export function clientsQuery() {
   return queryOptions({
-    queryKey: adminQueryKeys.organizations,
+    queryKey: queryKeys.organizations(),
     queryFn: () => listOrganizationsFn(),
   })
 }
 
 export function clientSitesQuery(organizationId: string) {
   return queryOptions({
-    queryKey: adminQueryKeys.sites(organizationId),
+    queryKey: queryKeys.sites(organizationId),
     queryFn: () => listSitesFn({ data: { organizationId } }),
   })
 }
 
 export function accountsQuery() {
   return queryOptions({
-    queryKey: adminQueryKeys.users,
+    queryKey: queryKeys.users(),
     queryFn: () => listUsersFn(),
   })
 }
@@ -52,7 +52,7 @@ export function accountsQuery() {
 /** Open invitations across every client, for the People list. */
 export function pendingInvitationsQuery() {
   return queryOptions({
-    queryKey: adminQueryKeys.pendingInvitations,
+    queryKey: queryKeys.pendingInvitations(),
     queryFn: () => listPendingInvitationsFn(),
   })
 }
@@ -60,28 +60,28 @@ export function pendingInvitationsQuery() {
 /** One person's page: profile, sign-in state, clients and open invitations. */
 export function personQuery(userId: string) {
   return queryOptions({
-    queryKey: adminQueryKeys.person(userId),
+    queryKey: queryKeys.person(userId),
     queryFn: () => getUserDetailFn({ data: { userId } }),
   })
 }
 
 export function invitationsQuery(organizationId: string) {
   return queryOptions({
-    queryKey: adminQueryKeys.invitations(organizationId),
+    queryKey: queryKeys.invitations(organizationId),
     queryFn: () => listInvitationsFn({ data: { organizationId } }),
   })
 }
 
 export function dokployStatusQuery(organizationId: string) {
   return queryOptions({
-    queryKey: adminQueryKeys.dokployCredentials(organizationId),
+    queryKey: queryKeys.dokployCredentials(organizationId),
     queryFn: () => getDokployCredentialStatusFn({ data: { organizationId } }),
   })
 }
 
 export function cloudflareStatusQuery(organizationId: string) {
   return queryOptions({
-    queryKey: adminQueryKeys.cloudflareCredentials(organizationId),
+    queryKey: queryKeys.cloudflareCredentials(organizationId),
     queryFn: () =>
       getCloudflareCredentialStatusFn({ data: { organizationId } }),
   })
@@ -89,7 +89,7 @@ export function cloudflareStatusQuery(organizationId: string) {
 
 export function homeActivityQuery() {
   return queryOptions({
-    queryKey: ['home-activity'] as const,
+    queryKey: queryKeys.homeActivity(),
     queryFn: () => getHomeActivityFn(),
     staleTime: 15_000,
   })

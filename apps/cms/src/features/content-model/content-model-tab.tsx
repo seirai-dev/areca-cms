@@ -6,9 +6,9 @@ import { CaretRight, Globe, Plus, Stack } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 import { invalidateDevSync } from '#/features/dev-env/invalidate'
-import { globalsQueryKey, useSiteGlobals } from '#/features/globals/use-globals'
+import { useSiteGlobals } from '#/features/globals/use-globals'
 import { errorMessage } from '#/lib/errors'
-import { queryKeys } from '#/lib/content/query-keys'
+import { queryKeys } from '#/lib/query-keys'
 import { Tag } from '#/components/ui/tag'
 import { Button } from '#/components/ui/button'
 import { EmptyState } from '#/components/ui/empty-state'
@@ -233,7 +233,7 @@ function SectionRow({
     mutationFn: (enabled: boolean) =>
       setEnabledFn({ data: { siteId, key: section.key, enabled } }),
     onMutate: async (enabled) => {
-      const key = globalsQueryKey(siteId)
+      const key = queryKeys.globals(siteId)
       await queryClient.cancelQueries({ queryKey: key })
       const previous = queryClient.getQueryData<SiteSection[]>(key)
       queryClient.setQueryData<SiteSection[]>(key, (list) =>
@@ -251,13 +251,13 @@ function SectionRow({
       ),
     onError: (error, _enabled, context) => {
       if (context?.previous) {
-        queryClient.setQueryData(globalsQueryKey(siteId), context.previous)
+        queryClient.setQueryData(queryKeys.globals(siteId), context.previous)
       }
       toast.error(errorMessage(error))
     },
     onSettled: () =>
       Promise.all([
-        queryClient.invalidateQueries({ queryKey: globalsQueryKey(siteId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.globals(siteId) }),
         invalidateDevSync(queryClient, siteId),
       ]),
   })

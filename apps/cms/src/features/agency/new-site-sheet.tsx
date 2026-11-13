@@ -3,7 +3,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import { adminQueryKeys, suggestSlug } from '#/lib/admin/helpers'
+import { suggestSlug } from '#/lib/admin/helpers'
+import { queryKeys } from '#/lib/query-keys'
 import { errorMessage } from '#/lib/errors'
 import { Button } from '#/components/ui/button'
 import { FormField } from '#/components/ui/form-field'
@@ -45,12 +46,12 @@ function useCreateSite(orgId: string) {
       toast.success(m.admin_org_toast_site_created())
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: adminQueryKeys.sites(orgId),
+          queryKey: queryKeys.sites(orgId),
         }),
         queryClient.invalidateQueries({
-          queryKey: adminQueryKeys.organizations,
+          queryKey: queryKeys.organizations(),
         }),
-        queryClient.invalidateQueries({ queryKey: ['sites-overview'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.sitesOverview() }),
         // `me.sites` feeds the sidebar and the switcher.
         router.invalidate(),
       ])

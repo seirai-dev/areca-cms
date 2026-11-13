@@ -3,6 +3,7 @@ import { useInfiniteQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { Scroll } from '@phosphor-icons/react'
 
+import { queryKeys } from '#/lib/query-keys'
 import { Button } from '#/components/ui/button'
 import { EmptyState } from '#/components/ui/empty-state'
 import { QueryError } from '#/components/ui/query-error'
@@ -17,9 +18,6 @@ import { activityScope, collapseRepeats } from './activity-sentence'
 import type { ActivityGroup } from './activity-sentence'
 
 export type ActivityRow = Awaited<ReturnType<typeof listAuditLogFn>>[number]
-
-const activityQueryKey = (organizationId?: string, siteId?: string) =>
-  ['activity', organizationId ?? 'all', siteId ?? 'all'] as const
 
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
@@ -72,7 +70,7 @@ export function ActivityList({
 }) {
   const listAuditLog = useServerFn(listAuditLogFn)
   const query = useInfiniteQuery({
-    queryKey: [...activityQueryKey(organizationId, siteId), pageSize],
+    queryKey: [...queryKeys.activity(organizationId, siteId), pageSize],
     initialPageParam: 0,
     // One extra row tells us whether there is another page.
     queryFn: ({ pageParam }) =>
