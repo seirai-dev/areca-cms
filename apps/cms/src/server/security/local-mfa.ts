@@ -5,7 +5,10 @@ import { db } from '#/db'
 import { session, verification } from '#/db/schema'
 import { env } from '#/env'
 import { MfaRequiredError } from '#/lib/security-errors'
-import { forgetForRequest, memoizeForRequest } from '#/server/http/request-scope.server'
+import {
+  forgetForRequest,
+  memoizeForRequest,
+} from '#/server/http/request-scope.server'
 import { m } from '#/paraglide/messages'
 
 type Principal = {
@@ -32,7 +35,10 @@ export function localMfaVerifiedAt(principal: Principal, now = new Date()) {
   )
 }
 
-async function readLocalMfaProof(principal: Principal, now: Date) {
+async function readLocalMfaProof(
+  principal: Principal,
+  now: Date,
+): Promise<Date | null> {
   const [proof] = await db
     .select({ createdAt: verification.createdAt })
     .from(verification)
