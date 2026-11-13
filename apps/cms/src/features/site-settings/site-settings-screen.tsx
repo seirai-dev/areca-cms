@@ -20,38 +20,9 @@ import { DeveloperTab } from './developer-tab'
 import { DevelopmentTab } from './development-tab'
 import { GeneralTab } from './general-tab'
 import { LanguagesTab } from './languages-tab'
+import { SETTINGS_TABS, settingsTabsFor } from './settings-tabs'
+import type { SettingsTab } from './settings-tabs'
 import { useSiteSettings } from './use-site-settings'
-
-export const SETTINGS_TABS = [
-  'general',
-  'languages',
-  'deployment',
-  'development',
-  'developer',
-  'ai',
-  'content',
-] as const
-export type SettingsTab = (typeof SETTINGS_TABS)[number]
-
-/**
- * The tabs a site shows. A development environment stays in Demo mode and
- * has no deployment target, so it has neither Deployment nor Development. A
- * production site gets Development once it is in Production mode or has gone
- * live (docs/design/dev-environments.md, Decision 5).
- */
-export function settingsTabsFor(site: {
-  environment: string
-  publishingMode: string
-  hasGoneLive: boolean
-}): SettingsTab[] {
-  if (isDevSite(site)) {
-    return SETTINGS_TABS.filter(
-      (tab) => tab !== 'deployment' && tab !== 'development',
-    )
-  }
-  const canDevelop = site.publishingMode === 'production' || site.hasGoneLive
-  return SETTINGS_TABS.filter((tab) => tab !== 'development' || canDevelop)
-}
 
 /**
  * Site settings (brief §3.10), agency admins only: underline tabs

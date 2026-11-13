@@ -1,7 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from '#/lib/zod'
 
-import { CLIENT_TABS, ClientScreen } from '#/features/agency/client-screen'
+import { ClientScreen } from '#/features/agency/client-screen'
+import { CLIENT_TABS } from '#/features/agency/client-tabs'
 
 /**
  * `/agency/clients/$orgId?tab=sites|people|deployment|settings&new=1`.

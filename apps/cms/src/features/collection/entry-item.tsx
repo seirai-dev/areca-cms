@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from '#/components/ui/dropdown-menu'
 import { RelativeTime } from '#/components/ui/timeline'
+import { preloadEditorScreen } from '#/features/editor/load-editor'
 import { editorPublishReason } from '#/features/golive/golive-tray'
 import type { LiveMembership } from '#/features/golive/entry-live-state'
 import { cn } from '#/lib/utils'
@@ -77,6 +78,8 @@ function EditorLink({
       params={{ siteId, collectionKey, entryId: row.id }}
       viewTransition
       className={className}
+      onPointerEnter={preloadEditorScreen}
+      onFocus={preloadEditorScreen}
     >
       {children}
     </Link>
@@ -122,6 +125,8 @@ function EntryQuickMenu({
           <Link
             to="/sites/$siteId/c/$collectionKey/$entryId"
             params={{ siteId, collectionKey, entryId: row.id }}
+            onPointerEnter={preloadEditorScreen}
+            onFocus={preloadEditorScreen}
           >
             <PencilSimple />
             {m.collection_open()}

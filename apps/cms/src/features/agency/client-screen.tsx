@@ -37,18 +37,11 @@ import { ClientSettings } from './client-settings'
 import { ClientTile } from './client-tile'
 import { clientCounts } from './clients-screen'
 import { NewSiteSheet } from './new-site-sheet'
+import type { ClientTab } from './client-tabs'
 import { clientSitesQuery, clientsQuery } from './queries'
 import type { ClientRow } from './queries'
 import { AgencySiteCard } from './site-card'
 import type { SiteFigures } from './site-card'
-
-export const CLIENT_TABS = [
-  'sites',
-  'people',
-  'deployment',
-  'settings',
-] as const
-export type ClientTab = (typeof CLIENT_TABS)[number]
 
 /**
  * `/agency/clients/$orgId` (brief §3.11): the client's name with its short

@@ -42,6 +42,7 @@ import { Stagger, StaggerItem } from '#/components/ui/stagger'
 import { Hint } from '#/components/ui/tooltip'
 import { SchemaEditorSheet } from '#/features/content-model/schema-editor-sheet'
 import type { SchemaSegment } from '#/features/content-model/schema-editor-sheet'
+import { preloadEditorScreen } from '#/features/editor/load-editor'
 import { editorPublishReason } from '#/features/golive/golive-tray'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { useDebouncedValue } from '#/hooks/use-debounced-value'
@@ -286,6 +287,8 @@ function CollectionView({
       <Link
         to="/sites/$siteId/c/$collectionKey/new"
         params={{ siteId, collectionKey: collection.key }}
+        onPointerEnter={preloadEditorScreen}
+        onFocus={preloadEditorScreen}
       >
         <Plus weight="bold" />
         {m.shell_new()}
@@ -511,6 +514,8 @@ function CollectionView({
                   <Link
                     to="/sites/$siteId/c/$collectionKey/new"
                     params={{ siteId, collectionKey: collection.key }}
+                    onPointerEnter={preloadEditorScreen}
+                    onFocus={preloadEditorScreen}
                   >
                     <Plus weight="bold" />
                     {singular
