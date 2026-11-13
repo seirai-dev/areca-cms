@@ -10,6 +10,7 @@
 import { I18N_KEY } from '#/lib/content-locale'
 import type { EntryData, Field } from '#/lib/types'
 import { remapEntryLinks } from '#/server/richtext/entry-links'
+import { isPlainObject } from '#/lib/is-plain-object'
 
 /**
  * A reference or an entry link that was cleared because its target cannot
@@ -27,10 +28,6 @@ export type ReferenceWarning = {
 
 /** Dev entry id to production entry id, or undefined when there is none. */
 export type ReferenceLookup = (devId: string) => string | undefined
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
 
 /**
  * Production ids that dev ids of this push resolve to: the origin of each

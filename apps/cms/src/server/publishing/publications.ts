@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm'
 
 import { CLOUDFLARE_API_BASE_URL } from '#/adapters/deployment/cloudflare-api'
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import {
   buildJob,
   cloudflareCredential,
@@ -34,7 +35,7 @@ import {
 } from '#/server/content/errors'
 import { diffApprovedRelease } from '#/server/publishing/release-diff'
 import { isDevSite } from '#/server/security/site-visibility'
-import { siteCoreColumns } from '#/server/content/site-core'
+import { getSiteOrThrow, siteCoreColumns } from '#/server/content/site-core'
 import type { SiteCore } from '#/server/content/site-core'
 
 export function dbActorId(actorId: string | null | undefined) {
@@ -54,29 +55,14 @@ export function deploymentBlockers(row: SiteCore): string[] {
     : [m.server_publication_deployment_required()]
 }
 
-export async function getSiteOrThrow(siteId: string) {
-  const row = (
-    await db
-      .select(siteCoreColumns)
-      .from(site)
-      .where(eq(site.id, siteId))
-      .limit(1)
-  ).at(0)
-  if (!row) {
-    throw new NotFoundError(m.server_site_not_found())
-  }
-  return row
-}
-
 function uniqueActorIds(ids: Array<string | null | undefined>) {
   return [...new Set(ids.filter((id): id is string => Boolean(id)))]
 }
 
-type RequestTx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type RequestIdentity = { siteId: string; actorId: string; requestKey?: string }
 
 async function replayRequest(
-  tx: RequestTx,
+  tx: Tx,
   input: RequestIdentity,
   operation: 'publish' | 'rollback',
   payload: string,
@@ -116,7 +102,7 @@ async function replayRequest(
 }
 
 async function rememberRequest(
-  tx: RequestTx,
+  tx: Tx,
   input: RequestIdentity,
   operation: 'publish' | 'rollback',
   payload: string,
@@ -135,7 +121,7 @@ async function rememberRequest(
   })
 }
 
-async function assertDispatchResolved(tx: RequestTx, siteId: string) {
+async function assertDispatchResolved(tx: Tx, siteId: string) {
   const uncertainJobs = await tx
     .select({ id: buildJob.id })
     .from(buildJob)
@@ -703,7 +689,9 @@ async function latestPublicationSummary(
     await db
       .select(publicationSummary)
       .from(publication)
-      .where(and(eq(publication.siteId, siteId), eq(publication.status, status)))
+      .where(
+        and(eq(publication.siteId, siteId), eq(publication.status, status)),
+      )
       .orderBy(desc(publication.createdAt))
       .limit(1)
   ).at(0)
@@ -786,7 +774,7 @@ export function deploymentResourceKey(
 
 /** Connection URL for the site's provider, or null when none is configured. */
 async function dispatchConnectionUrl(
-  tx: RequestTx,
+  tx: Tx,
   organizationId: string,
   target: DeploymentTarget | null,
 ) {
@@ -814,10 +802,7 @@ async function dispatchConnectionUrl(
 }
 
 /** Freeze the hosting destination when a release is requested. */
-export async function deploymentIdentity(
-  tx: RequestTx,
-  existingSite: SiteCore,
-) {
+export async function deploymentIdentity(tx: Tx, existingSite: SiteCore) {
   if (existingSite.publishingMode === 'demo') return {}
   const connectionUrl = await dispatchConnectionUrl(
     tx,

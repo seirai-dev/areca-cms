@@ -8,6 +8,7 @@
 import { and, count, desc, eq, gt, isNull } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import {
   account,
   invitation,
@@ -28,7 +29,6 @@ import {
   applyMemberRole,
   lockOrganization,
 } from './members'
-import type { Tx } from './members'
 import { lockPerson, runBulk } from './users'
 import type { BulkResult } from './users'
 
@@ -164,13 +164,6 @@ export async function getUserDetail(userId: string) {
     memberships,
     pendingInvitations,
   }
-}
-
-export type UserDetail = Awaited<ReturnType<typeof getUserDetail>>
-
-/** Raw `max(timestamptz)` values come back as text, so read them as dates. */
-export function toDate(value: unknown): Date | null {
-  return value ? new Date(String(value)) : null
 }
 
 /**

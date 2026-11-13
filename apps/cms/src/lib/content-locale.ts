@@ -11,6 +11,7 @@ import { LOCALE_TAG_MAX_LENGTH } from './content-limits.ts'
 import { isEmptyRichText } from './rich-text-empty.ts'
 import { SEO_KEY } from './seo.ts'
 import type { EntryData, Field, FieldType } from './types.ts'
+import { isPlainObject } from '#/lib/is-plain-object'
 
 /** Holds the translations of an entry, keyed by locale. */
 export const I18N_KEY = '$i18n'
@@ -57,10 +58,6 @@ export type ResolvedLocale = { locale: string; isFallback: boolean }
 
 /** Keys stored per language besides the translatable fields. */
 const LOCALIZED_META = [SEO_KEY, SLUG_KEY] as const
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
 
 function has(source: object, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(source, key)

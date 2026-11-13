@@ -6,6 +6,7 @@ import { and, eq, inArray, or } from 'drizzle-orm'
 import { z } from '#/lib/zod'
 
 import { db } from '#/db'
+import type { DbReader } from '#/db'
 import { asset, collection, entry } from '#/db/schema'
 import {
   ENTRY_DATA_MAX_BYTES,
@@ -32,6 +33,7 @@ import { m } from '#/paraglide/messages'
 import { validateRichText } from '#/server/richtext'
 
 import { getCollection } from './collections.ts'
+import { isPlainObject } from '#/lib/is-plain-object'
 
 const ISO_DATETIME =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/
@@ -460,7 +462,7 @@ export async function validateReferences(
   fields: Field[],
   data: EntryData,
   options: { requirePublished?: boolean } = {},
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ): Promise<FieldError[]> {
   const errors: FieldError[] = []
 
@@ -557,10 +559,6 @@ export function resolveSlug(
   return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
 /**
  * Drafts may be incomplete, but supplied IDs must belong to their authorized
  * scope. Checks the base values and every `$i18n.<locale>` slot, so a
@@ -576,7 +574,7 @@ export async function validateContentOwnership(
   organizationId: string,
   fields: Field[],
   data: EntryData,
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ) {
   const scopes: { data: EntryData; prefix: string }[] = [{ data, prefix: '' }]
   const translations = data[I18N_KEY]

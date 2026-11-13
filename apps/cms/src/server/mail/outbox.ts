@@ -24,6 +24,7 @@ import {
 } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbExecutor } from '#/db'
 import {
   emailDeliveryAttempt,
   emailOutbox,
@@ -52,7 +53,7 @@ import {
 } from './outbox-policy.ts'
 import type { InvitationDeliveryStatus } from './outbox-policy.ts'
 import { mailLocale, MailRenderError, renderTemplate } from './render/index.ts'
-import type { Executor, MailLocale } from './render/index.ts'
+import type { MailLocale } from './render/index.ts'
 import { draftToConfig } from './settings.ts'
 import type { MailDraft } from './settings.ts'
 import { sendMail } from './transport.ts'
@@ -170,9 +171,8 @@ const RECENT_LIMIT_MAX = 200
  */
 export async function enqueueEmail(
   input: EnqueueEmailInput,
-  connection?: unknown,
+  executor: DbExecutor = db,
 ): Promise<EnqueuedEmail> {
-  const executor = (connection ?? db) as Executor
   const locale = mailLocale(input.locale)
   const subject = await renderSubject(input, locale, executor)
   const [row] = await executor
@@ -211,7 +211,7 @@ export async function enqueueEmail(
 async function renderSubject(
   input: EnqueueEmailInput,
   locale: MailLocale,
-  connection: Executor,
+  connection: DbExecutor,
 ): Promise<string> {
   try {
     const rendered = await renderTemplate(
@@ -512,9 +512,8 @@ export async function sendTestEmail(input: {
  */
 export async function supersedeInvitationEmails(
   invitationId: string,
-  connection?: unknown,
+  executor: DbExecutor = db,
 ): Promise<void> {
-  const executor = (connection ?? db) as Executor
   await executor
     .update(emailOutbox)
     .set({
@@ -541,9 +540,8 @@ export async function supersedeInvitationEmails(
 export async function cancelQueuedNotificationEmails(
   userId: string,
   organizationId: string,
-  connection?: unknown,
+  executor: DbExecutor = db,
 ): Promise<number> {
-  const executor = (connection ?? db) as Executor
   const cancelled = await executor
     .update(emailOutbox)
     .set({ status: 'cancelled', nextAttemptAt: null, leaseUntil: null })
@@ -565,9 +563,8 @@ export async function cancelQueuedNotificationEmails(
  */
 export async function cancelAllQueuedNotificationEmails(
   userId: string,
-  connection?: unknown,
+  executor: DbExecutor = db,
 ): Promise<number> {
-  const executor = (connection ?? db) as Executor
   const cancelled = await executor
     .update(emailOutbox)
     .set({ status: 'cancelled', nextAttemptAt: null, leaseUntil: null })

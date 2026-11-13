@@ -6,6 +6,7 @@
 import { inArray, isNull, and, eq } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import { membership, organization, user } from '#/db/schema'
 import { createTestSite } from '#/server/content/test-utils'
 
@@ -61,7 +62,7 @@ export async function join(
  * with this. The locking and the row locks stay real; only the set counted
  * is narrowed to the fixture admins.
  */
-export async function scopedActiveAdminCount(tx: TestTx, ids: string[]) {
+export async function scopedActiveAdminCount(tx: Tx, ids: string[]) {
   const rows = await tx
     .select({ id: user.id })
     .from(user)
@@ -74,8 +75,6 @@ export async function scopedActiveAdminCount(tx: TestTx, ids: string[]) {
     )
   return rows.length
 }
-
-type TestTx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 export async function removePeople(ids: string[]) {
   if (ids.length === 0) return

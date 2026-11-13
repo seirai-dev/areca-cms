@@ -5,12 +5,10 @@
  */
 import { and, eq, isNull, sql } from 'drizzle-orm'
 
-import type { db } from '#/db'
+import type { Tx } from '#/db'
 import { user } from '#/db/schema'
 import { m } from '#/paraglide/messages'
 import { ConflictError } from '#/server/content/errors'
-
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /** The last active agency admin cannot be demoted, blocked or deleted. */
 export class LastAgencyAdminError extends ConflictError {

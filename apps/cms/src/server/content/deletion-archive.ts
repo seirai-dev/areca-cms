@@ -9,11 +9,11 @@ import {
   site,
 } from '#/db/schema'
 import { assetAttachLock } from '#/server/assets/usage'
-import type { AssetTransaction } from '#/server/assets/usage'
+import type { Tx } from '#/db'
 
 /** Preserve deleted authoring versions until the organization itself is deleted. */
 export async function archiveDeletedContent(
-  tx: AssetTransaction,
+  tx: Tx,
   organizationId: string,
   entityType: 'entry' | 'collection' | 'site',
   entityId: string,

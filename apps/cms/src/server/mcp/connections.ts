@@ -4,6 +4,7 @@ import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { Pool } from 'pg'
 
 import { db, pool } from '#/db'
+import type { Tx } from '#/db'
 import { registerPool } from '#/db/pool-registry'
 import { createSessionLock } from '#/db/session-lock'
 import {
@@ -59,30 +60,6 @@ export function isConnectionUsable(
   if (row.revokedAt) return false
   const lastActive = row.lastUsedAt ?? row.createdAt
   return now.getTime() - lastActive.getTime() <= MCP_CONNECTION_IDLE_MS
-}
-
-/**
- * Records that `userId` connected `clientId` to a site. One active connection
- * per (user, site, app): approving again updates the name and go-live flag.
- */
-export async function upsertConnection(input: {
-  userId: string
-  siteId: string
-  organizationId: string
-  clientId: string
-  clientName: string
-  allowGoLive: boolean
-  now?: Date
-}): Promise<McpConnectionRow> {
-  return withConnectionLock(input, async () => {
-    const now = input.now ?? new Date()
-    const existing = await findUsableConnection({ ...input, now })
-    return saveConnectionApproval(
-      input,
-      existing?.id ?? crypto.randomUUID(),
-      now,
-    )
-  })
 }
 
 /** Serialize approval and disconnect for the same grant across processes. */
@@ -334,7 +311,7 @@ async function revokeRow(
  * connection, its consent and every token it issued are revoked.
  */
 export async function revokeMemberMcpConnections(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tx: Tx,
   input: { userId: string; siteIds: string[]; now?: Date },
 ): Promise<number> {
   if (input.siteIds.length === 0) return 0
@@ -361,7 +338,7 @@ export async function revokeMemberMcpConnections(
  * admin role). Same effect as `revokeMemberMcpConnections`, for agency scope.
  */
 export async function revokeAgencyMcpConnections(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tx: Tx,
   input: { userId: string; now?: Date },
 ): Promise<number> {
   const now = input.now ?? new Date()
@@ -395,7 +372,7 @@ export function connectionRefs(row: {
 
 /** Consent and every token of one connection, in the caller's transaction. */
 async function revokeConnectionTokens(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tx: Tx,
   row: Pick<McpConnectionRow, 'id' | 'siteId' | 'clientId' | 'userId'>,
   now: Date,
 ) {
@@ -414,7 +391,7 @@ async function revokeConnectionTokens(
 
 /** Clear replay caches too: a disconnected rotated token must never return 200. */
 async function revokeGenerationTokens(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tx: Tx,
   row: { clientId: string; userId: string },
   refs: string[],
   now: Date,

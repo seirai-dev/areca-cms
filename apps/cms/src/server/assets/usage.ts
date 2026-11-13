@@ -1,9 +1,5 @@
 import { sql } from 'drizzle-orm'
-import type { db } from '#/db'
-
-export type AssetTransaction = Parameters<
-  Parameters<typeof db.transaction>[0]
->[0]
+import type { Tx } from '#/db'
 
 /*
  * Asset reference invariant (per organization): a committed reference to an
@@ -31,20 +27,14 @@ const assetLockKey = (organizationId: string) =>
   sql`hashtextextended(${`assets:${organizationId}`}, 0)`
 
 /** Shared: taken by every transaction that attaches asset references. */
-export async function assetAttachLock(
-  tx: AssetTransaction,
-  organizationId: string,
-) {
+export async function assetAttachLock(tx: Tx, organizationId: string) {
   await tx.execute(
     sql`select pg_advisory_xact_lock_shared(${assetLockKey(organizationId)})`,
   )
 }
 
 /** Exclusive: taken by asset deletion, reference checks and bulk dev-env writes. */
-export async function assetExclusiveLock(
-  tx: AssetTransaction,
-  organizationId: string,
-) {
+export async function assetExclusiveLock(tx: Tx, organizationId: string) {
   await tx.execute(
     sql`select pg_advisory_xact_lock(${assetLockKey(organizationId)})`,
   )

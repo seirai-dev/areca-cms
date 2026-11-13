@@ -17,10 +17,7 @@ import {
   isEntryLinkCollection,
   isEntryLinkId,
 } from './allowlist'
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
+import { isPlainObject } from '#/lib/is-plain-object'
 
 function checkAttrs(
   attrs: unknown,

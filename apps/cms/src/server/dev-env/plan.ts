@@ -15,6 +15,7 @@ import {
   withoutFieldKeys,
 } from '#/lib/field-content'
 import { I18N_KEY, LOCALE_KEY } from '#/lib/content-locale'
+import { stableEqual, stableStringify } from '#/lib/stable-json'
 import type {
   ContentKind,
   EntryData,
@@ -27,6 +28,7 @@ import type {
 
 import { findSlugCollisions } from './slug-collisions'
 import type { SlugCollision, SlugOwner } from './slug-collisions'
+import { isPlainObject } from '#/lib/is-plain-object'
 
 export type PlanItemKind =
   | 'schema.add'
@@ -154,29 +156,6 @@ export type PlanInput = {
 
 const EMPTY_SCHEMA: SchemaSnapshot = { languages: null, collections: [] }
 
-/** Deterministic JSON: object keys sorted, undefined members dropped. */
-export function stableStringify(value: unknown): string {
-  return JSON.stringify(sortKeys(value))
-}
-
-function sortKeys(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortKeys)
-  if (value !== null && typeof value === 'object') {
-    const source = value as Record<string, unknown>
-    const out: Record<string, unknown> = {}
-    for (const key of Object.keys(source).sort()) {
-      if (source[key] === undefined) continue
-      out[key] = sortKeys(source[key])
-    }
-    return out
-  }
-  return value
-}
-
-export function deepEqual(a: unknown, b: unknown): boolean {
-  return stableStringify(a) === stableStringify(b)
-}
-
 function sha256(text: string): string {
   return createHash('sha256').update(text).digest('hex')
 }
@@ -201,14 +180,14 @@ function changedFieldKeys(before: Field[], after: Field[]): string[] {
   return keys.filter((key) => {
     const a = before.find((field) => field.key === key)
     const b = after.find((field) => field.key === key)
-    return !deepEqual(a, b)
+    return !stableEqual(a, b)
   })
 }
 
 /** Top-level keys whose values differ, `$i18n` and `$seo` included as whole keys. */
 function changedDataKeys(before: EntryData, after: EntryData): string[] {
   const keys = uniqueSorted([...Object.keys(before), ...Object.keys(after)])
-  return keys.filter((key) => !deepEqual(before[key], after[key]))
+  return keys.filter((key) => !stableEqual(before[key], after[key]))
 }
 
 /** Production values of the fields the dev side removes, in field order. */
@@ -290,7 +269,7 @@ function schemaItems(input: PlanInput, base: SchemaSnapshot): Built[] {
     const b = findByKey(base.collections, key)
     const d = findByKey(input.dev.collections, key)
     const pRaw = findByKey(input.production.collections, key)
-    if (deepEqual(b, d)) continue
+    if (stableEqual(b, d)) continue
 
     const p = productionSide(pRaw, d === undefined)
     const kind: PlanItemKind = !b
@@ -298,9 +277,9 @@ function schemaItems(input: PlanInput, base: SchemaSnapshot): Built[] {
       : !d
         ? 'schema.remove'
         : 'schema.change'
-    const productionChanged = !deepEqual(b, p)
+    const productionChanged = !stableEqual(b, p)
     // Dev equal to production leaves nothing to resolve, so it is never a conflict.
-    const conflict = productionChanged && !deepEqual(d, p)
+    const conflict = productionChanged && !stableEqual(d, p)
     const dropped = droppedFields(
       pRaw?.fields ?? [],
       d?.fields ?? [],
@@ -369,11 +348,11 @@ function languageItem(input: PlanInput, base: SchemaSnapshot): Built | null {
   const baseLanguages = base.languages
   const devLanguages = input.dev.languages
   // A site cannot clear its languages, so a dev env with none has no change to push.
-  if (devLanguages == null || deepEqual(baseLanguages, devLanguages)) {
+  if (devLanguages == null || stableEqual(baseLanguages, devLanguages)) {
     return null
   }
   const productionLanguages = input.production.languages
-  const productionChanged = !deepEqual(baseLanguages, productionLanguages)
+  const productionChanged = !stableEqual(baseLanguages, productionLanguages)
   // Only a switch of an existing main language stamps data; a first language has nothing to stamp.
   const mainChanged =
     baseLanguages != null && baseLanguages.main !== devLanguages.main
@@ -389,7 +368,7 @@ function languageItem(input: PlanInput, base: SchemaSnapshot): Built | null {
   const attention: PlanAttention =
     scheduledTitles.length > 0
       ? 'scheduled'
-      : productionChanged && !deepEqual(devLanguages, productionLanguages)
+      : productionChanged && !stableEqual(devLanguages, productionLanguages)
         ? 'conflict'
         : mainChanged
           ? 'main-language'
@@ -431,12 +410,12 @@ function entryChanged(dev: PlanEntry, ignore: string[] = []): boolean {
   if (!base) return true
   return (
     dev.slug !== base.slug ||
-    !deepEqual(
+    !stableEqual(
       withoutKeysForCompare(dev.draftData, ignore),
       withoutKeysForCompare(base.data, ignore),
     ) ||
     dev.publishedSlug !== base.publishedSlug ||
-    !deepEqual(
+    !stableEqual(
       withoutIgnored(dev.publishedData, ignore),
       withoutIgnored(base.publishedData, ignore),
     ) ||
@@ -469,10 +448,6 @@ function withoutKeysForCompare(data: EntryData, ignore: string[]): EntryData {
   return slots.length > 0
     ? { ...rest, [I18N_KEY]: Object.fromEntries(slots) }
     : rest
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /**
@@ -531,10 +506,10 @@ function entrySummary(dev: PlanEntry, ignore: string[] = []): PlanSummary {
   const baseDraft = withoutKeysForCompare(base.data, ignore)
   const published = withoutIgnored(dev.publishedData, ignore)
   const basePublished = withoutIgnored(base.publishedData, ignore)
-  const draftChanged = dev.slug !== base.slug || !deepEqual(draft, baseDraft)
+  const draftChanged = dev.slug !== base.slug || !stableEqual(draft, baseDraft)
   const readyChanged =
     dev.publishedSlug !== base.publishedSlug ||
-    !deepEqual(published, basePublished) ||
+    !stableEqual(published, basePublished) ||
     dev.status !== base.status
   const changedFields = uniqueSorted([
     ...changedDataKeys(baseDraft, draft),
@@ -848,9 +823,9 @@ export function productionChangeCount(input: PlanInput): number {
       findByKey(input.production.collections, key),
       b === undefined,
     )
-    if (!deepEqual(b, p)) count += 1
+    if (!stableEqual(b, p)) count += 1
   }
-  if (!deepEqual(base.languages, input.production.languages)) count += 1
+  if (!stableEqual(base.languages, input.production.languages)) count += 1
   const productionById = new Map(
     input.productionEntries.map((row) => [row.id, row]),
   )
@@ -900,7 +875,7 @@ export function collectionsMatchProduction(
   const matches: Record<string, boolean> = {}
   for (const key of keys) {
     const d = findByKey(input.dev.collections, key)
-    matches[key] = deepEqual(
+    matches[key] = stableEqual(
       d,
       productionSide(findByKey(input.production.collections, key), !d),
     )

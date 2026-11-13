@@ -35,3 +35,9 @@ pool.on('error', (error) => {
 })
 
 export const db = drizzle(pool, { schema })
+
+/** A transaction handle, as passed to the `db.transaction` callback. */
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+/** The pool or an open transaction: anything that can run a query. */
+export type DbExecutor = typeof db | Tx
+export type DbReader = Pick<typeof db, 'select'>

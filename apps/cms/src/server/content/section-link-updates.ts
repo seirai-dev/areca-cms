@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { and, eq, inArray, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbReader } from '#/db'
 import { collection, entry, entryLink, site } from '#/db/schema'
 import { baseLocale } from '#/lib/content-locale'
 import { isEditedSinceReady } from '#/lib/content/edited-since-ready'
@@ -100,7 +101,7 @@ type SourceRow = {
 }
 
 async function readSources(
-  connection: Pick<typeof db, 'select'>,
+  connection: DbReader,
   ids: string[],
   lock: boolean,
 ): Promise<SourceRow[]> {

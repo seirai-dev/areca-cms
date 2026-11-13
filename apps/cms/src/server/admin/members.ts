@@ -4,6 +4,7 @@ import { and, eq, gt, isNull, like, sql } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import {
   invitation,
   membership,
@@ -83,8 +84,6 @@ export class InvitationDeliveryError extends AppError {
     this.reason = reason
   }
 }
-
-export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /**
  * Serialises every owner-changing operation of one organization: concurrent
@@ -822,19 +821,6 @@ export async function acceptInvitation(input: {
     await notifyInviteAccepted(newlyAccepted.invitationId, input.userId)
   }
   return result
-}
-
-export async function listAgencyAdmins() {
-  return db
-    .select({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      isAgencyAdmin: user.isAgencyAdmin,
-    })
-    .from(user)
-    .where(eq(user.isAgencyAdmin, true))
-    .orderBy(user.email)
 }
 
 export async function setAgencyAdmin(

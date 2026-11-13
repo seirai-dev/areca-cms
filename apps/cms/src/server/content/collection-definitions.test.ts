@@ -2,8 +2,16 @@ import { describe, expect, it } from 'vitest'
 
 import type { Field } from '#/lib/types'
 
-import { validateCollectionDefinitions } from './collections.ts'
+import { validateContentDefinitions } from './content-definitions.ts'
 import { ValidationError } from './errors.ts'
+
+function validateCollectionDefinitions(
+  defs: { key: string; fields: Field[]; enabled?: boolean }[],
+) {
+  validateContentDefinitions(
+    defs.map((def) => ({ ...def, kind: 'collection' as const })),
+  )
+}
 
 function issuesOf(run: () => void) {
   try {

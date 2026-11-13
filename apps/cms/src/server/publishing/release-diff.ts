@@ -1,9 +1,10 @@
 import { and, desc, eq, gt, inArray } from 'drizzle-orm'
 
 import { db } from '#/db'
-import { collection, entry, publication, site, user } from '#/db/schema'
+import { collection, entry, publication, user } from '#/db/schema'
 import { entryTitle } from '#/lib/content/utils'
 import { globalsAsEntryLists } from '#/lib/globals'
+import { stableStringify } from '#/lib/stable-json'
 import type {
   Field,
   SeoMeta,
@@ -13,7 +14,7 @@ import type {
 } from '#/lib/types'
 import { buildSnapshot } from '#/server/content/snapshot'
 import type { LinkWarning } from '#/server/content/snapshot'
-import { siteCoreColumns } from '#/server/content/site-core'
+import { findSite } from '#/server/content/site-core'
 
 /**
  * Approved-candidate vs live (or demo) snapshot.
@@ -86,19 +87,9 @@ export type PendingReleaseChange = {
 type IndexedEntry = ReleaseDiffEntry &
   Pick<SnapshotEntry, 'seo' | 'publishedAt' | 'locales'>
 
-/** Order-insensitive JSON; same rule as `entry-live-state` `stable()`. */
-export function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value as Record<string, unknown>)
-      .sort()
-      .map(
-        (key) =>
-          `${JSON.stringify(key)}:${stableJson((value as Record<string, unknown>)[key])}`,
-      )
-      .join(',')}}`
-  }
-  return JSON.stringify(value ?? null)
+/** Order-insensitive JSON; same rule as `isEditedSinceReady`. */
+function stableJson(value: unknown): string {
+  return stableStringify(value, { undefinedAsNull: true })
 }
 
 function fingerprint(item: Pick<SnapshotEntry, 'id' | 'slug' | 'data'>) {
@@ -373,13 +364,7 @@ async function listScheduledUpcoming(
 export async function diffApprovedRelease(
   siteId: string,
 ): Promise<ApprovedReleaseDiff> {
-  const existingSite = (
-    await db
-      .select(siteCoreColumns)
-      .from(site)
-      .where(eq(site.id, siteId))
-      .limit(1)
-  ).at(0)
+  const existingSite = await findSite(siteId)
   const publishingMode = existingSite?.publishingMode ?? 'production'
   const live = await latestPublication(siteId, 'live')
   const demo =
@@ -539,10 +524,4 @@ export async function listPendingRelease(
   })
 
   return { changes, languages: diff.languages, linkWarnings: diff.linkWarnings }
-}
-
-export async function listPendingReleaseChanges(
-  siteId: string,
-): Promise<PendingReleaseChange[]> {
-  return (await listPendingRelease(siteId)).changes
 }

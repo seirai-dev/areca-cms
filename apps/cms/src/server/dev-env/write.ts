@@ -8,13 +8,12 @@
 import { and, eq } from 'drizzle-orm'
 
 import type { collection } from '#/db/schema'
-import { entry, entryRevision, site } from '#/db/schema'
+import { entry, entryRevision } from '#/db/schema'
 import type { DevEnvWarning } from '#/lib/dev-env'
 import { carryFieldValues } from '#/lib/field-content'
 import type { EntryData, EntryOriginBaseline, Field } from '#/lib/types'
-import { m } from '#/paraglide/messages'
 import { prepareReadyData } from '#/server/content/entries'
-import { NotFoundError, ValidationError } from '#/server/content/errors'
+import { ValidationError } from '#/server/content/errors'
 import { languageName } from '#/server/content/locale-validation'
 import { validateReferences } from '#/server/content/validation'
 
@@ -22,7 +21,8 @@ import type { PlanEntry } from './plan'
 import type { SlugCollision } from './slug-collisions'
 import { referenceLookup, referenceTargets } from './references'
 import type { ReferenceLookup, ReferenceWarning } from './references'
-import type { SiteRow, Tx } from './rows'
+import type { SiteCore } from '#/server/content/site-core'
+import type { Tx } from '#/db'
 
 export type ProductionCollection = typeof collection.$inferSelect
 
@@ -51,14 +51,6 @@ export type DevEntryState = Pick<
   | 'status'
   | 'originBaseline'
 >
-
-export async function readSiteRow(tx: Tx, siteId: string): Promise<SiteRow> {
-  const row = (
-    await tx.select().from(site).where(eq(site.id, siteId)).limit(1)
-  ).at(0)
-  if (!row) throw new NotFoundError(m.server_site_not_found())
-  return row
-}
 
 /** Keeps the production draft that a dev push or copy is about to replace, as a revision. */
 export async function keepDraftRevision(
@@ -192,7 +184,7 @@ export type ReadyCheckInput = {
  */
 export async function readyProblems(
   tx: Tx,
-  productionSite: SiteRow,
+  productionSite: SiteCore,
   candidate: ReadyCheckInput,
 ): Promise<{ messages: string[]; stored: EntryData | null }> {
   try {

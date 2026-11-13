@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { withTestSite } from '#/server/content/test-utils'
 import { AppError } from '#/server/http/app-error'
+import { m } from '#/paraglide/messages'
 
 import { AssetValidationError, deleteAsset } from './index'
 import {
@@ -14,11 +15,15 @@ import {
   httpStatusMessage,
   RemoteFetchError,
   sniffMimeType,
-  UNSUPPORTED_FILE_MESSAGE,
   unsupportedDownloadMessage,
   uploadAssetFromUrl,
-  WEB_PAGE_MESSAGE,
 } from './remote'
+
+const UNSUPPORTED_FILE_MESSAGE = m.server_remote_unsupported_file(
+  {},
+  { locale: 'en' },
+)
+const WEB_PAGE_MESSAGE = m.server_remote_web_page({}, { locale: 'en' })
 
 // Test servers listen on 8080, one of the ports the fetcher allows.
 const TEST_PORT = 8080

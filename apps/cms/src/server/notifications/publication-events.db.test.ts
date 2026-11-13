@@ -4,7 +4,6 @@ import type * as TriggersModule from './triggers.ts'
 import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createMockDeploymentAdapter } from '#/adapters/deployment/mock'
 import { db } from '#/db'
 import {
   buildJob,
@@ -28,6 +27,7 @@ import {
   processPublicationEvents,
   queuePublicationEvent,
 } from './publication-events.ts'
+import { createMockDeploymentAdapter } from '#/server/publishing/test-helpers'
 
 // `failNext` makes the next live delivery throw, as a failing SMTP or database
 // would. Everything else runs for real.

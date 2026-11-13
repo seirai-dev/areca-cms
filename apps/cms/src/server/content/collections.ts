@@ -2,6 +2,7 @@ import { archiveDeletedContent } from './deletion-archive'
 import { and, eq, notInArray } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbReader, Tx } from '#/db'
 import { collection, site } from '#/db/schema'
 import type { Field, SiteManifest } from '#/lib/types'
 import { withRequiredSlugField } from '#/lib/collection-fields'
@@ -24,12 +25,12 @@ import { lockSiteLinkIndex } from './entry-link-index.ts'
 import { ensureGlobalEntry } from './globals.ts'
 import { normalizeRequiredLanguages } from './locale-validation.ts'
 import { NotFoundError, ValidationError } from './errors.ts'
-import { siteCoreColumns } from './site-core.ts'
+import { getSiteOrThrow } from './site-core.ts'
 
 export async function listCollections(
   siteId: string,
   options: { enabledOnly?: boolean } = {},
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ) {
   const filters = [
     eq(collection.siteId, siteId),
@@ -52,7 +53,7 @@ export async function listCollections(
 export async function getCollection(
   siteId: string,
   key: string,
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ) {
   const row = (
     await connection
@@ -100,16 +101,7 @@ export async function syncManifest(
   for (const [key, def] of Object.entries(globals)) {
     assertPreviewPath(def.previewPath, key)
   }
-  const existingSite = (
-    await db
-      .select(siteCoreColumns)
-      .from(site)
-      .where(eq(site.id, siteId))
-      .limit(1)
-  ).at(0)
-  if (!existingSite) {
-    throw new NotFoundError(m.server_site_not_found())
-  }
+  const existingSite = await getSiteOrThrow(siteId)
 
   const now = new Date()
 
@@ -268,8 +260,6 @@ export async function syncManifest(
   })
 }
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
-
 export type CollectionUpsertInput = {
   key: string
   label: string
@@ -392,16 +382,7 @@ export async function upsertCollection(
   actorId?: string,
 ) {
   const prepared = prepareCollectionUpsert(input)
-  const existingSite = (
-    await db
-      .select(siteCoreColumns)
-      .from(site)
-      .where(eq(site.id, siteId))
-      .limit(1)
-  ).at(0)
-  if (!existingSite) {
-    throw new NotFoundError(m.server_site_not_found())
-  }
+  const existingSite = await getSiteOrThrow(siteId)
 
   const now = new Date()
 
@@ -505,14 +486,5 @@ export async function writeCollectionDelete(
       meta: { key: existing.key },
     },
     tx,
-  )
-}
-
-/** Collection-only validation (every definition is a collection). */
-export function validateCollectionDefinitions(
-  defs: { key: string; fields: Field[]; enabled?: boolean }[],
-) {
-  validateContentDefinitions(
-    defs.map((def) => ({ ...def, kind: 'collection' as const })),
   )
 }

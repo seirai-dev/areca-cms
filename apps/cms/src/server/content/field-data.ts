@@ -1,6 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbExecutor, Tx } from '#/db'
 import { collection, entry } from '#/db/schema'
 import { holdsAnyFieldKey, withoutFieldKeys } from '#/lib/field-content'
 import type { Field } from '#/lib/types'
@@ -16,15 +17,13 @@ import { syncEntryLinkIndex } from './entry-link-index.ts'
  * deletes that content, so the save must confirm it by key.
  */
 
-type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0]
-
 /**
  * Entries of one collection or section that hold a value for each field key,
  * in any stored version (draft, live, scheduled) and in any language. A blank
  * value (empty text, null, an empty list or object) is not content.
  */
 export async function fieldKeyUsage(
-  executor: Pick<typeof db, 'execute'>,
+  executor: DbExecutor,
   collectionId: string,
 ): Promise<Record<string, number>> {
   const result = await executor.execute<{ key: string; entries: number }>(sql`
@@ -85,7 +84,7 @@ export function droppedFieldKeys(before: Field[], after: Field[]): string[] {
  * them. Throws a validation error naming every unconfirmed key.
  */
 export async function confirmedFieldDrops(
-  tx: DbTx,
+  tx: Tx,
   input: {
     collectionId: string | undefined
     before: Field[]
@@ -150,7 +149,7 @@ export class FieldDropsUnconfirmedError extends Error {
  * unconfirmed drop. Returns the confirmed keys to purge, per collection id.
  */
 export async function planManifestFieldDrops(
-  tx: DbTx,
+  tx: Tx,
   input: {
     existing: {
       id: string
@@ -190,7 +189,7 @@ export async function planManifestFieldDrops(
 
 /** Deletes the content of the given keys from the collection's entries. */
 export async function purgeFieldContent(
-  tx: DbTx,
+  tx: Tx,
   collectionId: string,
   keys: string[],
 ): Promise<void> {

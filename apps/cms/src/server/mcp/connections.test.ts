@@ -18,8 +18,9 @@ import {
   isConnectionUsable,
   listConnections,
   revokeConnection,
+  saveConnectionApproval,
   touchConnection,
-  upsertConnection,
+  withConnectionLock,
 } from './connections'
 import { MCP_CONNECTION_IDLE_MS } from './oauth-resource'
 
@@ -112,15 +113,25 @@ describe.skipIf(!hasDb)('MCP connections', () => {
     userId: string,
     allowGoLive = false,
     clientName = 'Connections test app',
-  ) =>
-    upsertConnection({
+  ) => {
+    const input = {
       userId,
       siteId: ctx.site.id,
       organizationId: ctx.org.id,
       clientId,
       clientName,
       allowGoLive,
+    }
+    return withConnectionLock(input, async () => {
+      const now = new Date()
+      const existing = await findUsableConnection({ ...input, now })
+      return saveConnectionApproval(
+        input,
+        existing?.id ?? crypto.randomUUID(),
+        now,
+      )
     })
+  }
 
   it('keeps one active connection per user, site and app, and updates it on re-approval', async () => {
     const first = await connect(owner, false)

@@ -3,12 +3,10 @@ import { eq } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { site } from '#/db/schema'
-import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { hashToken } from '#/server/security/token-hash'
 
-import { NotFoundError } from './errors.ts'
-import { siteCoreColumns } from './site-core.ts'
+import { getSiteOrThrow, siteCoreColumns } from './site-core.ts'
 
 export function generateSiteToken() {
   const token = randomBytes(32).toString('hex')
@@ -41,16 +39,7 @@ export async function authenticateSite(
 }
 
 export async function rotateSiteToken(siteId: string) {
-  const existing = (
-    await db
-      .select(siteCoreColumns)
-      .from(site)
-      .where(eq(site.id, siteId))
-      .limit(1)
-  ).at(0)
-  if (!existing) {
-    throw new NotFoundError(m.server_site_not_found())
-  }
+  const existing = await getSiteOrThrow(siteId)
 
   const generated = generateSiteToken()
   await db

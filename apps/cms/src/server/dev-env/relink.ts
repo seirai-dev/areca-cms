@@ -1,6 +1,7 @@
 import { eq, inArray } from 'drizzle-orm'
 
 import { collection, entry } from '#/db/schema'
+import { stableStringify } from '#/lib/stable-json'
 import type { EntryData } from '#/lib/types'
 import {
   entryLinkPath,
@@ -12,8 +13,7 @@ import {
   relinkEntryLinks,
 } from '#/server/richtext/entry-links'
 
-import { stableStringify } from './plan'
-import type { Tx } from './rows'
+import type { Tx } from '#/db'
 
 /** A production entry after `relinkProductionEntries`: its data with the paths recomputed. */
 export type RelinkedEntry = {

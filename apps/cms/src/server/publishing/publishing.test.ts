@@ -1,7 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 import { describe, expect, it, vi } from 'vitest'
 
-import { createMockDeploymentAdapter } from '#/adapters/deployment/mock'
 import type { DeploymentAdapter } from '#/adapters/deployment/types'
 import { db, pool } from '#/db'
 import {
@@ -34,14 +33,14 @@ import {
   requestPublication,
   requestRollback,
 } from './publications.ts'
-import { resetSchedulerAttempts, runSchedulerTick } from './scheduler.ts'
+import { runSchedulerTick } from './scheduler.ts'
 import {
   CLAIM_SQL,
   claimNextJob,
   processJob,
   recoverStaleJobs,
 } from './worker.ts'
-import { jobOf } from './test-helpers'
+import { createMockDeploymentAdapter, jobOf } from './test-helpers'
 
 const hasDb = Boolean(process.env.DATABASE_URL)
 
@@ -350,7 +349,6 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
   it('enqueues a publication from the scheduler for due scheduled entries', async () => {
     await withTestSite(async (ctx) => {
       await setDeploymentTarget(ctx.site.id)
-      resetSchedulerAttempts()
       await createTestCollection(ctx.site.id)
       const scheduled = await createEntry({
         siteId: ctx.site.id,
@@ -848,7 +846,7 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
     })
   })
 
-  it('keeps scheduler backoff in the database across resetSchedulerAttempts', async () => {
+  it('keeps scheduler backoff in the database across ticks', async () => {
     await withTestSite(async (ctx) => {
       await createTestCollection(ctx.site.id)
       const scheduled = await createEntry({
@@ -890,7 +888,6 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         expect.objectContaining({ scheduledBy: [ctx.actor.id] }),
       )
 
-      resetSchedulerAttempts()
       await runSchedulerTick()
       expect(await listBuildJobs(ctx.site.id)).toHaveLength(0)
       const still = (

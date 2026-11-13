@@ -7,7 +7,6 @@ import {
   collectionsMatchProduction,
   productionChangeCount,
   selectPlanItems,
-  stableStringify,
 } from './plan'
 import type { PlanEntry, PlanInput, PlanProductionEntry } from './plan'
 
@@ -745,14 +744,6 @@ describe('productionChangeCount', () => {
         }),
       ),
     ).toBe(3)
-  })
-})
-
-describe('stableStringify', () => {
-  it('sorts object keys and drops undefined members', () => {
-    expect(stableStringify({ b: 1, a: { d: 2, c: undefined } })).toBe(
-      '{"a":{"d":2},"b":1}',
-    )
   })
 })
 

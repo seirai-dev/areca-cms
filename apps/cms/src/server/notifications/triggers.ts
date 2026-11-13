@@ -190,16 +190,7 @@ async function alertAgencyAdmins(input: {
  * A release went live (publication status `live`). Scheduled releases notify
  * the people who scheduled them; rollbacks tell owners; manual releases tell
  * the requester, and other owners get the `.others` variant.
- */
-export async function notifyPublicationLive(publicationId: string) {
-  try {
-    await deliverPublicationLive(publicationId)
-  } catch (error) {
-    log.error('live notification failed', { publicationId, err: error })
-  }
-}
-
-/**
+ *
  * Fans out the live notifications and throws on failure, so the publication
  * events loop can retry. `previousPublicationId` is the release that was live
  * before this one, read before it was superseded. Omitted: look it up now
@@ -279,20 +270,9 @@ export async function deliverPublicationLive(
 /**
  * A release failed (`stuck` when its outcome is unknown). The requester, the
  * people who scheduled it and owners are told, then agency admins who did not
- * already hear about it.
+ * already hear about it. Throws on failure so the publication events loop
+ * retries it.
  */
-export async function notifyPublicationFailed(
-  publicationId: string,
-  opts: { stuck: boolean },
-) {
-  try {
-    await deliverPublicationFailed(publicationId, opts)
-  } catch (error) {
-    log.error('failure notification failed', { publicationId, err: error })
-  }
-}
-
-/** Throws on failure so the publication events loop retries it. */
 export async function deliverPublicationFailed(
   publicationId: string,
   opts: { stuck: boolean },

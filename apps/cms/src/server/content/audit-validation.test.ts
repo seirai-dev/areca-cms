@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { validateCollectionDefinitions } from './collections'
+import { validateContentDefinitions } from './content-definitions'
 import { isApprovedReferenceTarget, validateEntryData } from './validation'
 import type { Field } from '#/lib/types'
+
+function validateCollectionDefinitions(
+  defs: { key: string; fields: Field[]; enabled?: boolean }[],
+) {
+  validateContentDefinitions(
+    defs.map((def) => ({ ...def, kind: 'collection' as const })),
+  )
+}
 
 describe('audit content validation regressions', () => {
   it.each([{}, '', { length: 0 }, { every: true }])(

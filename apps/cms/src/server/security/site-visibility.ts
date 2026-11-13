@@ -2,7 +2,6 @@ import { eq } from 'drizzle-orm'
 
 import { auditLog } from '#/db/schema'
 import { isDevSite } from '#/lib/site-environment'
-import { assertAdminMfa } from '#/lib/session.server'
 import { MfaRequiredError } from '#/lib/security-errors'
 import { m } from '#/paraglide/messages'
 import { NotFoundError } from '#/server/content/errors'
@@ -34,7 +33,6 @@ export async function isAgencyAdminWithMfa(
 ): Promise<boolean> {
   if (!principal.user.isAgencyAdmin) return false
   try {
-    assertAdminMfa(principal.user)
     await requireAdminLocalMfa(principal)
     return true
   } catch (error) {

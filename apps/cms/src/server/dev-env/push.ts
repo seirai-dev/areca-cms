@@ -5,9 +5,11 @@ import {
   SCHEDULED_IN_PRODUCTION_MESSAGE,
 } from '#/lib/dev-env'
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import { collection, entry, environmentPush, site } from '#/db/schema'
 import { entryTitle } from '#/lib/content/utils'
 import { carryFieldValues, withoutFieldKeys } from '#/lib/field-content'
+import { stableStringify } from '#/lib/stable-json'
 import type {
   ContentKind,
   EntryData,
@@ -43,12 +45,7 @@ import { requestPublication } from '#/server/publishing/publications'
 
 import { lockProductionSite } from './lock'
 import { relinkProductionEntries } from './relink'
-import {
-  buildPlan,
-  removedFieldKeysOf,
-  selectPlanItems,
-  stableStringify,
-} from './plan'
+import { buildPlan, removedFieldKeysOf, selectPlanItems } from './plan'
 import type { PlanEntry, PlanInput, PlanItem } from './plan'
 import { findSlugCollisions } from './slug-collisions'
 import type { SlugOwner } from './slug-collisions'
@@ -65,12 +62,13 @@ import {
   lockProductionRow,
   readDevEnvironment,
 } from './rows'
-import type { DevEnvActor, SiteRow, Tx } from './rows'
+import type { DevEnvActor, SiteRow } from './rows'
+import { getSiteOrThrow } from '#/server/content/site-core'
+import type { SiteCore } from '#/server/content/site-core'
 import {
   keepDraftRevision,
   nextOriginBaseline,
   productionReferenceLookup,
-  readSiteRow,
   readyProblems,
   referenceWarnings,
   slugCollisionMessage,
@@ -256,7 +254,7 @@ async function runPush(
     .select()
     .from(collection)
     .where(eq(collection.siteId, prod.id))
-  const productionSite = await readSiteRow(tx, prod.id)
+  const productionSite = await getSiteOrThrow(prod.id, tx)
 
   const created = await pushEntriesPassOne(
     state,
@@ -991,7 +989,7 @@ async function relinkWrittenEntries(
  */
 async function resolveReadyCandidates(
   tx: Tx,
-  productionSite: SiteRow,
+  productionSite: SiteCore,
   candidates: ReadyCandidate[],
   warnings: PushWarning[],
 ) {

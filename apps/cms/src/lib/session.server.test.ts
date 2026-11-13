@@ -3,9 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as DbModule from '#/db'
 
 import { withRequestScope } from '#/server/http/request-scope.server'
-import { securityErrorCode } from './security-errors.ts'
+import { MfaRequiredError, securityErrorCode } from './security-errors.ts'
 import {
-  assertAdminMfa,
   forgetSession,
   getSession as loadCurrentSession,
   hasRole,
@@ -74,25 +73,17 @@ beforeEach(() => {
   getSession.mockReset()
   memberRows.rows = []
   factorProof.mockReset()
-  factorProof.mockResolvedValue(undefined)
+  // The two-factor rule of the real requireAdminLocalMfa; its proof lookup is
+  // covered in audit-auth-regressions.test.ts.
+  factorProof.mockImplementation(
+    async (principal: { user: { twoFactorEnabled: boolean } }) => {
+      if (!principal.user.twoFactorEnabled) throw new MfaRequiredError()
+    },
+  )
   factorVerifiedAt.mockReset()
   factorVerifiedAt.mockResolvedValue(new Date())
   memberFactor.mockReset()
   memberFactor.mockResolvedValue(undefined)
-})
-
-describe('assertAdminMfa', () => {
-  it('requires two-factor when enforcement is on', () => {
-    expect(() => assertAdminMfa({ twoFactorEnabled: false }, true)).toThrow()
-    expect(() => assertAdminMfa({}, true)).toThrow()
-    expect(() => assertAdminMfa({ twoFactorEnabled: true }, true)).not.toThrow()
-  })
-
-  it('does nothing when enforcement is off', () => {
-    expect(() =>
-      assertAdminMfa({ twoFactorEnabled: false }, false),
-    ).not.toThrow()
-  })
 })
 
 describe('requireAgencyAdmin', () => {

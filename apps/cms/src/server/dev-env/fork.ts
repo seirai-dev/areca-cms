@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { eq, inArray } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import {
   collection,
   entry,
@@ -27,7 +28,7 @@ import {
 import { lockProductionSite } from './lock'
 import { DEV_SLUG_ATTEMPTS, devSlugCandidates, pickDevSlug } from './slug'
 import { lockProductionRow } from './rows'
-import type { DevEnvActor, SiteRow, Tx } from './rows'
+import type { DevEnvActor, SiteRow } from './rows'
 
 /** Preview URL of a new dev env: the agency's local site (Decision 10). */
 export const DEV_PREVIEW_URL = 'http://localhost:3000'

@@ -1,6 +1,7 @@
 import { and, eq, ne, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { DbExecutor, DbReader } from '#/db'
 import { collection, entry, site } from '#/db/schema'
 import {
   I18N_KEY,
@@ -16,6 +17,7 @@ import { m } from '#/paraglide/messages'
 
 import type { LanguageBlockerDetail } from './errors.ts'
 import type { FieldError } from './validation.ts'
+import { isPlainObject } from '#/lib/is-plain-object'
 
 /**
  * Required-language codes as stored: canonical tags, without duplicates. Codes
@@ -28,7 +30,7 @@ export function normalizeRequiredLanguages(codes: readonly string[]): string[] {
 /** Languages of a site, or null when it is single-language. */
 export async function loadSiteLanguages(
   siteId: string,
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ): Promise<SiteLanguages | null> {
   const row = (
     await connection
@@ -115,10 +117,6 @@ export function toLanguageBlockerDetail(
   }))
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
 /** Per-language slugs in `$i18n[locale].$slug` as `[locale, slug]` pairs. */
 function localeSlugs(data: EntryData): [string, string][] {
   const translations = data[I18N_KEY]
@@ -150,7 +148,7 @@ export function claimedSlugs(
  * shared asset attach lock first (server/assets/usage.ts).
  */
 export async function lockSlugClaims(
-  tx: Pick<typeof db, 'execute'>,
+  tx: DbExecutor,
   collectionId: string,
   slugs: readonly string[],
 ) {
@@ -170,7 +168,7 @@ export async function lockSlugClaims(
  */
 export async function validateLocaleSlugs(
   input: { collectionId: string; entryId?: string; data: EntryData },
-  connection: Pick<typeof db, 'select'> = db,
+  connection: DbReader = db,
 ): Promise<FieldError[]> {
   const errors: FieldError[] = []
   const slugs = localeSlugs(input.data)
@@ -218,14 +216,4 @@ export async function validateLocaleSlugs(
     }
   }
   return errors
-}
-
-/** The site's languages, read from the database. Used by lifecycle code. */
-export async function siteLocaleCtx(
-  siteId: string,
-  fields: Field[],
-  connection: Pick<typeof db, 'select'> = db,
-): Promise<LocaleCtx | null> {
-  const languages = await loadSiteLanguages(siteId, connection)
-  return languages ? localeCtxFor(languages, fields) : null
 }

@@ -306,8 +306,7 @@ export async function liveRoleFor(
   if (owner.blockedAt) return { ok: false, reason: 'invalid' }
   const role = await orgRoleOf(owner, organizationId)
   if (!role) return { ok: false, reason: 'invalid' }
-  // Mirrors assertAdminMfa in lib/session.server.ts. Not imported, because
-  // that module pulls in request-only APIs.
+  // Mirrors the two-factor rule of requireAdminLocalMfa (security/local-mfa.ts).
   if (role === 'agency' && env.ADMIN_MFA_REQUIRED && !owner.twoFactorEnabled) {
     return { ok: false, reason: 'mfa_required' }
   }
@@ -423,7 +422,7 @@ export function agencyAdminStatus(owner: {
 }): AgencyAdminStatus {
   if (!owner.isAgencyAdmin) return 'not_admin'
   if (owner.blockedAt) return 'blocked'
-  // Mirrors assertAdminMfa in lib/session.server.ts (see liveRoleFor).
+  // Mirrors the two-factor rule of requireAdminLocalMfa (see liveRoleFor).
   if (env.ADMIN_MFA_REQUIRED && !owner.twoFactorEnabled) return 'mfa_required'
   return 'active'
 }

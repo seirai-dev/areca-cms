@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { and, eq, inArray, lte, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
+import type { Tx } from '#/db'
 import { buildJob, entry, schedulerBackoff, site } from '#/db/schema'
 import { audit } from '#/server/audit'
 import { createLogger } from '#/server/log'
@@ -19,10 +20,6 @@ const BLOCKING_JOB_STATUSES = [
   'validating',
   'deploying',
 ] as const
-type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
-
-/** Kept for tests; retry state is durable, never process-local. */
-export function resetSchedulerAttempts() {}
 
 export function scheduleFingerprint(
   rows: Array<{ id: string; scheduledVersion: string | null }>,
@@ -45,7 +42,7 @@ export function nextSchedulerAttempt(failureCount: number, at: Date) {
 }
 
 export async function recordSchedulerFailure(
-  tx: Transaction,
+  tx: Tx,
   job: Pick<typeof buildJob.$inferSelect, 'siteId' | 'schedulerFingerprint'>,
   error: string,
   at: Date,
@@ -92,7 +89,7 @@ export async function recordSchedulerFailure(
 }
 
 export async function clearSchedulerFailure(
-  tx: Transaction,
+  tx: Tx,
   job: Pick<typeof buildJob.$inferSelect, 'siteId' | 'schedulerFingerprint'>,
 ) {
   if (!job.schedulerFingerprint) return
