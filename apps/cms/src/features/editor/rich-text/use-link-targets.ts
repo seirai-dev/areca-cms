@@ -110,5 +110,7 @@ export function useLinkChecks({
     enabled: pairs.length > 0,
     // Checked again when the editor opens or saves: targets change in other tabs too.
     staleTime: 0,
+    // One check per rich text field: a focus round trip should not refire them all.
+    refetchOnWindowFocus: false,
   })
 }

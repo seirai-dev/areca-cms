@@ -9,10 +9,15 @@ const mocks = vi.hoisted(() => ({
   rows: new Map<string, { mimeType: string; width: number | null }>(),
   get: vi.fn(),
   put: vi.fn(),
+  delete: vi.fn(),
 }))
 
 vi.mock('#/adapters', () => ({
-  getStorage: () => ({ get: mocks.get, put: mocks.put }),
+  getStorage: () => ({
+    get: mocks.get,
+    put: mocks.put,
+    delete: mocks.delete,
+  }),
 }))
 // Every test has one asset row; both the thumbnail and the original file
 // lookups select it by storage key.
@@ -61,6 +66,10 @@ beforeEach(() => {
   mocks.rows.clear()
   mocks.get.mockReset()
   mocks.put.mockReset()
+  mocks.delete.mockReset()
+  mocks.delete.mockImplementation(async (key: string) => {
+    mocks.objects.delete(key)
+  })
   mocks.get.mockImplementation(async (key: string) => {
     const object = mocks.objects.get(key)
     return object
@@ -86,6 +95,13 @@ function addAsset(
 ) {
   mocks.objects.set(key, { bytes, contentType: mimeType })
   mocks.rows.set(key, { mimeType, width })
+}
+
+/** What deleteAsset and its cleanup do: the row and every object go. */
+function deleteAssetNow(key: string) {
+  mocks.rows.delete(key)
+  for (const stored of [key, ...derivedStorageKeys(key)])
+    mocks.objects.delete(stored)
 }
 
 function get(path: string, accept = 'image/avif,image/webp,*/*') {
@@ -190,6 +206,28 @@ describe('asset thumbnails (?w=)', () => {
     expect((await get('org/gone.jpg?w=320')).status).toBe(404)
   })
 
+  it('removes a thumbnail whose asset was deleted while it rendered', async () => {
+    addAsset('org/photo.jpg', photo, 'image/jpeg', 2000)
+    const key = thumbnailKey('org/photo.jpg', 1280, 'avif')
+    mocks.put.mockImplementationOnce(
+      async (putKey: string, bytes: Buffer, contentType: string) => {
+        deleteAssetNow('org/photo.jpg')
+        mocks.objects.set(putKey, { bytes: Buffer.from(bytes), contentType })
+      },
+    )
+    expect((await get('org/photo.jpg?w=1280')).status).toBe(404)
+    expect(mocks.delete).toHaveBeenCalledWith(key)
+    expect(mocks.objects.has(key)).toBe(false)
+  })
+
+  it('never serves a stored thumbnail of a deleted asset', async () => {
+    const key = thumbnailKey('org/photo.jpg', 320, 'webp')
+    mocks.objects.set(key, { bytes: photo, contentType: 'image/webp' })
+    const response = await get('org/photo.jpg?w=320', 'image/webp,*/*')
+    expect(response.status).toBe(404)
+    expect(mocks.get).not.toHaveBeenCalledWith(key)
+  })
+
   it('lists every derived key for deletion', () => {
     expect(derivedStorageKeys('org/photo.jpg')).toContain(
       thumbnailKey('org/photo.jpg', 1280, 'avif'),
@@ -213,6 +251,24 @@ describe('MCP image previews', () => {
     expect(first?.mimeType).toBe('image/jpeg')
     expect(second).toEqual(first)
     expect(mocks.put).toHaveBeenCalledOnce()
+  })
+
+  it('removes a preview whose asset was deleted while it rendered', async () => {
+    addAsset('org/photo.jpg', photo, 'image/jpeg', 2000)
+    mocks.put.mockImplementationOnce(
+      async (putKey: string, bytes: Buffer, contentType: string) => {
+        deleteAssetNow('org/photo.jpg')
+        mocks.objects.set(putKey, { bytes: Buffer.from(bytes), contentType })
+      },
+    )
+    expect(
+      await assetPreview({
+        id: 'a',
+        storageKey: 'org/photo.jpg',
+        mimeType: 'image/jpeg',
+      }),
+    ).toBeNull()
+    expect(mocks.objects.has('derived/org/photo.jpg/preview.jpg')).toBe(false)
   })
 
   it('has no preview for a PDF', async () => {

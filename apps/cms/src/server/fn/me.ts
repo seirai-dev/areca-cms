@@ -6,7 +6,7 @@ import { z } from '#/lib/zod'
 import { db } from '#/db'
 import { membership, organization, site, user } from '#/db/schema'
 import { hasAgencyWideAccess } from '#/lib/agency-access'
-import { localMfaVerifiedAt } from '#/server/security/local-mfa'
+import { owesLocalMfa } from '#/server/security/local-mfa'
 import { env } from '#/env'
 import type { MembershipRole, SiteLanguages } from '#/lib/types'
 import { getSession, requireSignedIn } from '#/lib/session.server'
@@ -114,16 +114,13 @@ export const getMeFn = createServerFn({ method: 'GET', ...meFn }).handler(
 
     // Agency-wide data (every site, the organization count) waits until an
     // admin has verified a local factor in this session. Until then an admin
-    // gets the same membership-scoped view as anyone else. Anyone else with
+    // gets the same membership-scoped view as anyone else. Everyone with
     // two-factor on is asked for a code the same way (social and SSO sign-ins
     // skip Better Auth's challenge).
     const adminMfaRequired = env.ADMIN_MFA_REQUIRED && currentUser.isAgencyAdmin
     const mfaEnrolmentRequired =
       adminMfaRequired && !currentUser.twoFactorEnabled
-    const mfaVerificationRequired =
-      (adminMfaRequired || !currentUser.isAgencyAdmin) &&
-      currentUser.twoFactorEnabled &&
-      !(await localMfaVerifiedAt(session))
+    const mfaVerificationRequired = await owesLocalMfa(session)
     const agencyWide = hasAgencyWideAccess({
       isAgencyAdmin: currentUser.isAgencyAdmin,
       adminMfaRequired: env.ADMIN_MFA_REQUIRED,

@@ -662,9 +662,10 @@ async function reissueInvitation(
         tokenHash,
         expiresAt: new Date(Date.now() + INVITE_TTL_MS),
         deliveryStatus: 'queued',
-        ...(action === 'invitation.regenerate_link'
-          ? { linkRevealedAt: new Date() }
-          : {}),
+        // Only the admin has seen a regenerated link. A resend replaces it
+        // with one that went to the mailbox alone.
+        linkRevealedAt:
+          action === 'invitation.regenerate_link' ? new Date() : null,
       })
       .where(eq(invitation.id, id))
       .returning()

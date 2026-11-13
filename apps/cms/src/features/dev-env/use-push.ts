@@ -35,6 +35,8 @@ export function useDevSyncStatus(devSiteId: string, { enabled = true } = {}) {
     queryKey: queryKeys.devSync(devSiteId),
     queryFn: () => getSync({ data: { devSiteId } }),
     enabled,
+    // Counts the whole dev site; dev saves and pushes invalidate it.
+    refetchOnWindowFocus: false,
   })
 }
 

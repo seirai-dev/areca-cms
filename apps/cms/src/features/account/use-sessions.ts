@@ -11,7 +11,6 @@ export function useAccountSessions() {
   return useQuery({
     queryKey: queryKeys.sessions(),
     queryFn: () => listMySessionsFn(),
-    staleTime: 0,
     retry: false,
   })
 }
