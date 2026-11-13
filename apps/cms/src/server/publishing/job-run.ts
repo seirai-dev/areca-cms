@@ -27,6 +27,7 @@ import {
   lockSiteLinkIndex,
   syncEntryLinkIndexes,
 } from '#/server/content/entry-link-index'
+import { CLEARED_SCHEDULE } from '#/server/content/entry-commit'
 import { siteCoreColumns } from '#/server/content/site-core'
 import { createLogger, redactString } from '#/server/log'
 import { queuePublicationEvent } from '#/server/notifications/publication-events'
@@ -528,12 +529,7 @@ async function completeRelease(
           publishedData: sql`${entry.scheduledData}`,
           publishedSlug: sql`${entry.scheduledSlug}`,
           publishedAt: now,
-          scheduledAt: null,
-          scheduleTimezone: null,
-          scheduledBy: null,
-          scheduledData: null,
-          scheduledSlug: null,
-          scheduledVersion: null,
+          ...CLEARED_SCHEDULE,
         })
         .where(
           and(
