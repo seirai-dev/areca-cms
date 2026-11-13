@@ -17,26 +17,31 @@ const state = vi.hoisted(() => ({
     snapshot: Record<string, unknown>
   }>,
 }))
+const selectRows = (condition: unknown) => {
+  const query = new PgDialect().sqlToQuery(condition as never)
+  const [siteId, selected] = query.params
+  return state.rows
+    .filter(
+      (row) =>
+        row.siteId === siteId &&
+        (query.sql.includes('"publication"."id"')
+          ? row.id === selected
+          : row.status === selected),
+    )
+    .slice(0, 1)
+    .map((row) => ({
+      ...row,
+      snapshotHash: row.snapshot.hash,
+      hasAssets: 'assets' in row.snapshot,
+    }))
+}
 vi.mock('#/db', () => ({
   db: {
     select: () => ({
       from: () => ({
         where: (condition: unknown) => ({
-          orderBy: () => ({
-            limit: async () => {
-              const query = new PgDialect().sqlToQuery(condition as never)
-              const [siteId, selected] = query.params
-              return state.rows
-                .filter(
-                  (row) =>
-                    row.siteId === siteId &&
-                    (query.sql.includes('"publication"."id"')
-                      ? row.id === selected
-                      : row.status === selected),
-                )
-                .slice(0, 1)
-            },
-          }),
+          orderBy: () => ({ limit: async () => selectRows(condition) }),
+          limit: async () => selectRows(condition),
         }),
       }),
     }),
@@ -156,5 +161,84 @@ describe('snapshot/current publication selection and caching', () => {
       assets: [{ id: 'stored' }],
     })
     expect(snapshotAssets).not.toHaveBeenCalled()
+  })
+
+  it('sends an ETag for a stored publication and answers a match with 304', async () => {
+    state.site = {
+      id: 's',
+      publishingMode: 'production',
+      organizationId: 'org',
+      productionUrl: 'https://www.acme.test/',
+    }
+    state.rows = [
+      {
+        id: 'p1',
+        siteId: 's',
+        status: 'live',
+        snapshot: { hash: 'h1', collections: {}, assets: [] },
+      },
+    ]
+    const first = await getSitesSnapshotCurrent(request())
+    const etag = first.headers.get('ETag')
+    expect(etag).toMatch(/^"[0-9a-f]{40}"$/)
+    expect(first.headers.get('Cache-Control')).toBe('private, no-cache')
+    const body = await first.text()
+    expect(body).toBe(
+      JSON.stringify({
+        hash: 'h1',
+        collections: {},
+        assets: [],
+        publicationId: 'p1',
+        siteUrl: 'https://www.acme.test',
+      }),
+    )
+
+    for (const header of [etag!, `W/${etag}`, `"other", ${etag}`, '*']) {
+      const again = await getSitesSnapshotCurrent(
+        new Request('http://cms.test/api/sites/snapshot/current', {
+          headers: { 'If-None-Match': header },
+        }),
+      )
+      expect(again.status).toBe(304)
+      expect(again.headers.get('ETag')).toBe(etag)
+      expect(await again.text()).toBe('')
+    }
+
+    const stale = await getSitesSnapshotCurrent(
+      new Request('http://cms.test/api/sites/snapshot/current', {
+        headers: { 'If-None-Match': '"other"' },
+      }),
+    )
+    expect(stale.status).toBe(200)
+    expect(await stale.text()).toBe(body)
+
+    // The site URL is part of the body, so a new one changes the tag.
+    state.site.productionUrl = 'https://new.acme.test'
+    const moved = await getSitesSnapshotCurrent(
+      new Request('http://cms.test/api/sites/snapshot/current', {
+        headers: { 'If-None-Match': etag! },
+      }),
+    )
+    expect(moved.status).toBe(200)
+    expect(moved.headers.get('ETag')).not.toBe(etag)
+  })
+
+  it('sends no ETag when the asset list is computed for an older publication', async () => {
+    state.site = {
+      id: 's',
+      publishingMode: 'production',
+      organizationId: 'org',
+    }
+    state.rows = [
+      { id: 'old', siteId: 's', status: 'live', snapshot: { hash: 'a' } },
+    ]
+    const res = await getSitesSnapshotCurrent(
+      new Request('http://cms.test/api/sites/snapshot/current', {
+        headers: { 'If-None-Match': '*' },
+      }),
+    )
+    expect(res.status).toBe(200)
+    expect(res.headers.get('ETag')).toBeNull()
+    expect(res.headers.get('Cache-Control')).toBe('no-store')
   })
 })
