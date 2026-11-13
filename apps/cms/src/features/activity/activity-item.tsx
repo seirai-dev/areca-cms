@@ -5,12 +5,21 @@ import { CheckCircle, XCircle } from '@phosphor-icons/react'
 import { queryKeys } from '#/lib/query-keys'
 import { SystemAvatar, UserAvatar } from '#/components/ui/avatar'
 import { Tag } from '#/components/ui/tag'
-import { RelativeTime, TimelineItem } from '#/components/ui/timeline'
+import {
+  RelativeTime,
+  TimelineItem,
+  absoluteTimeLabel,
+} from '#/components/ui/timeline'
 import { contentRoute } from '#/lib/content-route'
 import { ACTIVITY_ENTRIES_MAX_IDS } from '#/lib/content-limits'
 import { m } from '#/paraglide/messages'
 import { getActivityEntriesFn } from '#/server/fn/activity-entries'
-import { activityParts, entryTargetIds, viaMcpKey } from './activity-sentence'
+import {
+  activityParts,
+  entryTargetIds,
+  lastSavedAt,
+  viaMcpKey,
+} from './activity-sentence'
 import type { ActivityLike } from './activity-sentence'
 
 type EntryRef = {
@@ -102,6 +111,7 @@ export function ActivityTimelineItem({
       : null
   const metaLine = [scope, repeat].filter(Boolean).join(' · ')
   const via = viaMcpKey(row)
+  const savedUntil = lastSavedAt(row)
   const viaKey = via?.name ?? null
 
   const icon =
@@ -141,7 +151,16 @@ export function ActivityTimelineItem({
           </span>
         </span>
       }
-      time={<RelativeTime value={row.createdAt} />}
+      time={
+        <RelativeTime
+          value={row.createdAt}
+          title={
+            savedUntil
+              ? `${absoluteTimeLabel(row.createdAt)} – ${absoluteTimeLabel(savedUntil)}`
+              : undefined
+          }
+        />
+      }
       meta={
         metaLine || viaKey ? (
           <span className="flex flex-wrap items-center gap-2 text-caption font-normal text-text-muted">

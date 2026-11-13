@@ -22,6 +22,7 @@ import {
   mcpConnection,
   twoFactor,
   user,
+  verification,
 } from '#/db/schema'
 import { env } from '#/env'
 import { securityErrorCode } from '#/lib/security-errors'
@@ -1957,6 +1958,126 @@ describe.skipIf(!hasDb)(
         )
         expect(await toolNames(client)).toContain('list_entries')
         await client.close()
+      })
+
+      it('sends a session without a code to the consent screen even when consent is remembered', async () => {
+        const tfa = await addUser('tfa-remembered', 'owner', {
+          twoFactor: true,
+        })
+        const clientId = await registerClient()
+        const firstPkce = pkcePair()
+        const firstLogin = await startAuthorization({
+          clientId,
+          slug: ctx.site.slug,
+          pkce: firstPkce,
+          state: 'first',
+        })
+        const jar: Jar = new Map()
+        await authPost(
+          '/sign-in/email',
+          { email: tfa.email, password: PASSWORD, oauth_query: firstLogin },
+          jar,
+        )
+        await authPost(
+          '/two-factor/verify-totp',
+          { code: totpNow(TOTP_SECRET) },
+          jar,
+        )
+        const resumed = await authPost(
+          '/oauth2/continue',
+          { postLogin: true, oauth_query: firstLogin },
+          jar,
+        )
+        cookiesAsHeaders(jar)
+        await approveConsentRequest({
+          query: new URL(String(resumed.json.url), AUTH_ORIGIN).search.slice(1),
+          siteId: ctx.site.id,
+          allowGoLive: false,
+        })
+
+        // Now the session looks like a provider sign-in: no code entered.
+        const sessions = await db
+          .select({ id: session.id })
+          .from(session)
+          .where(eq(session.userId, tfa.id))
+        const proofIds = sessions.map((row) => `local-mfa:${row.id}`)
+        await db.delete(verification).where(inArray(verification.id, proofIds))
+
+        const pkce = pkcePair()
+        const params = new URLSearchParams({
+          client_id: clientId,
+          redirect_uri: REDIRECT_URI,
+          response_type: 'code',
+          state: 'remembered',
+          code_challenge: pkce.challenge,
+          code_challenge_method: 'S256',
+          scope: 'mcp offline_access openid',
+          resource: mcpResourceUrl(ctx.site.slug),
+        })
+        const authorized = await auth.handler(
+          new Request(`${AUTH_BASE}/oauth2/authorize?${params}`, {
+            headers: { accept: 'text/html', cookie: cookieHeader(jar) },
+            redirect: 'manual',
+          }),
+        )
+        const location = new URL(
+          authorized.headers.get('location') ?? '',
+          AUTH_ORIGIN,
+        )
+        expect(location.pathname).toBe('/oauth/consent')
+        expect(location.searchParams.has('code')).toBe(false)
+        const consentQuery = location.search.slice(1)
+
+        // The resume after a provider round trip goes the same way.
+        const continued = await authPost(
+          '/oauth2/continue',
+          { postLogin: true, oauth_query: firstLogin },
+          jar,
+        )
+        expect(String(continued.json.url)).toContain('/oauth/consent?')
+
+        // Calling the plugin's consent endpoint directly does not skip the code.
+        const direct = await authPost(
+          '/oauth2/consent',
+          { accept: true, oauth_query: consentQuery },
+          jar,
+        )
+        expect(direct.status).toBe(403)
+
+        cookiesAsHeaders(jar)
+        expect(await describeConsentRequest(consentQuery)).toMatchObject({
+          needsStepUp: true,
+        })
+        const refused: unknown = await approveConsentRequest({
+          query: consentQuery,
+          siteId: ctx.site.id,
+          allowGoLive: false,
+        }).catch((error: unknown) => error)
+        expect(securityErrorCode(refused)).toBe('REAUTH_REQUIRED')
+
+        // The code dialog records the proof; the retried approval goes through.
+        await db.insert(verification).values(
+          sessions.map((row) => ({
+            id: `local-mfa:${row.id}`,
+            identifier: `local-mfa:${row.id}`,
+            value: tfa.id,
+            expiresAt: new Date(Date.now() + 60_000),
+          })),
+        )
+        const approved = await approveConsentRequest({
+          query: consentQuery,
+          siteId: ctx.site.id,
+          allowGoLive: false,
+        })
+        const exchanged = await tokenRequest({
+          grant_type: 'authorization_code',
+          code: new URL(approved.redirectTo).searchParams.get('code') ?? '',
+          redirect_uri: REDIRECT_URI,
+          client_id: clientId,
+          code_verifier: pkce.verifier,
+          resource: mcpResourceUrl(ctx.site.slug),
+        })
+        expect(exchanged.status).toBe(200)
       })
     })
   },

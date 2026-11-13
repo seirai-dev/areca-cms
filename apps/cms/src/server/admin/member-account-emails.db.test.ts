@@ -334,4 +334,16 @@ describe.skipIf(!hasDb)('member account emails', () => {
     })
     expect(await emailVerifiedOf(revealed.person.id)).toBe(false)
   })
+
+  it('forgets the revealed link when a resend replaces it', async () => {
+    const { invitationId, owner } = await deliveredInvite(new Date())
+
+    await resendInvitation(invitationId, owner.id).catch(() => undefined)
+
+    const [row] = await db
+      .select({ linkRevealedAt: invitation.linkRevealedAt })
+      .from(invitation)
+      .where(eq(invitation.id, invitationId))
+    expect(row?.linkRevealedAt).toBeNull()
+  })
 })

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PgDialect } from 'drizzle-orm/pg-core'
 
+import { publication } from '#/db/schema'
+
 import { getSitesSnapshotCurrent } from './current'
 
 const state = vi.hoisted(() => ({
@@ -35,9 +37,11 @@ const selectRows = (condition: unknown) => {
       hasAssets: 'assets' in row.snapshot,
     }))
 }
+const selected = vi.hoisted(() => [] as Record<string, unknown>[])
 vi.mock('#/db', () => ({
   db: {
-    select: () => ({
+    select: (fields: Record<string, unknown>) => ({
+      ...(selected.push(fields), {}),
       from: () => ({
         where: (condition: unknown) => ({
           orderBy: () => ({ limit: async () => selectRows(condition) }),
@@ -57,6 +61,7 @@ const request = (query = '') =>
   new Request(`http://cms.test/api/sites/snapshot/current${query}`)
 beforeEach(() => {
   snapshotAssets.mockClear()
+  selected.length = 0
   state.site = { id: 's', publishingMode: 'production' }
   state.rows = [
     {
@@ -203,6 +208,21 @@ describe('snapshot/current publication selection and caching', () => {
       expect(again.headers.get('ETag')).toBe(etag)
       expect(await again.text()).toBe('')
     }
+
+    // A 304 reads only plain columns, never the snapshot itself.
+    selected.length = 0
+    await getSitesSnapshotCurrent(
+      new Request('http://cms.test/api/sites/snapshot/current', {
+        headers: { 'If-None-Match': etag! },
+      }),
+    )
+    expect(selected).toEqual([
+      {
+        id: publication.id,
+        snapshotHash: publication.snapshotHash,
+        hasAssets: publication.hasAssets,
+      },
+    ])
 
     const stale = await getSitesSnapshotCurrent(
       new Request('http://cms.test/api/sites/snapshot/current', {

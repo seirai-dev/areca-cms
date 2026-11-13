@@ -301,6 +301,9 @@ function normaliseOrigin(value: string): string {
   return origin
 }
 
+// A failed overlay chunk is reported once per page, not once per bridge.
+let overlayLoadWarned = false
+
 /**
  * Connects a site's preview page to the CMS. It answers `ping` with `hello`, announces
  * itself once when created, and passes each newer `update` to `onUpdate`. It reports
@@ -382,16 +385,23 @@ export function createVisualBridge(options: VisualBridgeOptions): VisualBridge {
   // It loads on demand, so pages outside the CMS frame never download it, and starts
   // after hello, so its first markers message follows the announcement.
   if (markers && options.window === undefined && typeof document !== 'undefined') {
-    void import('./visual-overlay.js').then(({ startOverlay }) => {
-      if (destroyed) return
-      overlay = startOverlay({
-        post: (message) => post(message),
-        document,
-        window: target as unknown as Window,
-      })
-      if (lastMode) overlay.setMode(lastMode)
-      if (lastHighlight) overlay.highlight(lastHighlight)
-    })
+    void import('./visual-overlay.js').then(
+      ({ startOverlay }) => {
+        if (destroyed) return
+        overlay = startOverlay({
+          post: (message) => post(message),
+          document,
+          window: target as unknown as Window,
+        })
+        if (lastMode) overlay.setMode(lastMode)
+        if (lastHighlight) overlay.highlight(lastHighlight)
+      },
+      (error: unknown) => {
+        if (overlayLoadWarned) return
+        overlayLoadWarned = true
+        console.warn('Live preview: could not load the click-to-edit overlay.', error)
+      },
+    )
   }
 
   return {

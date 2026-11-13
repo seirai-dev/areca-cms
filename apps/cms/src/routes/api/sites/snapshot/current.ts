@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import '@tanstack/react-start'
 import { createHash } from 'node:crypto'
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { publication } from '#/db/schema'
@@ -53,7 +53,7 @@ export async function getSitesSnapshotCurrent(request: Request) {
       .select({
         id: publication.id,
         snapshotHash: publication.snapshotHash,
-        hasAssets: sql<boolean>`${publication.snapshot} ? 'assets'`,
+        hasAssets: publication.hasAssets,
       })
       .from(publication)
       .where(

@@ -47,9 +47,11 @@ export async function audit(
 
 /**
  * The `entry.update` row of an autosave. When the entry's newest audit row is
- * this person's autosave row within the window, that row counts the save
- * (`meta.saves`, `meta.firstSavedAt`) and moves to now; otherwise a new row
- * starts with `saves: 1`. Writes inside an audit context (MCP) always add
+ * this person's autosave row, started within the window, that row counts the
+ * save (`meta.saves`, `meta.lastSavedAt`); otherwise a new row starts with
+ * `saves: 1`. The row keeps the `created_at` of its first save, so the log's
+ * order and its offset paging never shift while someone keeps editing, and a
+ * row never spans more than the window. Writes inside an audit context (MCP) always add
  * their own row. Callers hold the site's link-index lock, so two saves of one
  * entry never race here.
  */
@@ -87,10 +89,10 @@ export async function auditAutosave(
       limit 1
     )
     update ${auditLog}
-    set created_at = now(),
-      meta = latest.meta || jsonb_build_object(
+    set meta = latest.meta || jsonb_build_object(
         'saves', (latest.meta->>'saves')::int + 1,
-        'firstSavedAt', coalesce(latest.meta->'firstSavedAt', to_jsonb(latest.created_at))
+        'firstSavedAt', coalesce(latest.meta->'firstSavedAt', to_jsonb(latest.created_at)),
+        'lastSavedAt', to_jsonb(now())
       )
     from latest
     where ${auditLog.id} = latest.id

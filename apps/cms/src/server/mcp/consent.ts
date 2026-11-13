@@ -14,7 +14,7 @@ import {
 import { ReauthRequiredError } from '#/lib/security-errors'
 import { m } from '#/paraglide/messages'
 import { ForbiddenError, ValidationError } from '#/server/content/errors'
-import { localMfaVerifiedAt } from '#/server/security/local-mfa'
+import { owesLocalMfa } from '#/server/security/local-mfa'
 import { assertFreshSession } from '#/server/security/step-up'
 import {
   isAgencyAdminWithMfa,
@@ -270,10 +270,13 @@ export async function describeConsentRequest(
       .where(eq(site.slug, siteSlug))
       .limit(1)
   ).at(0)
-  // A dev env is not offered to anyone but an agency admin (Decision 3).
+  // A dev env is not offered to anyone but an agency admin (Decision 3). An
+  // admin who still owes a code sees it; approval asks for the code first.
   if (
     !target ||
-    (isDevSite(target) && !(await isAgencyAdminWithMfa(session)))
+    (isDevSite(target) &&
+      !(session.user.isAgencyAdmin && (await owesLocalMfa(session))) &&
+      !(await isAgencyAdminWithMfa(session)))
   ) {
     return {
       ok: false,
@@ -306,9 +309,8 @@ export async function describeConsentRequest(
     role,
     canAllowGoLive: role !== 'editor',
     needsStepUp:
-      role === 'agency'
-        ? await needsReauth(session)
-        : await needsMemberCode(session),
+      (await owesLocalMfa(session)) ||
+      (role === 'agency' && (await needsReauth(session))),
   }
 }
 
@@ -320,8 +322,14 @@ async function describeAgencyConsent(
   session: NonNullable<Awaited<ReturnType<typeof getSession>>>,
   client: ConsentClient,
 ): Promise<ConsentInfo> {
+  // An admin who still owes this session a code is shown the screen; the
+  // code dialog runs before the approval (approveAgencyConsentRequest).
   const status = agencyAdminStatus(session.user)
-  if (status !== 'active' || !(await isAgencyAdminWithMfa(session))) {
+  const owesCode = await owesLocalMfa(session)
+  if (
+    status !== 'active' ||
+    (!owesCode && !(await isAgencyAdminWithMfa(session)))
+  ) {
     return {
       ok: false,
       reason: 'no_access',
@@ -339,7 +347,7 @@ async function describeAgencyConsent(
       title: m.server_mcp_oauth_agency_title({ app: client.name }),
       body: m.server_mcp_oauth_agency_body(),
     },
-    needsStepUp: await needsReauth(session),
+    needsStepUp: owesCode || (await needsReauth(session)),
   }
 }
 
@@ -356,7 +364,7 @@ export async function approveConsentRequest(input: {
 }): Promise<{ redirectTo: string }> {
   // After a provider sign-in, a two-factor user has not entered a code yet.
   // The consent screen's code dialog answers REAUTH_REQUIRED and retries.
-  if (await needsMemberCode(await requireSignedIn())) {
+  if (await owesLocalMfa(await requireSignedIn())) {
     throw new ReauthRequiredError()
   }
   const {
@@ -430,6 +438,9 @@ export async function approveConsentRequest(input: {
 export async function approveAgencyConsentRequest(input: {
   query: string
 }): Promise<{ redirectTo: string }> {
+  if (await owesLocalMfa(await requireSignedIn())) {
+    throw new ReauthRequiredError()
+  }
   const session = await requireAgencyAdmin()
   await assertFreshSession(session)
 
@@ -496,15 +507,6 @@ export async function denyConsentRequest(
   }
   const redirectTo = await completePluginConsent({ query, accept: false })
   return { redirectTo }
-}
-
-/** True when someone other than an agency admin still owes this session a code. */
-async function needsMemberCode(session: {
-  session: { id: string }
-  user: { id: string; isAgencyAdmin: boolean; twoFactorEnabled: boolean }
-}) {
-  if (session.user.isAgencyAdmin || !session.user.twoFactorEnabled) return false
-  return !(await localMfaVerifiedAt(session))
 }
 
 /** True when an agency admin's session needs a fresh second factor to approve. */

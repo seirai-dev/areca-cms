@@ -679,6 +679,10 @@ export const publication = pgTable(
       .references(() => site.id, { onDelete: 'cascade' }),
     snapshot: jsonb('snapshot').$type<Snapshot>().notNull(),
     snapshotHash: text('snapshot_hash').notNull(),
+    /** Whether the snapshot stores its asset list, readable without the snapshot. */
+    hasAssets: boolean('has_assets')
+      .notNull()
+      .generatedAlwaysAs(sql`snapshot ? 'assets'`),
     entryVersions: jsonb('entry_versions')
       .$type<{ entryId: string; scheduledVersion: string }[]>()
       .notNull()
