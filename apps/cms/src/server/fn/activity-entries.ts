@@ -75,7 +75,9 @@ export const getActivityEntriesFn = createServerFn({
         siteId: entry.siteId,
         slug: entry.slug,
         draftData: sql<EntryData>`jsonb_build_object(${sql.join(
-          TITLE_KEYS.map((key) => sql`${key}::text, ${entry.draftData} -> ${key}`),
+          TITLE_KEYS.map(
+            (key) => sql`${key}::text, ${entry.draftData} -> ${key}`,
+          ),
           sql`, `,
         )})`,
         collectionKey: collection.key,
