@@ -51,7 +51,6 @@ import {
   canManageSite,
   collectionIcon,
   displayHost,
-  newEntryLabel,
   siteNavItems,
 } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
@@ -376,7 +375,7 @@ export function CommandPalette() {
               <CommandItem
                 key={`new-${collection.id}`}
                 value={`create new ${collection.label} ${collection.key}`}
-                keywords={[newEntryLabel(collection.label), collection.label]}
+                keywords={[m.shell_new(), collection.label]}
                 onSelect={() =>
                   go({
                     to: '/sites/$siteId/c/$collectionKey/new',
@@ -388,7 +387,7 @@ export function CommandPalette() {
                 }
               >
                 <Plus />
-                {newEntryLabel(collection.label)}
+                {collection.label}
               </CommandItem>
             ))}
           </CommandGroup>

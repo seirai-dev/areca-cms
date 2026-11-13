@@ -48,7 +48,6 @@ import { useDebouncedValue } from '#/hooks/use-debounced-value'
 import {
   canManageSite,
   collectionIcon,
-  newEntryLabel,
   singularLabel,
 } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
@@ -91,7 +90,7 @@ type CollectionRecord = {
 /**
  * Collection (brief §3.4): header with the entry count and route whisper,
  * expanding search (`/`), Cards/List (remembered), Select, the primary
- * "New {singular}"; the status filter; cards or rows; Photos-style select
+ * "New"; the status filter; cards or rows; Photos-style select
  * mode with a floating action bar; "Show more" paging.
  */
 export function CollectionScreen({
@@ -293,7 +292,7 @@ function CollectionView({
         params={{ siteId, collectionKey: collection.key }}
       >
         <Plus weight="bold" />
-        {newEntryLabel(collection.label)}
+        {m.shell_new()}
       </Link>
     </Button>
   ) : null

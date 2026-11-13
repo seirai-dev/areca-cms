@@ -48,7 +48,6 @@ import {
   canManageSite,
   collectionIcon,
   displayHost,
-  newEntryLabel,
 } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
@@ -201,7 +200,7 @@ export function OverviewScreen({ site }: { site: MeSite }) {
                       </span>
                       <span className="grid min-w-0 gap-0.5">
                         <span className="truncate text-[14px] leading-5 font-semibold text-text-primary sm:text-headline">
-                          {newEntryLabel(collection.label)}
+                          {collection.label}
                         </span>
                         <span className="truncate text-mono text-text-muted max-sm:hidden">
                           {collection.routePattern}

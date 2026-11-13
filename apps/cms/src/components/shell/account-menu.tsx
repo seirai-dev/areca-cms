@@ -64,6 +64,8 @@ function AppearanceControl({ size = 'sm' }: { size?: 'sm' | 'md' }) {
       data-testid="theme-toggle"
       size={size}
       fullWidth
+      // Content-sized segments so longer labels (Otomatik) are not cut off.
+      className="[&>button]:flex-auto [&>button]:px-2"
       value={value}
       onValueChange={setTheme}
       options={[

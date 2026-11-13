@@ -39,7 +39,6 @@ import {
   agencyNavItems,
   canManageSite,
   collectionIcon,
-  newEntryLabel,
   siteNavItems,
 } from '#/lib/site-nav'
 import { isDevSite } from '#/lib/site-environment'
@@ -223,7 +222,7 @@ function ContentGroup({
                             data-testid={`new-${collection.key}`}
                           >
                             <Icon />
-                            {newEntryLabel(collection.label)}
+                            {collection.label}
                           </Link>
                         </DropdownMenuItem>
                       )
