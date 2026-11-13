@@ -1,0 +1,1 @@
+ALTER TABLE "invitation" ADD COLUMN "link_revealed_at" timestamp with time zone;

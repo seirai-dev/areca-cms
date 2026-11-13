@@ -8,7 +8,7 @@ import { getLocale, localizeHref } from '#/paraglide/runtime'
 import { acceptInvitationFn } from '#/server/fn/me'
 import { completeSetupFn } from '#/server/fn/setup'
 
-import { ACCOUNT_BLOCKED_CODE, signInFailureMessage } from './sign-in-error'
+import { signInFailureMessage } from './sign-in-error'
 import {
   continueOAuth,
   isPluginRedirect,
@@ -26,18 +26,6 @@ export function useHydrated() {
   const [ready, setReady] = React.useState(false)
   React.useEffect(() => setReady(true), [])
   return ready
-}
-
-/**
- * Better Auth reports provider failures as a code on the callback URL. The
- * invite-only gate is the one people actually hit, so it gets real copy.
- */
-export function providerErrorMessage(code: string | undefined) {
-  if (!code) return null
-  if (code === ACCOUNT_BLOCKED_CODE) return m.auth_account_blocked()
-  return code === 'REGISTRATION_NOT_ALLOWED'
-    ? m.auth_registration_not_allowed()
-    : m.auth_could_not_sign_in()
 }
 
 function go(path: string) {

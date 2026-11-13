@@ -663,6 +663,9 @@ async function reissueInvitation(
         tokenHash,
         expiresAt: new Date(Date.now() + INVITE_TTL_MS),
         deliveryStatus: 'queued',
+        ...(action === 'invitation.regenerate_link'
+          ? { linkRevealedAt: new Date() }
+          : {}),
       })
       .where(eq(invitation.id, id))
       .returning()
@@ -794,8 +797,9 @@ export async function acceptInvitation(input: {
       .set({ acceptedAt: new Date() })
       .where(eq(invitation.id, invite.id))
     newlyAccepted.invitationId = invite.id
-    // The link was delivered to this address, so it counts as verified.
-    if (invite.deliveryStatus === 'sent') {
+    // The link reached only this mailbox, so the address counts as verified.
+    // A link the inviter has seen proves nothing about who signed up with it.
+    if (invite.deliveryStatus === 'sent' && !invite.linkRevealedAt) {
       await tx
         .update(user)
         .set({ emailVerified: true })

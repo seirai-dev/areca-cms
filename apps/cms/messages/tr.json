@@ -894,6 +894,7 @@
   "agency_token_saved": "Kaydettim",
   "agency_view_activity": "Etkinliği görüntüle",
   "auth_account_blocked": "Bu hesap engellendi. Ajansına başvur.",
+  "auth_account_not_linked": "Bu e-posta adresiyle zaten bir hesap var. Önce her zamanki gibi giriş yapıp e-posta adresinizi doğrulayın. Ardından bu giriş yöntemi de çalışır.",
   "auth_account_created_sign_in_failed": "Hesap oluşturuldu ancak giriş başarısız oldu",
   "auth_account_deleted": "Hesabın silindi.",
   "auth_already_have_account": "Zaten bir hesabınız var mı?",

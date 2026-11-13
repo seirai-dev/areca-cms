@@ -894,6 +894,7 @@
   "agency_token_saved": "Ik heb het opgeslagen",
   "agency_view_activity": "Activiteit bekijken",
   "auth_account_blocked": "Dit account is geblokkeerd. Neem contact op met je bureau.",
+  "auth_account_not_linked": "Er bestaat al een account met dit e-mailadres. Log eerst in zoals je gewend bent en bevestig je e-mailadres. Daarna werkt deze manier van inloggen ook.",
   "auth_account_created_sign_in_failed": "Account aangemaakt, inloggen mislukt",
   "auth_account_deleted": "Je account is verwijderd.",
   "auth_already_have_account": "Heb je al een account?",

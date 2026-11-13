@@ -315,12 +315,11 @@ const authBase = betterAuth({
   // stay usable: Better Auth also tries the plain identifier for them.
   verification: { storeIdentifier: 'hashed' },
   account: {
-    accountLinking: {
-      // An invited or bootstrapped account is never email-verified locally, so
-      // linking has to rely on the provider vouching for the address instead.
-      enabled: true,
-      requireLocalEmailVerified: false,
-    },
+    // A provider links to an existing account only when that account's email
+    // is verified here too (Better Auth's default). Otherwise anyone who made
+    // the account first, for example with a shared invitation link, would keep
+    // their password next to the real owner's provider sign-in.
+    accountLinking: { enabled: true },
   },
   databaseHooks: {
     session: {

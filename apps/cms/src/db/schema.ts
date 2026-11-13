@@ -252,6 +252,11 @@ export const invitation = pgTable('invitation', {
     .default('sent'),
   lastDeliveryError: text('last_delivery_error'),
   lastSentAt: timestamptz('last_sent_at'),
+  /**
+   * Set when the raw link was shown to the inviter ("Regenerate link"). Such an
+   * invitation no longer proves the invitee owns the mailbox.
+   */
+  linkRevealedAt: timestamptz('link_revealed_at'),
   createdAt: createdAt(),
 })
 
