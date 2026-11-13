@@ -29,7 +29,7 @@ export async function membershipRole(
   userId: string,
   organizationId: string,
 ): Promise<MembershipRole | null> {
-  const [member] = await db
+  const rows = await db
     .select({ role: membership.role })
     .from(membership)
     .where(
@@ -39,7 +39,7 @@ export async function membershipRole(
       ),
     )
     .limit(1)
-  return member?.role ?? null
+  return rows.at(0)?.role ?? null
 }
 
 /**

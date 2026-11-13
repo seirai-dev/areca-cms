@@ -325,7 +325,10 @@ describe('invitation accepted', () => {
 
   it('tells an agency admin who is also a member under their membership role', async () => {
     const { org } = await setup()
-    const memberAdmin = await makeUser({ name: 'Mia Member', agencyAdmin: true })
+    const memberAdmin = await makeUser({
+      name: 'Mia Member',
+      agencyAdmin: true,
+    })
     const invitee = await makeUser({ name: 'Ivo Invitee' })
     cleanups.push(() => removeUsers([memberAdmin.id, invitee.id]))
     await addMember(memberAdmin.id, org.id, 'owner')
