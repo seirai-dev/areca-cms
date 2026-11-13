@@ -15,7 +15,13 @@ import {
 import { MailConfigError } from '#/server/mail/errors'
 import { hashToken } from '#/server/security/token-hash'
 
-import { acceptInvitation, removeMember, updateMemberRole } from './members.ts'
+import {
+  acceptInvitation,
+  regenerateInvitationLink,
+  removeMember,
+  resendInvitation,
+  updateMemberRole,
+} from './members.ts'
 
 // `unreadable` makes the delivery-time config read fail like a wrong key would.
 const mail = vi.hoisted(() => ({ unreadable: false }))
@@ -232,5 +238,86 @@ describe.skipIf(!hasDb)('member account emails', () => {
       .from(user)
       .where(eq(user.id, person.id))
     expect(after?.emailVerified).toBe(false)
+  })
+  /** An unverified person with a delivered invitation, and its raw token. */
+  async function deliveredInvite(linkRevealedAt: Date | null) {
+    const { org, owner } = await fixture()
+    const suffix = crypto.randomUUID()
+    const [person] = await db
+      .insert(user)
+      .values({
+        id: crypto.randomUUID(),
+        name: 'Linked Person',
+        email: `linked-${suffix}@areca.local`,
+        emailVerified: false,
+      })
+      .returning()
+    if (!person) throw new Error('fixture failed')
+    cleanups.push(async () => {
+      await db.delete(user).where(eq(user.id, person.id))
+    })
+    const token = `tok-${suffix}`
+    const [row] = await db
+      .insert(invitation)
+      .values({
+        email: person.email,
+        organizationId: org.id,
+        role: 'editor',
+        tokenHash: hashToken(token),
+        expiresAt: new Date(Date.now() + 60_000),
+        deliveryStatus: 'sent',
+        linkRevealedAt,
+      })
+      .returning()
+    if (!row) throw new Error('fixture failed')
+    return { person, token, invitationId: row.id, owner }
+  }
+
+  async function emailVerifiedOf(userId: string) {
+    const [after] = await db
+      .select({ emailVerified: user.emailVerified })
+      .from(user)
+      .where(eq(user.id, userId))
+    return after?.emailVerified
+  }
+
+  it('leaves the address unverified when the inviter was shown the link', async () => {
+    const { person, token } = await deliveredInvite(new Date())
+
+    await acceptInvitation({ token, userId: person.id })
+
+    expect(await emailVerifiedOf(person.id)).toBe(false)
+  })
+
+  it('records that the link was revealed on "Regenerate link", not on resend', async () => {
+    const resent = await deliveredInvite(null)
+    await resendInvitation(resent.invitationId, resent.owner.id).catch(
+      () => undefined,
+    )
+    const revealed = await deliveredInvite(null)
+    const { link } = await regenerateInvitationLink(
+      revealed.invitationId,
+      revealed.owner.id,
+    )
+
+    const rows = await db
+      .select({ id: invitation.id, linkRevealedAt: invitation.linkRevealedAt })
+      .from(invitation)
+      .where(
+        inArray(invitation.id, [resent.invitationId, revealed.invitationId]),
+      )
+    const byId = new Map(rows.map((row) => [row.id, row.linkRevealedAt]))
+    expect(byId.get(resent.invitationId)).toBeNull()
+    expect(byId.get(revealed.invitationId)).toBeInstanceOf(Date)
+
+    await db
+      .update(invitation)
+      .set({ deliveryStatus: 'sent' })
+      .where(eq(invitation.id, revealed.invitationId))
+    await acceptInvitation({
+      token: link.slice(link.lastIndexOf('/') + 1),
+      userId: revealed.person.id,
+    })
+    expect(await emailVerifiedOf(revealed.person.id)).toBe(false)
   })
 })

@@ -16,3 +16,22 @@ export function signInFailureMessage(failure: {
   if (failure.code === ACCOUNT_BLOCKED_CODE) return m.auth_account_blocked()
   return failure.message ?? m.auth_could_not_sign_in()
 }
+
+/**
+ * Better Auth reports provider failures as a code on the callback URL (social
+ * callbacks use underscores, Microsoft SSO spaces). The ones people actually
+ * hit get real copy.
+ */
+export function providerErrorMessage(code: string | undefined) {
+  if (!code) return null
+  switch (code.replaceAll(' ', '_')) {
+    case ACCOUNT_BLOCKED_CODE:
+      return m.auth_account_blocked()
+    case 'REGISTRATION_NOT_ALLOWED':
+      return m.auth_registration_not_allowed()
+    case 'account_not_linked':
+      return m.auth_account_not_linked()
+    default:
+      return m.auth_could_not_sign_in()
+  }
+}

@@ -4,9 +4,16 @@ import { createHmac } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import { afterAll, describe, expect, it } from 'vitest'
 
+import { securityErrorCode } from '#/lib/security-errors'
+
 import { db } from '#/db'
+import { env } from '#/env'
 import { account, session, twoFactor, user } from '#/db/schema'
-import { localMfaVerifiedAt } from './local-mfa'
+import {
+  localMfaVerifiedAt,
+  recordLocalMfaForToken,
+  requireMemberLocalMfa,
+} from './local-mfa'
 import { auth } from '#/lib/auth'
 
 const hasDb = Boolean(process.env.DATABASE_URL)
@@ -117,8 +124,29 @@ describe.skipIf(!hasDb)('two-factor (Better Auth)', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]?.verified).toBe(true)
 
-    const challenged = await auth.api.signInEmail({ body: { email, password } })
-    expect(challenged).toMatchObject({ twoFactorRedirect: true })
+    const challenged = await auth.api.signInEmail({
+      body: { email, password },
+      returnHeaders: true,
+    })
+    expect(challenged.response).toMatchObject({ twoFactorRedirect: true })
+
+    // Passing the sign-in challenge counts as this session's code, so the
+    // CMS does not ask a second time.
+    const passed = await auth.api.verifyTOTP({
+      body: { code: totp(secret) },
+      headers: cookieHeader(challenged.headers),
+    })
+    const [signedInSession] = await db
+      .select()
+      .from(session)
+      .where(eq(session.token, passed.token))
+    if (!signedInSession) throw new Error('expected the signed-in session')
+    const principal = {
+      session: signedInSession,
+      user: { id: userId, twoFactorEnabled: true, isAgencyAdmin: false },
+    }
+    expect(await localMfaVerifiedAt(principal)).toBeInstanceOf(Date)
+    await expect(requireMemberLocalMfa(principal)).resolves.toBeUndefined()
 
     // The secret was shown during enrolment. Once enabled, it is not handed out again.
     await expect(
@@ -171,5 +199,102 @@ describe.skipIf(!hasDb)('two-factor without a password', () => {
       .where(eq(session.userId, userId))
     const enabled = await auth.api.enableTwoFactor({ body: {}, headers })
     expect(enabled).toHaveProperty('totpURI')
+  })
+})
+
+/** A session row as a social or SSO sign-in leaves it: no code entered. */
+async function providerSession(userId: string) {
+  const token = crypto.randomUUID()
+  const [row] = await db
+    .insert(session)
+    .values({
+      id: crypto.randomUUID(),
+      userId,
+      token,
+      expiresAt: new Date(Date.now() + 60 * 60_000),
+    })
+    .returning()
+  if (!row) throw new Error('session insert failed')
+  return row
+}
+
+async function rejection(promise: Promise<unknown>) {
+  try {
+    await promise
+  } catch (error) {
+    return error
+  }
+  throw new Error('expected a rejection')
+}
+
+describe.skipIf(!hasDb)('a provider sign-in of a two-factor user', () => {
+  const ids: string[] = []
+
+  afterAll(async () => {
+    for (const id of ids) await db.delete(user).where(eq(user.id, id))
+  })
+
+  async function makeUser(values: {
+    twoFactorEnabled: boolean
+    isAgencyAdmin?: boolean
+  }) {
+    const id = crypto.randomUUID()
+    ids.push(id)
+    await db.insert(user).values({
+      id,
+      name: 'Provider User',
+      email: `provider-${id}@test.local`,
+      emailVerified: true,
+      ...values,
+    })
+    return id
+  }
+
+  it('is refused until a code is entered in that session', async () => {
+    const userId = await makeUser({ twoFactorEnabled: true })
+    const row = await providerSession(userId)
+    const principal = {
+      session: row,
+      user: { id: userId, twoFactorEnabled: true, isAgencyAdmin: false },
+    }
+
+    const refused = await rejection(requireMemberLocalMfa(principal))
+    expect(securityErrorCode(refused)).toBe('MFA_REQUIRED')
+
+    // Nor can it change two-factor before the code, password or not.
+    const headers = new Headers({
+      cookie: `better-auth.session_token=${encodeURIComponent(
+        `${row.token}.${createHmac('sha256', env.BETTER_AUTH_SECRET).update(row.token).digest('base64')}`,
+      )}`,
+    })
+    await expect(
+      auth.api.disableTwoFactor({ body: {}, headers }),
+    ).rejects.toMatchObject({ body: { code: 'MFA_REQUIRED' } })
+
+    await recordLocalMfaForToken(row.token)
+    await expect(requireMemberLocalMfa(principal)).resolves.toBeUndefined()
+  })
+
+  it('leaves users without two-factor and agency admins to their own rules', async () => {
+    const plainId = await makeUser({ twoFactorEnabled: false })
+    const plain = await providerSession(plainId)
+    await expect(
+      requireMemberLocalMfa({
+        session: plain,
+        user: { id: plainId, twoFactorEnabled: false, isAgencyAdmin: false },
+      }),
+    ).resolves.toBeUndefined()
+
+    const adminId = await makeUser({
+      twoFactorEnabled: true,
+      isAgencyAdmin: true,
+    })
+    const admin = await providerSession(adminId)
+    await expect(
+      requireMemberLocalMfa({
+        session: admin,
+        user: { id: adminId, twoFactorEnabled: true, isAgencyAdmin: true },
+      }),
+    ).resolves.toBeUndefined()
   })
 })

@@ -97,7 +97,7 @@ Agency admins must turn on two-factor authentication (2FA) before they can use a
 Two more points about 2FA:
 
 - Some actions ask you to **Confirm it's you** with a fresh code, even when you are signed in. These include deleting a client, saving Dokploy credentials, creating a site or rotating its tokens, and granting or removing agency access. After you confirm a code, the session stays fresh for 10 minutes. See [two-factor and step-up](/docs/security/two-factor-and-step-up).
-- Sign-in with GitHub, Google, Discord or Microsoft skips the CMS's own 2FA prompt. When `ADMIN_MFA_REQUIRED` is on, an agency admin must still verify a local TOTP or backup code in that session before using admin functions. Make sure your provider account has MFA turned on too.
+- Sign-in with GitHub, Google, Discord or Microsoft is followed by the CMS's own 2FA prompt for anyone with two-factor on: the session must verify a local TOTP or backup code before it can use the CMS. Make sure your provider account has MFA turned on too.
 
 ## Set up the agency
 

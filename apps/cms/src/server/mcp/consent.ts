@@ -7,10 +7,15 @@ import { db } from '#/db'
 import { membership, oauthClient, site } from '#/db/schema'
 import { env } from '#/env'
 import { auth } from '#/lib/auth'
-import { getSession, requireAgencyAdmin } from '#/lib/session.server'
+import {
+  getSession,
+  requireAgencyAdmin,
+  requireSignedIn,
+} from '#/lib/session.server'
 import { ReauthRequiredError } from '#/lib/security-errors'
 import { m } from '#/paraglide/messages'
 import { ForbiddenError, ValidationError } from '#/server/content/errors'
+import { localMfaVerifiedAt } from '#/server/security/local-mfa'
 import { assertFreshSession } from '#/server/security/step-up'
 import {
   isAgencyAdminWithMfa,
@@ -293,7 +298,10 @@ export async function describeConsentRequest(
     }),
     role,
     canAllowGoLive: role !== 'editor',
-    needsStepUp: role === 'agency' && (await needsReauth(session)),
+    needsStepUp:
+      role === 'agency'
+        ? await needsReauth(session)
+        : await needsMemberCode(session),
   }
 }
 
@@ -339,6 +347,11 @@ export async function approveConsentRequest(input: {
   siteId: string
   allowGoLive: boolean
 }): Promise<{ redirectTo: string }> {
+  // After a provider sign-in, a two-factor user has not entered a code yet.
+  // The consent screen's code dialog answers REAUTH_REQUIRED and retries.
+  if (await needsMemberCode(await requireSignedIn())) {
+    throw new ReauthRequiredError()
+  }
   const {
     session,
     site: found,
@@ -476,6 +489,15 @@ export async function denyConsentRequest(
   }
   const redirectTo = await completePluginConsent({ query, accept: false })
   return { redirectTo }
+}
+
+/** True when someone other than an agency admin still owes this session a code. */
+async function needsMemberCode(session: {
+  session: { id: string }
+  user: { id: string; isAgencyAdmin: boolean; twoFactorEnabled: boolean }
+}) {
+  if (session.user.isAgencyAdmin || !session.user.twoFactorEnabled) return false
+  return !(await localMfaVerifiedAt(session))
 }
 
 /** True when an agency admin's session needs a fresh second factor to approve. */

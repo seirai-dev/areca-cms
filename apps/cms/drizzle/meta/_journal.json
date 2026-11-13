@@ -337,6 +337,13 @@
       "when": 1794568558078,
       "tag": "0047_upload_session_credential",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1794569413315,
+      "tag": "0048_invitation_link_revealed",
+      "breakpoints": true
     }
   ]
 }

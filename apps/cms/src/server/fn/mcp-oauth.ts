@@ -6,7 +6,11 @@ import { z } from '#/lib/zod'
 import { db } from '#/db'
 import { mcpConnection } from '#/db/schema'
 import { ID_MAX_LENGTH } from '#/lib/content-limits'
-import { requireAgencyAdmin, requireUser } from '#/lib/session.server'
+import {
+  requireAgencyAdmin,
+  requireSignedIn,
+  requireUser,
+} from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { NotFoundError } from '#/server/content/errors'
 import {
@@ -76,7 +80,7 @@ export const approveAgencyOAuthConsentFn = createServerFn({
 export const denyOAuthConsentFn = createServerFn({ method: 'POST', ...loose })
   .validator(z.object({ query: queryField }))
   .handler(async ({ data }) => {
-    await requireUser()
+    await requireSignedIn()
     return denyConsentRequest(data.query)
   })
 

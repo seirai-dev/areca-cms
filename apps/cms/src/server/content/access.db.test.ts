@@ -6,7 +6,9 @@ import { db } from '#/db'
 import { membership, organization, session, user } from '#/db/schema'
 import { env } from '#/env'
 import { auth } from '#/lib/auth'
+import { securityErrorCode } from '#/lib/security-errors'
 import { withRequestScope } from '#/server/http/request-scope.server'
+import { recordLocalMfaForToken } from '#/server/security/local-mfa'
 import { NotFoundError } from './errors.ts'
 import { requireEntryAccess } from './access.ts'
 import { createEntry } from './entries.ts'
@@ -177,5 +179,29 @@ describe.skipIf(!hasDb)('requireEntryAccess', () => {
       requireEntryAccess(section.entry.id),
     )
     expect(access.entry.id).toBe(section.entry.id)
+  })
+  it('asks a two-factor editor signed in with a provider for a code first', async () => {
+    const { entryId, editorHeaders } = await setUp()
+    const token = decodeURIComponent(
+      editorHeaders.get('cookie')?.split('=')[1] ?? '',
+    ).split('.')[0]
+    const row = (
+      await db.select().from(session).where(eq(session.token, token))
+    ).at(0)
+    if (!row) throw new Error('session missing')
+    await db
+      .update(user)
+      .set({ twoFactorEnabled: true })
+      .where(eq(user.id, row.userId))
+    headersHolder.current = editorHeaders
+
+    const refused = await withRequestScope(() =>
+      requireEntryAccess(entryId),
+    ).catch((error: unknown) => error)
+    expect(securityErrorCode(refused)).toBe('MFA_REQUIRED')
+
+    await recordLocalMfaForToken(token)
+    const access = await withRequestScope(() => requireEntryAccess(entryId))
+    expect(access.entry.id).toBe(entryId)
   })
 })

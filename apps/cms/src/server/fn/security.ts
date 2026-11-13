@@ -2,7 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from '#/lib/zod'
 
-import { requireFreshAgencyAdmin, requireUser } from '#/lib/session.server'
+import { requireFreshAgencyAdmin, requireSignedIn } from '#/lib/session.server'
 import { ForbiddenError } from '#/server/content/errors'
 import { m } from '#/paraglide/messages'
 import { resetAdminFactorLockout } from '#/server/security/reset-factor-lockout'
@@ -22,7 +22,7 @@ export const verifyStepUpFn = createServerFn({
     }),
   )
   .handler(async ({ data }) => {
-    const session = await requireUser()
+    const session = await requireSignedIn()
     if (!session.user.twoFactorEnabled) {
       throw new ForbiddenError(m.server_step_up_no_two_factor())
     }

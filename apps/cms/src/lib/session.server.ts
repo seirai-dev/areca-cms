@@ -12,7 +12,10 @@ import {
   isReadOnlyRequest,
   memoizeForRequest,
 } from '#/server/http/request-scope.server'
-import { requireAdminLocalMfa } from '#/server/security/local-mfa'
+import {
+  requireAdminLocalMfa,
+  requireMemberLocalMfa,
+} from '#/server/security/local-mfa'
 import { assertFreshSession } from '#/server/security/step-up'
 
 import type { MembershipRole } from './types.ts'
@@ -53,14 +56,27 @@ export function forgetSession() {
 }
 
 /**
- * A blocked person is signed out here too. Their sessions are deleted when
- * they are blocked, so this is defence in depth.
+ * The signed-in session before the second-factor rule. Only for the steps
+ * that lead to passing it, such as entering the code. A blocked person is
+ * signed out here too. Their sessions are deleted when they are blocked, so
+ * this is defence in depth.
  */
-export async function requireUser() {
+export async function requireSignedIn() {
   const session = await getSession()
   if (!session || session.user.blockedAt) {
     throw redirect({ href: '/login' })
   }
+  return session
+}
+
+/**
+ * A signed-in user whose session counts. Someone with two-factor on must have
+ * entered a code in this session (`requireMemberLocalMfa`). Agency admins are
+ * held to their own rule by the admin and membership guards below.
+ */
+export async function requireUser() {
+  const session = await requireSignedIn()
+  await requireMemberLocalMfa(session)
   return session
 }
 

@@ -15,11 +15,8 @@ import { m } from '#/paraglide/messages'
 import { AuthDivider, AuthError, AuthHeading, AuthShell } from './auth-shell'
 import { PasswordInput } from './password-input'
 import { ProviderSignIn } from './provider-buttons'
-import {
-  providerErrorMessage,
-  useHydrated,
-  useInvitation,
-} from './use-auth-forms'
+import { providerErrorMessage } from './sign-in-error'
+import { useHydrated, useInvitation } from './use-auth-forms'
 
 type Invitation = {
   email: string

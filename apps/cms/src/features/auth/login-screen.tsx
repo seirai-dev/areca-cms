@@ -18,12 +18,9 @@ import {
 } from './auth-shell'
 import { PasswordInput } from './password-input'
 import { ProviderSignIn } from './provider-buttons'
+import { providerErrorMessage } from './sign-in-error'
 import { TwoFactorChallenge } from './two-factor-challenge'
-import {
-  providerErrorMessage,
-  useHydrated,
-  usePasswordSignIn,
-} from './use-auth-forms'
+import { useHydrated, usePasswordSignIn } from './use-auth-forms'
 
 /**
  * `/login` (brief §3.1): "Sign in to {app}", email and password, provider

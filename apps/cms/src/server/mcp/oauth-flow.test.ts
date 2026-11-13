@@ -25,6 +25,7 @@ import {
   user,
 } from '#/db/schema'
 import { env } from '#/env'
+import { securityErrorCode } from '#/lib/security-errors'
 import { createTestSite, cleanupTestSite } from '#/server/content/test-utils'
 
 import { handleDiscoveryRequest } from './discovery'
@@ -949,7 +950,28 @@ describe.skipIf(!hasDb)(
           ok: true,
           role: 'editor',
           canAllowGoLive: false,
+          needsStepUp: false,
         })
+
+        // With two-factor on, a session that never entered a code (a provider
+        // sign-in) is asked for one; the code dialog retries the approval.
+        await db
+          .update(user)
+          .set({ twoFactorEnabled: true })
+          .where(eq(user.id, editor.id))
+        expect(await describeConsentRequest(consentQuery)).toMatchObject({
+          needsStepUp: true,
+        })
+        const unverified: unknown = await approveConsentRequest({
+          query: consentQuery,
+          siteId: ctx.site.id,
+          allowGoLive: false,
+        }).catch((error: unknown) => error)
+        expect(securityErrorCode(unverified)).toBe('REAUTH_REQUIRED')
+        await db
+          .update(user)
+          .set({ twoFactorEnabled: false })
+          .where(eq(user.id, editor.id))
 
         await expect(
           approveConsentRequest({

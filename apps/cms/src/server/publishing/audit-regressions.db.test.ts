@@ -209,6 +209,7 @@ describe('audit publishing regressions', () => {
         saveDokployCredentials({
           organizationId: ctx.org.id,
           url: 'https://other-dokploy.example.com',
+          apiKey: 'other-key',
           actorId: ctx.actor.id,
           fetch: fakeFetch,
         }),

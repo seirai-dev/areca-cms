@@ -106,6 +106,10 @@ export function ClientDeployment({
   const [url, setUrl] = React.useState('')
   const [apiKey, setApiKey] = React.useState('')
   const configured = Boolean(status.data?.configured)
+  // The saved key is only sent to the URL it was saved for (the server checks).
+  const urlChanged =
+    configured && url.trim().replace(/\/+$/, '') !== (status.data?.url ?? '')
+  const keyRequired = !configured || urlChanged
 
   // Seed the address from the stored credentials; the key is never shown.
   React.useEffect(() => {
@@ -195,18 +199,20 @@ export function ClientDeployment({
               label={m.admin_org_dokploy_api_key()}
               htmlFor="dokploy-api-key"
               hint={
-                configured
-                  ? m.admin_org_dokploy_api_key_replace_hint()
-                  : m.admin_org_dokploy_api_key_new_hint()
+                urlChanged
+                  ? m.admin_org_dokploy_api_key_url_changed_hint()
+                  : configured
+                    ? m.admin_org_dokploy_api_key_replace_hint()
+                    : m.admin_org_dokploy_api_key_new_hint()
               }
             >
               <Input
                 id="dokploy-api-key"
                 data-testid="dokploy-api-key"
                 type="password"
-                required={!configured}
+                required={keyRequired}
                 autoComplete="new-password"
-                placeholder={configured ? '••••••••••••' : undefined}
+                placeholder={keyRequired ? undefined : '••••••••••••'}
                 value={apiKey}
                 onChange={(event) => setApiKey(event.target.value)}
               />
