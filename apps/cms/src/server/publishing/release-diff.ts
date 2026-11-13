@@ -14,7 +14,14 @@ import type {
 } from '#/lib/types'
 import { buildSnapshot } from '#/server/content/snapshot'
 import type { LinkWarning } from '#/server/content/snapshot'
+import { NotFoundError } from '#/server/content/errors'
 import { findSite } from '#/server/content/site-core'
+import { m } from '#/paraglide/messages'
+
+import {
+  createFingerprintCache,
+  releaseFingerprints,
+} from './release-diff-cache.ts'
 
 /**
  * Approved-candidate vs live (or demo) snapshot.
@@ -23,8 +30,9 @@ import { findSite } from '#/server/content/site-core'
  * freeze, and conversion stay in `buildSnapshot` — this module only diffs.
  *
  * Building the candidate snapshot does the same work as a Go-live request
- * (validation, asset/rich-text conversion). Status polling therefore costs
- * a full snapshot build, not a `updatedAt` count.
+ * (validation, asset/rich-text conversion). The result is therefore cached per
+ * site and reused until the site's change fingerprint moves (see
+ * `releaseFingerprints`). Go live itself always builds afresh.
  */
 
 export type ReleaseDiffEntry = {
@@ -65,6 +73,11 @@ export type ApprovedReleaseDiff = {
   languages: LanguageReleaseChange | null
   liveEntryIds: string[]
   liveSlugsByEntryId: Record<string, string>
+  /**
+   * Entry and section ids of the newest live publication, also in demo mode,
+   * where `liveEntryIds` follows the demo. Null before the first go live.
+   */
+  livePublication: { entryIds: string[] } | null
   /** Links that will not work after go live. Warnings only: they never block. */
   linkWarnings: LinkWarning[]
 }
@@ -361,7 +374,59 @@ async function listScheduledUpcoming(
   return upcoming
 }
 
+/** Sites whose diff is kept; each holds counts and the changed items only. */
+const diffCache = createFingerprintCache<ApprovedReleaseDiff>({
+  max: 100,
+  maxAgeMs: 5 * 60_000,
+})
+
+/** How many sites build their diff at once on a miss. */
+const BUILD_CONCURRENCY = 4
+
+/**
+ * The release diff of each site, from the cache when the site has not
+ * changed. Sites that do not exist (or are deleted meanwhile) are absent.
+ * Callers must not change the returned objects: they are shared.
+ */
+export async function approvedReleaseDiffs(
+  siteIds: string[],
+): Promise<Map<string, ApprovedReleaseDiff>> {
+  const unique = [...new Set(siteIds)]
+  const fingerprints = await releaseFingerprints(unique, new Date())
+  const out = new Map<string, ApprovedReleaseDiff>()
+  const queue = unique.filter((siteId) => fingerprints.has(siteId))
+  const worker = async () => {
+    for (let siteId = queue.shift(); siteId; siteId = queue.shift()) {
+      const id = siteId
+      try {
+        out.set(
+          id,
+          await diffCache.get(id, fingerprints.get(id)!, () =>
+            computeApprovedReleaseDiff(id),
+          ),
+        )
+      } catch (error) {
+        if (!(error instanceof NotFoundError)) throw error
+      }
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(BUILD_CONCURRENCY, queue.length) }, worker),
+  )
+  return out
+}
+
+/** One site's release diff (cached, see `approvedReleaseDiffs`). */
 export async function diffApprovedRelease(
+  siteId: string,
+): Promise<ApprovedReleaseDiff> {
+  const diff = (await approvedReleaseDiffs([siteId])).get(siteId)
+  if (!diff) throw new NotFoundError(m.server_site_not_found())
+  return diff
+}
+
+/** Builds the diff from scratch. Exported for tests that check the cache. */
+export async function computeApprovedReleaseDiff(
   siteId: string,
 ): Promise<ApprovedReleaseDiff> {
   const existingSite = await findSite(siteId)
@@ -394,6 +459,16 @@ export async function diffApprovedRelease(
 
   const liveSlugsByEntryId: Record<string, string> = {}
   for (const [id, item] of liveIndex) liveSlugsByEntryId[id] = item.slug
+  const livePublication = live
+    ? {
+        entryIds: [
+          ...(publishingMode === 'demo'
+            ? indexCollections(releaseContent(live.snapshot))
+            : liveIndex
+          ).keys(),
+        ],
+      }
+    : null
 
   return {
     pendingCount: pendingCountFromDiff({
@@ -411,6 +486,7 @@ export async function diffApprovedRelease(
     languages,
     liveEntryIds: [...liveIndex.keys()],
     liveSlugsByEntryId,
+    livePublication,
     linkWarnings: built.ok ? built.linkWarnings : [],
   }
 }
@@ -431,11 +507,15 @@ export type PendingRelease = {
   linkWarnings: LinkWarning[]
 }
 
-/** Entry and section changes plus the language change, from one diff. */
+/**
+ * Entry and section changes plus the language change, from one diff. Pass the
+ * diff when the caller already has it.
+ */
 export async function listPendingRelease(
   siteId: string,
+  known?: ApprovedReleaseDiff,
 ): Promise<PendingRelease> {
-  const diff = await diffApprovedRelease(siteId)
+  const diff = known ?? (await diffApprovedRelease(siteId))
   const collections = await db
     .select({
       key: collection.key,

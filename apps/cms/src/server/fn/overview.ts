@@ -12,9 +12,8 @@ import {
   site,
 } from '#/db/schema'
 import { requireUser } from '#/lib/session.server'
-import { NotFoundError } from '#/server/content/errors'
 import { requireAdminLocalMfa } from '#/server/security/local-mfa'
-import { diffApprovedRelease } from '#/server/publishing/release-diff'
+import { approvedReleaseDiffs } from '#/server/publishing/release-diff'
 
 const loose = { strict: { output: false } as const }
 
@@ -147,23 +146,12 @@ export const getSitesOverviewFn = createServerFn({
       .map((row) => row.siteId),
   )
 
-  // A site deleted after the list above is simply gone: `null` marks it and it
-  // is left out, rather than failing the whole overview.
-  const pendingPairs = await Promise.all(
-    siteIds.map(async (siteId) => {
-      try {
-        const diff = await diffApprovedRelease(siteId)
-        return [siteId, diff.pendingCount] as const
-      } catch (error) {
-        if (error instanceof NotFoundError) return [siteId, null] as const
-        throw error
-      }
-    }),
-  )
+  // A site deleted after the list above has no diff and is left out, rather
+  // than failing the whole overview. Unchanged sites come from the cache.
+  const diffs = await approvedReleaseDiffs(siteIds)
 
   const byCollection = new Map(collectionCounts.map((r) => [r.siteId, r]))
   const byEntry = new Map(entryCounts.map((r) => [r.siteId, r]))
-  const byPending = new Map(pendingPairs)
   const live = new Set(liveSince.keys())
 
   const organizations = orgIds
@@ -177,7 +165,7 @@ export const getSitesOverviewFn = createServerFn({
       )
 
   const rows = sites
-    .filter((row) => byPending.get(row.id) !== null)
+    .filter((row) => diffs.has(row.id))
     .map((row) => ({
       ...row,
       collections: byCollection.get(row.id)?.count ?? 0,
@@ -185,7 +173,7 @@ export const getSitesOverviewFn = createServerFn({
       lastUpdated: byEntry.get(row.id)?.lastUpdated ?? row.updatedAt,
       live: live.has(row.id),
       liveSince: liveSince.get(row.id) ?? null,
-      pendingEntries: byPending.get(row.id) ?? 0,
+      pendingEntries: diffs.get(row.id)?.pendingCount ?? 0,
       lastBuildFailed: failed.has(row.id),
     }))
 

@@ -47,9 +47,9 @@ vi.mock('#/server/publishing/release-diff', async (importOriginal) => {
   const actual = await importOriginal<typeof ReleaseDiff>()
   return {
     ...actual,
-    diffApprovedRelease: async (siteId: string) => {
-      await releaseDiffHook.beforeDiff?.(siteId)
-      return actual.diffApprovedRelease(siteId)
+    approvedReleaseDiffs: async (siteIds: string[]) => {
+      for (const siteId of siteIds) await releaseDiffHook.beforeDiff?.(siteId)
+      return actual.approvedReleaseDiffs(siteIds)
     },
   }
 })

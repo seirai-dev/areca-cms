@@ -261,7 +261,9 @@ export async function formatStoredEntry(
     row.publishedData ?? {},
   ])
   const siteRow = await loadSiteRow(actor)
-  const release = await loadReleaseState(actor.siteId)
+  const release = await loadReleaseState(actor.siteId, {
+    liveSnapshot: options.includePublished,
+  })
   const source: PreviewSource = {
     kind: content.kind,
     key: content.key,

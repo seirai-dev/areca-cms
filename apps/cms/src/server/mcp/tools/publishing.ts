@@ -17,7 +17,10 @@ import {
   requestPublication,
   requestRollback,
 } from '#/server/publishing/publications'
-import { listPendingRelease } from '#/server/publishing/release-diff'
+import {
+  diffApprovedRelease,
+  listPendingRelease,
+} from '#/server/publishing/release-diff'
 
 import type { McpActor } from '../keys'
 import {
@@ -158,8 +161,11 @@ export function registerPublishingTools(registry: ToolCollector): void {
     inputSchema: z.object({}),
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (_input, actor) => {
-      const status = await getSiteReleaseStatus(actor.siteId)
-      const pending = await listPendingRelease(actor.siteId)
+      const diff = await diffApprovedRelease(actor.siteId)
+      const [status, pending] = await Promise.all([
+        getSiteReleaseStatus(actor.siteId, diff),
+        listPendingRelease(actor.siteId, diff),
+      ])
       return {
         publishingMode: status.publishingMode,
         live: describeOptional(status.live),
