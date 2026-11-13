@@ -43,7 +43,7 @@ The reference run used an Apple M4 (10 cores, 16 GB), macOS, Node 24.21 and Post
 | Preview entry build | 4 | 6 |
 | Asset usage check, referenced asset (after) | 4,127 | 4,413 |
 
-The snapshot build dropped from about 6 seconds to about 0.5 seconds because the build now loads asset details in batches instead of one query per row. The asset usage check is still a full scan of the client's content, so it remains slow for a referenced asset.
+The snapshot build dropped from about 6 seconds to about 0.5 seconds because the build now loads asset details in batches instead of one query per row. The asset usage check still scans the client's content, so it remains slow for a referenced asset. Since this run it only reads the documents that can mention the asset, and the count shown to an AI no longer makes saves wait.
 
 Memory for the largest snapshot build was measured at about 175 to 205 MB of heap growth and a process peak of about 700 to 830 MB resident memory.
 

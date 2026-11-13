@@ -30,7 +30,7 @@ To check whether a file is still in use before you delete it, look at where it a
 
 ## How storage cleanup works
 
-When Areca deletes an asset's database record, it also records the file's storage key in a deletion queue. The file itself is then removed from your S3-compatible bucket. If the removal fails, the key stays in the queue with the last error, and Areca tries again later.
+When Areca deletes an asset's database record, it also records the file's storage key in a deletion queue, with the keys of its resized copies (thumbnails and the AI preview, under `derived/`). The file itself is then removed from your S3-compatible bucket. If the removal fails, the key stays in the queue with the last error, and Areca tries again later.
 
 Two things protect the queue:
 

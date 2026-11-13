@@ -27,6 +27,7 @@ import {
   drainStorageObjectDeletions,
   uploadAsset,
 } from './index'
+import { derivedStorageKeys } from './derived'
 
 const storage = vi.hoisted(() => ({
   put: vi.fn(),
@@ -312,6 +313,61 @@ describe.skipIf(!process.env.DATABASE_URL)(
           await connection.query('ROLLBACK')
           connection.release()
         }
+      })
+    })
+
+    it('counts usage without waiting for a transaction that holds the organization asset lock', async () => {
+      await withTestSite(async (ctx) => {
+        const [image] = await db
+          .insert(asset)
+          .values({
+            organizationId: ctx.org.id,
+            storageKey: `${ctx.org.id}/busy.png`,
+            originalFilename: 'busy.png',
+            mimeType: 'image/png',
+            size: 4,
+          })
+          .returning()
+        const connection = await pool.connect()
+        try {
+          await connection.query('BEGIN')
+          await connection.query(
+            'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+            [`assets:${ctx.org.id}`],
+          )
+          const counted = await Promise.race([
+            assetUsage(image.id, ctx.org.id),
+            new Promise((resolve) =>
+              setTimeout(() => resolve('blocked'), 2000),
+            ),
+          ])
+          expect(counted).toBe(0)
+        } finally {
+          await connection.query('ROLLBACK')
+          connection.release()
+        }
+      })
+    })
+
+    it('deletes the stored thumbnails and preview with the asset', async () => {
+      await withTestSite(async (ctx) => {
+        const storageKey = `${ctx.org.id}/derived.png`
+        const [image] = await db
+          .insert(asset)
+          .values({
+            organizationId: ctx.org.id,
+            storageKey,
+            originalFilename: 'derived.png',
+            mimeType: 'image/png',
+            size: 4,
+          })
+          .returning()
+        storage.delete.mockClear()
+        await deleteAsset(image.id, ctx.org.id)
+        const deleted = storage.delete.mock.calls.map(([key]) => key as string)
+        expect(new Set(deleted)).toEqual(
+          new Set([storageKey, ...derivedStorageKeys(storageKey)]),
+        )
       })
     })
 

@@ -7,7 +7,7 @@ import {
 } from '#/lib/content-limits'
 import type { Asset } from '#/server/assets'
 import { assetUrl, assetUsage, deleteAsset, updateAsset } from '#/server/assets'
-import { siteAssets } from '#/server/assets/site-scope'
+import { siteAssets, siteAssetsAmong } from '#/server/assets/site-scope'
 import { uploadAssetFromUrl } from '#/server/assets/remote'
 import { assetPreview } from '#/server/assets/preview'
 import {
@@ -46,9 +46,12 @@ function describeAsset(row: Asset) {
 }
 
 async function requireAsset(actor: McpActor, id: string): Promise<Asset> {
-  const row = (await siteAssets(actor.organizationId, actor.siteId)).find(
-    (item) => item.id === id,
-  )
+  const row = (
+    await siteAssetsAmong(actor.organizationId, actor.siteId, {
+      ids: [id],
+      storageKeys: [],
+    })
+  ).at(0)
   if (!row) {
     throw new McpNotFoundError(
       `No asset with id "${id}" available to this site. Call list_assets to find valid ids.`,

@@ -66,6 +66,24 @@ export function assetFileUrl(storageKey: string) {
   return `/api/assets/file/${storageKey}`
 }
 
+/** Widths the file route resizes images to (`?w=`); others are refused. */
+export const THUMBNAIL_WIDTHS = [160, 320, 640, 1280] as const
+
+/**
+ * `src`, `srcSet` and `sizes` for an image shown `sizes` wide: the browser
+ * picks a resized copy instead of the original upload.
+ */
+export function assetThumbnail(storageKey: string, sizes: string) {
+  const url = assetFileUrl(storageKey)
+  return {
+    src: `${url}?w=640`,
+    srcSet: THUMBNAIL_WIDTHS.map((width) => `${url}?w=${width} ${width}w`).join(
+      ', ',
+    ),
+    sizes,
+  }
+}
+
 export function emptyRichText() {
   return { type: 'doc' as const, content: [{ type: 'paragraph' as const }] }
 }
