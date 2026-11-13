@@ -348,6 +348,71 @@ function findClosingRun(text: string, from: number, run: number): number {
   return -1
 }
 
+const LINE_BREAKS = new Set(['\n', '\r', ' ', ' '])
+
+function backtickRun(text: string, from: number): number {
+  let end = from
+  while (text[end] === '`') end += 1
+  return end - from
+}
+
+/**
+ * Replaces each fenced code block with `hold(block)`. Matches exactly what
+ * `markdown.replace(/^(`{3,})[^\n]*\n[\s\S]*?\n\1`*[ \t]*$/gm, hold)` matches,
+ * in one pass: that regex takes quadratic time on many unclosed fences. A
+ * block closes at the first later line of at least as many backticks as it
+ * opened with, or failing that, at the first line of the longest run left.
+ */
+export function replaceFencedCode(
+  text: string,
+  hold: (block: string) => string,
+): string {
+  // Lines that can close a block: after a \n, three or more backticks, then
+  // only spaces or tabs up to the end of the line.
+  const closers: { newline: number; run: number; end: number }[] = []
+  for (let nl = text.indexOf('\n'); nl >= 0; nl = text.indexOf('\n', nl + 1)) {
+    const run = backtickRun(text, nl + 1)
+    if (run < 3) continue
+    let end = nl + 1 + run
+    while (text[end] === ' ' || text[end] === '\t') end += 1
+    if (end === text.length || LINE_BREAKS.has(text[end])) {
+      closers.push({ newline: nl, run, end })
+    }
+  }
+  const longestFrom: number[] = new Array<number>(closers.length)
+  for (let k = closers.length - 1, max = 0; k >= 0; k--) {
+    max = Math.max(max, closers[k].run)
+    longestFrom[k] = max
+  }
+
+  let out = ''
+  let copied = 0
+  let next = 0
+  let p = 0
+  while (p < text.length) {
+    const lineStart = p === 0 || LINE_BREAKS.has(text[p - 1])
+    const run = lineStart ? backtickRun(text, p) : 0
+    if (run < 3) {
+      p += 1
+      continue
+    }
+    const infoEnd = text.indexOf('\n', p + run)
+    if (infoEnd < 0) break
+    while (next < closers.length && closers[next].newline <= infoEnd) {
+      next += 1
+    }
+    if (next === closers.length) break
+    const want = Math.min(run, longestFrom[next])
+    let k = next
+    while (closers[k].run < want) k += 1
+    const end = closers[k].end
+    out += text.slice(copied, p) + hold(text.slice(p, end))
+    copied = p = end
+    next = k + 1
+  }
+  return out + text.slice(copied)
+}
+
 /**
  * Replaces fenced code blocks and inline code spans with opaque placeholders,
  * so the model never sees code. `restoreCode` puts the originals back.
@@ -361,10 +426,7 @@ export function protectCode(markdown: string): {
     code.push(span)
     return `⟦code-${code.length}⟧`
   }
-  const fenced = markdown.replace(
-    /^(`{3,})[^\n]*\n[\s\S]*?\n\1`*[ \t]*$/gm,
-    hold,
-  )
+  const fenced = replaceFencedCode(markdown, hold)
   let out = ''
   let i = 0
   while (i < fenced.length) {
