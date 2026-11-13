@@ -46,7 +46,11 @@ export function useDevEnvironment(siteId: string, enabled: boolean) {
       router,
       devSiteId
         ? devEnvQueryKeys({ devSiteId, productionSiteId: siteId })
-        : [queryKeys.devEnvironment(siteId), ['dev-sync'], ['push-plan']],
+        : [
+            queryKeys.devEnvironment(siteId),
+            queryKeys.allDevSyncs(),
+            queryKeys.allPushPlans(),
+          ],
     )
   }
 

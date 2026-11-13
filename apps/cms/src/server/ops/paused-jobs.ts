@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 /**
  * Work that stopped after repeated failures and needs an operator, or the
  * hourly automatic retry: storage deletions (four failed attempts) and
@@ -232,10 +231,12 @@ async function resetSchedules(where: ReturnType<typeof and>) {
 }
 
 async function siteOwnerOf(siteId: string) {
-  const [row] = await db
-    .select({ organizationId: site.organizationId })
-    .from(site)
-    .where(eq(site.id, siteId))
-    .limit(1)
+  const row = (
+    await db
+      .select({ organizationId: site.organizationId })
+      .from(site)
+      .where(eq(site.id, siteId))
+      .limit(1)
+  ).at(0)
   return row?.organizationId ?? null
 }

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 /**
  * What publishing and invitations call. Each entry point runs after the
  * caller's own commit and never throws: a notification problem must not fail
@@ -42,17 +41,19 @@ type Entries = Pick<NotificationPayload, 'entries' | 'moreEntries'>
  * (docs/design/dev-environments.md, Decision 22). Every caller returns early.
  */
 async function siteContext(siteId: string) {
-  const [row] = await db
-    .select({
-      siteId: site.id,
-      siteName: site.name,
-      organizationId: site.organizationId,
-      orgName: organization.name,
-    })
-    .from(site)
-    .innerJoin(organization, eq(organization.id, site.organizationId))
-    .where(and(eq(site.id, siteId), eq(site.environment, 'production')))
-    .limit(1)
+  const row = (
+    await db
+      .select({
+        siteId: site.id,
+        siteName: site.name,
+        organizationId: site.organizationId,
+        orgName: organization.name,
+      })
+      .from(site)
+      .innerJoin(organization, eq(organization.id, site.organizationId))
+      .where(and(eq(site.id, siteId), eq(site.environment, 'production')))
+      .limit(1)
+  ).at(0)
   return row ?? null
 }
 
@@ -137,29 +138,33 @@ function entriesBetween(current: Snapshot, previous: Snapshot | null): Entries {
 }
 
 async function publicationRow(publicationId: string) {
-  const [row] = await db
-    .select()
-    .from(publication)
-    .where(eq(publication.id, publicationId))
-    .limit(1)
+  const row = (
+    await db
+      .select()
+      .from(publication)
+      .where(eq(publication.id, publicationId))
+      .limit(1)
+  ).at(0)
   return row ?? null
 }
 
 /** Latest live release before this one, the baseline for "what changed". */
 async function previousLive(pub: typeof publication.$inferSelect) {
-  const [row] = await db
-    .select()
-    .from(publication)
-    .where(
-      and(
-        eq(publication.siteId, pub.siteId),
-        eq(publication.status, 'live'),
-        ne(publication.id, pub.id),
-        lte(publication.createdAt, pub.createdAt),
-      ),
-    )
-    .orderBy(desc(publication.createdAt))
-    .limit(1)
+  const row = (
+    await db
+      .select()
+      .from(publication)
+      .where(
+        and(
+          eq(publication.siteId, pub.siteId),
+          eq(publication.status, 'live'),
+          ne(publication.id, pub.id),
+          lte(publication.createdAt, pub.createdAt),
+        ),
+      )
+      .orderBy(desc(publication.createdAt))
+      .limit(1)
+  ).at(0)
   return row ?? null
 }
 
@@ -356,35 +361,43 @@ export async function notifyInviteAccepted(
   acceptedUserId: string,
 ) {
   try {
-    const [invite] = await db
-      .select()
-      .from(invitation)
-      .where(eq(invitation.id, invitationId))
-      .limit(1)
+    const invite = (
+      await db
+        .select()
+        .from(invitation)
+        .where(eq(invitation.id, invitationId))
+        .limit(1)
+    ).at(0)
     if (!invite) return
-    const [org] = await db
-      .select({ name: organization.name })
-      .from(organization)
-      .where(eq(organization.id, invite.organizationId))
-      .limit(1)
-    const [invitee] = await db
-      .select({ name: user.name, email: user.email })
-      .from(user)
-      .where(eq(user.id, acceptedUserId))
-      .limit(1)
+    const org = (
+      await db
+        .select({ name: organization.name })
+        .from(organization)
+        .where(eq(organization.id, invite.organizationId))
+        .limit(1)
+    ).at(0)
+    const invitee = (
+      await db
+        .select({ name: user.name, email: user.email })
+        .from(user)
+        .where(eq(user.id, acceptedUserId))
+        .limit(1)
+    ).at(0)
     // The audit row written when the invitation was sent names its sender.
-    const [sent] = await db
-      .select({ actorId: auditLog.actorId })
-      .from(auditLog)
-      .where(
-        and(
-          eq(auditLog.action, 'member.invite'),
-          eq(auditLog.targetId, invitationId),
-          isNotNull(auditLog.actorId),
-        ),
-      )
-      .orderBy(asc(auditLog.createdAt))
-      .limit(1)
+    const sent = (
+      await db
+        .select({ actorId: auditLog.actorId })
+        .from(auditLog)
+        .where(
+          and(
+            eq(auditLog.action, 'member.invite'),
+            eq(auditLog.targetId, invitationId),
+            isNotNull(auditLog.actorId),
+          ),
+        )
+        .orderBy(asc(auditLog.createdAt))
+        .limit(1)
+    ).at(0)
     if (!sent?.actorId) return
     await notify({
       event: 'invite.accepted',

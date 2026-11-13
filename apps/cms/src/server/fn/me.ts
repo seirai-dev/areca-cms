@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { createServerFn } from '@tanstack/react-start'
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { z } from '#/lib/zod'
@@ -184,11 +183,13 @@ export const getInvitationFn = createServerFn({ method: 'GET', ...meFn })
       throw new NotFoundError(m.server_invitation_not_found())
     }
 
-    const [org] = await db
-      .select({ name: organization.name })
-      .from(organization)
-      .where(eq(organization.id, invite.organizationId))
-      .limit(1)
+    const org = (
+      await db
+        .select({ name: organization.name })
+        .from(organization)
+        .where(eq(organization.id, invite.organizationId))
+        .limit(1)
+    ).at(0)
 
     return {
       email: invite.email,

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- tool results are read loosely in assertions */
 import { eq } from 'drizzle-orm'
 import sharp from 'sharp'
 import {
@@ -145,7 +144,9 @@ describe.skipIf(!hasDb)('upload links over MCP', () => {
   })
 
   afterAll(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unset when beforeAll failed
     if (ctx) await cleanupTestSite(ctx)
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unset when beforeAll failed
     if (other) await cleanupTestSite(other)
     if (editorId) await db.delete(user).where(eq(user.id, editorId))
   })
@@ -208,7 +209,7 @@ describe.skipIf(!hasDb)('upload links over MCP', () => {
     const meta = await sharp(
       Buffer.from(finished.images[0]?.data ?? '', 'base64'),
     ).metadata()
-    expect(Math.max(meta.width ?? 0, meta.height ?? 0)).toBe(1024)
+    expect(Math.max(meta.width, meta.height)).toBe(1024)
 
     // The link is closed: no more files.
     const late = await put(token, await png('#00ff00'), 'late.png')
@@ -243,10 +244,12 @@ describe.skipIf(!hasDb)('upload links over MCP', () => {
     const response = await put(token, Buffer.from('<html>nope</html>'), 'x.png')
     expect(response.status).toBe(400)
     expect(await response.json()).toMatchObject({ error: 'invalid_file' })
-    const [row] = await db
-      .select()
-      .from(assetUploadSession)
-      .where(eq(assetUploadSession.id, String(created.data.uploadId)))
+    const row = (
+      await db
+        .select()
+        .from(assetUploadSession)
+        .where(eq(assetUploadSession.id, String(created.data.uploadId)))
+    ).at(0)
     expect(row?.reservedCount).toBe(0)
   })
 

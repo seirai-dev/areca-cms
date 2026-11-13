@@ -19,6 +19,7 @@ import {
   validateContentDefinitions,
 } from '#/server/content/content-definitions'
 import type { ContentDefinition } from '#/server/content/content-definitions'
+import { archivedColumns } from '#/server/content/entry-commit'
 import { ValidationError } from '#/server/content/errors'
 import {
   prepareGlobalUpsert,
@@ -171,10 +172,8 @@ async function disableAndArchive(state: PushState, collectionId: string) {
   await tx
     .update(entry)
     .set({
-      status: 'archived',
       contentVersion: sql`${entry.contentVersion} + 1`,
-      updatedBy: actor.id,
-      updatedAt: now,
+      ...archivedColumns(actor.id, now),
     })
     .where(eq(entry.collectionId, collectionId))
 }

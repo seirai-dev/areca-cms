@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import { and, eq, inArray } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -51,10 +50,12 @@ async function storageRow(
 }
 
 async function attemptsOf(storageKey: string) {
-  const [row] = await db
-    .select({ attempts: storageObjectDeletion.attempts })
-    .from(storageObjectDeletion)
-    .where(eq(storageObjectDeletion.storageKey, storageKey))
+  const row = (
+    await db
+      .select({ attempts: storageObjectDeletion.attempts })
+      .from(storageObjectDeletion)
+      .where(eq(storageObjectDeletion.storageKey, storageKey))
+  ).at(0)
   return row?.attempts
 }
 
@@ -176,10 +177,12 @@ describe.skipIf(!hasDb)('paused jobs', () => {
       retryPausedJob('schedule', ctx.site.id, ctx.actor.id),
     ).resolves.toBe(true)
 
-    const [after] = await db
-      .select({ failureCount: schedulerBackoff.failureCount })
-      .from(schedulerBackoff)
-      .where(eq(schedulerBackoff.siteId, ctx.site.id))
+    const after = (
+      await db
+        .select({ failureCount: schedulerBackoff.failureCount })
+        .from(schedulerBackoff)
+        .where(eq(schedulerBackoff.siteId, ctx.site.id))
+    ).at(0)
     expect(after?.failureCount).toBe(0)
     const { schedules } = await listPausedJobs()
     expect(schedules.map((row) => row.id)).not.toContain(ctx.site.id)
@@ -202,10 +205,12 @@ describe.skipIf(!hasDb)('paused jobs', () => {
 
     await autoRetryPausedJobs()
 
-    const [row] = await db
-      .select({ failureCount: schedulerBackoff.failureCount })
-      .from(schedulerBackoff)
-      .where(inArray(schedulerBackoff.siteId, [ctx.site.id]))
+    const row = (
+      await db
+        .select({ failureCount: schedulerBackoff.failureCount })
+        .from(schedulerBackoff)
+        .where(inArray(schedulerBackoff.siteId, [ctx.site.id]))
+    ).at(0)
     expect(row?.failureCount).toBe(4)
     expect((await listPausedJobs()).schedules.map((r) => r.id)).not.toContain(
       ctx.site.id,

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 /**
  * Seeds for the person-level DB tests (blocking, deletion, client access).
  * People are created per test with unique emails and removed afterwards.
@@ -21,28 +20,32 @@ export async function makePerson(
   } = {},
 ) {
   const id = crypto.randomUUID()
-  const [row] = await db
-    .insert(user)
-    .values({
-      id,
-      name: input.name ?? `Person ${id.slice(0, 6)}`,
-      email: `person-${id}@areca.test`,
-      emailVerified: true,
-      isAgencyAdmin: input.admin ?? false,
-      twoFactorEnabled: input.twoFactor ?? false,
-      locale: input.locale === undefined ? 'en' : input.locale,
-    })
-    .returning()
+  const row = (
+    await db
+      .insert(user)
+      .values({
+        id,
+        name: input.name ?? `Person ${id.slice(0, 6)}`,
+        email: `person-${id}@areca.test`,
+        emailVerified: true,
+        isAgencyAdmin: input.admin ?? false,
+        twoFactorEnabled: input.twoFactor ?? false,
+        locale: input.locale === undefined ? 'en' : input.locale,
+      })
+      .returning()
+  ).at(0)
   if (!row) throw new Error('Failed to create person')
   return row
 }
 
 export async function makeClient(label = 'Client') {
   const suffix = crypto.randomUUID()
-  const [row] = await db
-    .insert(organization)
-    .values({ name: label, slug: `client-${suffix}` })
-    .returning()
+  const row = (
+    await db
+      .insert(organization)
+      .values({ name: label, slug: `client-${suffix}` })
+      .returning()
+  ).at(0)
   if (!row) throw new Error('Failed to create client')
   return row
 }

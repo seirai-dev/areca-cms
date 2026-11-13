@@ -1,11 +1,13 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { and, eq, gt } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { session, verification } from '#/db/schema'
 import { env } from '#/env'
 import { MfaRequiredError } from '#/lib/security-errors'
-import { forgetForRequest, memoizeForRequest } from '#/server/http/request-scope.server'
+import {
+  forgetForRequest,
+  memoizeForRequest,
+} from '#/server/http/request-scope.server'
 import { m } from '#/paraglide/messages'
 
 type Principal = {
@@ -33,17 +35,19 @@ export function localMfaVerifiedAt(principal: Principal, now = new Date()) {
 }
 
 async function readLocalMfaProof(principal: Principal, now: Date) {
-  const [proof] = await db
-    .select({ createdAt: verification.createdAt })
-    .from(verification)
-    .where(
-      and(
-        eq(verification.id, proofId(principal.session.id)),
-        eq(verification.value, principal.user.id),
-        gt(verification.expiresAt, now),
-      ),
-    )
-    .limit(1)
+  const proof = (
+    await db
+      .select({ createdAt: verification.createdAt })
+      .from(verification)
+      .where(
+        and(
+          eq(verification.id, proofId(principal.session.id)),
+          eq(verification.value, principal.user.id),
+          gt(verification.expiresAt, now),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   return proof?.createdAt ?? null
 }
 
@@ -78,11 +82,13 @@ export async function requireLocalMfa(principal: Principal) {
 
 /** Called only after Better Auth successfully verifies TOTP or a backup code. */
 export async function recordLocalMfaForToken(token: string, now = new Date()) {
-  const [verifiedSession] = await db
-    .select()
-    .from(session)
-    .where(and(eq(session.token, token), gt(session.expiresAt, now)))
-    .limit(1)
+  const verifiedSession = (
+    await db
+      .select()
+      .from(session)
+      .where(and(eq(session.token, token), gt(session.expiresAt, now)))
+      .limit(1)
+  ).at(0)
   if (!verifiedSession) return
   const id = proofId(verifiedSession.id)
   await db

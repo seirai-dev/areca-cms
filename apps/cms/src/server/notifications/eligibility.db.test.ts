@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -27,34 +26,40 @@ afterEach(async () => {
  */
 async function queuedNotificationEmail() {
   const suffix = crypto.randomUUID()
-  const [org] = await db
-    .insert(organization)
-    .values({ name: `Eligible ${suffix}`, slug: `eligible-${suffix}` })
-    .returning()
-  const [person] = await db
-    .insert(user)
-    .values({
-      id: crypto.randomUUID(),
-      name: 'Eli Gible',
-      email: `eligible-${suffix}@areca.local`,
-      emailVerified: true,
-      locale: 'en',
-    })
-    .returning()
+  const org = (
+    await db
+      .insert(organization)
+      .values({ name: `Eligible ${suffix}`, slug: `eligible-${suffix}` })
+      .returning()
+  ).at(0)
+  const person = (
+    await db
+      .insert(user)
+      .values({
+        id: crypto.randomUUID(),
+        name: 'Eli Gible',
+        email: `eligible-${suffix}@areca.local`,
+        emailVerified: true,
+        locale: 'en',
+      })
+      .returning()
+  ).at(0)
   if (!org || !person) throw new Error('fixture failed')
   await db
     .insert(membership)
     .values({ userId: person.id, organizationId: org.id, role: 'editor' })
-  const [row] = await db
-    .insert(notification)
-    .values({
-      userId: person.id,
-      organizationId: org.id,
-      event: 'release.live',
-      payload: { organizationId: org.id, recipientRole: 'editor' },
-      dedupeKey: `release.live:${suffix}:${person.id}`,
-    })
-    .returning()
+  const row = (
+    await db
+      .insert(notification)
+      .values({
+        userId: person.id,
+        organizationId: org.id,
+        event: 'release.live',
+        payload: { organizationId: org.id, recipientRole: 'editor' },
+        dedupeKey: `release.live:${suffix}:${person.id}`,
+      })
+      .returning()
+  ).at(0)
   if (!row) throw new Error('fixture failed')
   const queued = await enqueueEmail({
     kind: 'release.live',
@@ -74,12 +79,12 @@ async function queuedNotificationEmail() {
 }
 
 async function statusOf(outboxId: string) {
-  const [row] = await db
+  const rows = await db
     .select({ status: emailOutbox.status, sentAt: emailOutbox.sentAt })
     .from(emailOutbox)
     .where(eq(emailOutbox.id, outboxId))
     .limit(1)
-  return row
+  return rows.at(0)
 }
 
 describe.skipIf(!hasDb)('notification emails at send time', () => {

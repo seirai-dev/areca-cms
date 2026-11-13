@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .select() are checked defensively */
 import type * as AdminRoster from './agency-admin-roster.ts'
 
 import { and, eq, inArray, isNull } from 'drizzle-orm'
@@ -102,20 +101,22 @@ async function signIn(userId: string) {
 
 /** A queued notification email for a person, as the fan-out leaves it. */
 async function queuedNotice(userId: string) {
-  const [row] = await db
-    .insert(emailOutbox)
-    .values({
-      kind: 'notification',
-      notificationId: crypto.randomUUID(),
-      toAddress: `queued-${userId}@areca.test`,
-      userId,
-      subject: 'Live',
-      template: 'notification',
-      params: { userId },
-      locale: 'en',
-      status: 'queued',
-    })
-    .returning()
+  const row = (
+    await db
+      .insert(emailOutbox)
+      .values({
+        kind: 'notification',
+        notificationId: crypto.randomUUID(),
+        toAddress: `queued-${userId}@areca.test`,
+        userId,
+        subject: 'Live',
+        template: 'notification',
+        params: { userId },
+        locale: 'en',
+        status: 'queued',
+      })
+      .returning()
+  ).at(0)
   if (!row) throw new Error('fixture failed')
   return row
 }
@@ -152,7 +153,9 @@ describe.skipIf(!hasDb)('blocking a person', () => {
       reason: '  Left the agency ',
     })
 
-    const [row] = await db.select().from(user).where(eq(user.id, target.id))
+    const row = (await db.select().from(user).where(eq(user.id, target.id))).at(
+      0,
+    )
     expect(row?.blockedAt).toBeInstanceOf(Date)
     expect(row?.blockedById).toBe(admin.id)
     expect(row?.blockedReason).toBe('Left the agency')
@@ -249,10 +252,12 @@ describe.skipIf(!hasDb)('blocking a person', () => {
       reason: 'invalid',
     })
     // Suspended, not revoked: the key row itself is untouched.
-    const [key] = await db
-      .select()
-      .from(mcpKey)
-      .where(eq(mcpKey.tokenHash, generated.tokenHash))
+    const key = (
+      await db
+        .select()
+        .from(mcpKey)
+        .where(eq(mcpKey.tokenHash, generated.tokenHash))
+    ).at(0)
     expect(key?.revokedAt).toBeNull()
 
     await unblockUser({ actorId: admin.id, userId: target.id })
@@ -284,10 +289,9 @@ describe.skipIf(!hasDb)('blocking a person', () => {
 
     await blockUser({ actorId: admin.id, userId: target.id })
 
-    const [cancelled] = await db
-      .select()
-      .from(emailOutbox)
-      .where(eq(emailOutbox.id, queued.id))
+    const cancelled = (
+      await db.select().from(emailOutbox).where(eq(emailOutbox.id, queued.id))
+    ).at(0)
     expect(cancelled?.status).toBe('cancelled')
     // A notice that was already in flight is refused at send time.
     const notifications = await db
@@ -319,14 +323,12 @@ describe.skipIf(!hasDb)('blocking a person', () => {
     const cancelled = await cancelAllQueuedNotificationEmails(target.id)
 
     expect(cancelled).toBe(1)
-    const [a] = await db
-      .select()
-      .from(emailOutbox)
-      .where(eq(emailOutbox.id, mine.id))
-    const [b] = await db
-      .select()
-      .from(emailOutbox)
-      .where(eq(emailOutbox.id, theirs.id))
+    const a = (
+      await db.select().from(emailOutbox).where(eq(emailOutbox.id, mine.id))
+    ).at(0)
+    const b = (
+      await db.select().from(emailOutbox).where(eq(emailOutbox.id, theirs.id))
+    ).at(0)
     expect(a?.status).toBe('cancelled')
     expect(b?.status).toBe('queued')
   })
@@ -383,7 +385,7 @@ describe.skipIf(!hasDb)('last active agency admin', () => {
     await expect(
       blockUser({ actorId: adminB.id, userId: adminA.id }),
     ).rejects.toBeInstanceOf(LastAgencyAdminError)
-    const [a] = await db.select().from(user).where(eq(user.id, adminA.id))
+    const a = (await db.select().from(user).where(eq(user.id, adminA.id))).at(0)
     expect(a?.blockedAt).toBeNull()
   })
 
@@ -476,15 +478,17 @@ describe.skipIf(!hasDb)('security actions', () => {
 
     expect(result.sessionsEnded).toBe(2)
     expect(await sessionsOf(target.id)).toHaveLength(0)
-    const [audit] = await db
-      .select()
-      .from(auditLog)
-      .where(
-        and(
-          eq(auditLog.action, 'user.sessions_revoke'),
-          eq(auditLog.targetId, target.id),
-        ),
-      )
+    const audit = (
+      await db
+        .select()
+        .from(auditLog)
+        .where(
+          and(
+            eq(auditLog.action, 'user.sessions_revoke'),
+            eq(auditLog.targetId, target.id),
+          ),
+        )
+    ).at(0)
     expect(audit?.meta).toMatchObject({ sessionsEnded: 2 })
   })
 
@@ -512,31 +516,37 @@ describe.skipIf(!hasDb)('security actions', () => {
     expect(
       await db.select().from(twoFactor).where(eq(twoFactor.userId, target.id)),
     ).toHaveLength(0)
-    const [row] = await db.select().from(user).where(eq(user.id, target.id))
+    const row = (await db.select().from(user).where(eq(user.id, target.id))).at(
+      0,
+    )
     expect(row?.twoFactorEnabled).toBe(false)
     expect(await sessionsOf(target.id)).toHaveLength(0)
-    const [notice] = await db
-      .select()
-      .from(emailOutbox)
-      .where(
-        and(
-          eq(emailOutbox.userId, target.id),
-          eq(emailOutbox.kind, 'two_factor_reset'),
-        ),
-      )
+    const notice = (
+      await db
+        .select()
+        .from(emailOutbox)
+        .where(
+          and(
+            eq(emailOutbox.userId, target.id),
+            eq(emailOutbox.kind, 'two_factor_reset'),
+          ),
+        )
+    ).at(0)
     expect(notice).toMatchObject({ status: 'queued', locale: 'en' })
     expect(notice?.params).toEqual(
       expect.objectContaining({ actorName: admin.name }),
     )
-    const [audit] = await db
-      .select()
-      .from(auditLog)
-      .where(
-        and(
-          eq(auditLog.action, 'user.two_factor_reset'),
-          eq(auditLog.targetId, target.id),
-        ),
-      )
+    const audit = (
+      await db
+        .select()
+        .from(auditLog)
+        .where(
+          and(
+            eq(auditLog.action, 'user.two_factor_reset'),
+            eq(auditLog.targetId, target.id),
+          ),
+        )
+    ).at(0)
     expect(audit?.actorId).toBe(admin.id)
   })
 
@@ -550,17 +560,21 @@ describe.skipIf(!hasDb)('security actions', () => {
       name: '  New Name ',
     })
 
-    const [row] = await db.select().from(user).where(eq(user.id, target.id))
+    const row = (await db.select().from(user).where(eq(user.id, target.id))).at(
+      0,
+    )
     expect(row?.name).toBe('New Name')
-    const [audit] = await db
-      .select()
-      .from(auditLog)
-      .where(
-        and(
-          eq(auditLog.action, 'user.rename'),
-          eq(auditLog.targetId, target.id),
-        ),
-      )
+    const audit = (
+      await db
+        .select()
+        .from(auditLog)
+        .where(
+          and(
+            eq(auditLog.action, 'user.rename'),
+            eq(auditLog.targetId, target.id),
+          ),
+        )
+    ).at(0)
     expect(audit?.meta).toMatchObject({
       userName: 'New Name',
       previousName: 'Old Name',

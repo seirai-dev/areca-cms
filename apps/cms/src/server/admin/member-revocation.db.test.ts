@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import { and, eq, inArray } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -21,26 +20,30 @@ afterEach(async () => {
 async function fixture() {
   const suffix = crypto.randomUUID()
   const { org, site: quay, actor } = await createTestSite()
-  const [owner] = await db
-    .insert(user)
-    .values({
-      id: crypto.randomUUID(),
-      name: 'Owen Owner',
-      email: `owner-${suffix}@areca.local`,
-      emailVerified: true,
-      locale: 'en',
-    })
-    .returning()
-  const [member] = await db
-    .insert(user)
-    .values({
-      id: crypto.randomUUID(),
-      name: 'Edith Editor',
-      email: `editor-${suffix}@areca.local`,
-      emailVerified: true,
-      locale: 'en',
-    })
-    .returning()
+  const owner = (
+    await db
+      .insert(user)
+      .values({
+        id: crypto.randomUUID(),
+        name: 'Owen Owner',
+        email: `owner-${suffix}@areca.local`,
+        emailVerified: true,
+        locale: 'en',
+      })
+      .returning()
+  ).at(0)
+  const member = (
+    await db
+      .insert(user)
+      .values({
+        id: crypto.randomUUID(),
+        name: 'Edith Editor',
+        email: `editor-${suffix}@areca.local`,
+        emailVerified: true,
+        locale: 'en',
+      })
+      .returning()
+  ).at(0)
   if (!owner || !member) throw new Error('fixture failed')
   await db.insert(membership).values([
     { userId: owner.id, organizationId: org.id, role: 'owner' },
@@ -59,39 +62,42 @@ async function fixture() {
 describe.skipIf(!hasDb)('member removal revokes access', () => {
   it('revokes personal MCP keys on the org sites, cancels queued notices and audits it', async () => {
     const { org, owner, member, quay } = await fixture()
-    const [key] = await db
-      .insert(mcpKey)
-      .values({
-        userId: member.id,
-        siteId: quay.id,
-        name: 'Laptop',
-        tokenPrefix: 'areca_test',
-        tokenHash: `hash-${crypto.randomUUID()}`,
-      })
-      .returning()
-    const [queued] = await db
-      .insert(emailOutbox)
-      .values({
-        kind: 'notification',
-        notificationId: 'content.published',
-        toAddress: member.email,
-        userId: member.id,
-        organizationId: org.id,
-        subject: 'Published',
-        template: 'notification',
-        params: { userId: member.id },
-        locale: 'en',
-        status: 'queued',
-      })
-      .returning()
+    const key = (
+      await db
+        .insert(mcpKey)
+        .values({
+          userId: member.id,
+          siteId: quay.id,
+          name: 'Laptop',
+          tokenPrefix: 'areca_test',
+          tokenHash: `hash-${crypto.randomUUID()}`,
+        })
+        .returning()
+    ).at(0)
+    const queued = (
+      await db
+        .insert(emailOutbox)
+        .values({
+          kind: 'notification',
+          notificationId: 'content.published',
+          toAddress: member.email,
+          userId: member.id,
+          organizationId: org.id,
+          subject: 'Published',
+          template: 'notification',
+          params: { userId: member.id },
+          locale: 'en',
+          status: 'queued',
+        })
+        .returning()
+    ).at(0)
     if (!key || !queued) throw new Error('fixture failed')
 
     await removeMember(org.id, member.id, owner.id)
 
-    const [revoked] = await db
-      .select()
-      .from(mcpKey)
-      .where(eq(mcpKey.id, key.id))
+    const revoked = (
+      await db.select().from(mcpKey).where(eq(mcpKey.id, key.id))
+    ).at(0)
     expect(revoked?.revokedAt).toBeInstanceOf(Date)
     const [cancelled] = await db
       .select()
@@ -123,15 +129,17 @@ describe.skipIf(!hasDb)('agency admin grant and revoke notices', () => {
   it('queues a mandatory notice to the person and audits the change', async () => {
     const { owner, member } = await fixture()
     await setAgencyAdmin(member.id, true, owner.id)
-    const [granted] = await db
-      .select()
-      .from(emailOutbox)
-      .where(
-        and(
-          eq(emailOutbox.userId, member.id),
-          eq(emailOutbox.kind, 'agency_admin_granted'),
-        ),
-      )
+    const granted = (
+      await db
+        .select()
+        .from(emailOutbox)
+        .where(
+          and(
+            eq(emailOutbox.userId, member.id),
+            eq(emailOutbox.kind, 'agency_admin_granted'),
+          ),
+        )
+    ).at(0)
     expect(granted).toMatchObject({ status: 'queued', locale: 'en' })
     expect(granted?.params).toEqual(
       expect.objectContaining({ userId: member.id, actorName: 'Owen Owner' }),

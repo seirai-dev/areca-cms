@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import type * as PublicationsModule from './publications.ts'
 
 import { eq, inArray } from 'drizzle-orm'
@@ -100,17 +99,19 @@ describe.skipIf(!hasDb)(
           siteId: ctx.site.id,
           status: 'building',
         })
-        const [job] = await db
-          .insert(buildJob)
-          .values({
-            siteId: ctx.site.id,
-            publicationId: pub.id,
-            status: 'building',
-            attempts: 1,
-            startedAt: new Date(Date.now() - 2 * 60 * 60_000),
-            leaseExpiresAt: new Date(Date.now() - 60_000),
-          })
-          .returning()
+        const job = (
+          await db
+            .insert(buildJob)
+            .values({
+              siteId: ctx.site.id,
+              publicationId: pub.id,
+              status: 'building',
+              attempts: 1,
+              startedAt: new Date(Date.now() - 2 * 60 * 60_000),
+              leaseExpiresAt: new Date(Date.now() - 60_000),
+            })
+            .returning()
+        ).at(0)
         if (!job) throw new Error('fixture failed')
         stale.push(job.id)
         cleanups.push(async () => {

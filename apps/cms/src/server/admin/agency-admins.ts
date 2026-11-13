@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 /** Granting and revoking the agency admin role. */
 import { eq } from 'drizzle-orm'
 
@@ -23,15 +22,17 @@ export async function setAgencyAdmin(
 ) {
   return db.transaction(async (tx) => {
     await lockAgencyAdminRoster(tx)
-    const [existing] = await tx
-      .select({
-        id: user.id,
-        isAgencyAdmin: user.isAgencyAdmin,
-        blockedAt: user.blockedAt,
-      })
-      .from(user)
-      .where(eq(user.id, userId))
-      .limit(1)
+    const existing = (
+      await tx
+        .select({
+          id: user.id,
+          isAgencyAdmin: user.isAgencyAdmin,
+          blockedAt: user.blockedAt,
+        })
+        .from(user)
+        .where(eq(user.id, userId))
+        .limit(1)
+    ).at(0)
     if (!existing) {
       throw new NotFoundError(m.server_user_not_found())
     }
@@ -41,16 +42,18 @@ export async function setAgencyAdmin(
       assertAgencyAdminCanBeRemoved(await countActiveAgencyAdmins(tx))
     }
 
-    const [updated] = await tx
-      .update(user)
-      .set({ isAgencyAdmin, updatedAt: new Date() })
-      .where(eq(user.id, userId))
-      .returning({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        isAgencyAdmin: user.isAgencyAdmin,
-      })
+    const updated = (
+      await tx
+        .update(user)
+        .set({ isAgencyAdmin, updatedAt: new Date() })
+        .where(eq(user.id, userId))
+        .returning({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          isAgencyAdmin: user.isAgencyAdmin,
+        })
+    ).at(0)
     if (!updated) {
       throw new NotFoundError(m.server_user_not_found())
     }
@@ -71,11 +74,13 @@ export async function setAgencyAdmin(
         tx,
       )
       // A security notice, so it is sent whatever the person's preferences.
-      const [actor] = await tx
-        .select({ name: user.name })
-        .from(user)
-        .where(eq(user.id, actorId))
-        .limit(1)
+      const actor = (
+        await tx
+          .select({ name: user.name })
+          .from(user)
+          .where(eq(user.id, actorId))
+          .limit(1)
+      ).at(0)
       const at = new Date().toISOString()
       await sendAccountEmail({
         kind: isAgencyAdmin ? 'agency_admin_granted' : 'agency_admin_revoked',

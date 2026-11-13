@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 /**
  * A person's client access: the detail page's read, and the staged batch that
  * adds, changes and removes memberships in one transaction. Role changes and
@@ -48,21 +47,23 @@ export type ClientAccessResult = {
 
 /** The person's page: profile, sign-in state and client access. */
 export async function getUserDetail(userId: string) {
-  const [person] = await db
-    .select({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      isAgencyAdmin: user.isAgencyAdmin,
-      twoFactorEnabled: user.twoFactorEnabled,
-      createdAt: user.createdAt,
-      blockedAt: user.blockedAt,
-      blockedReason: user.blockedReason,
-      blockedById: user.blockedById,
-    })
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1)
+  const person = (
+    await db
+      .select({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        isAgencyAdmin: user.isAgencyAdmin,
+        twoFactorEnabled: user.twoFactorEnabled,
+        createdAt: user.createdAt,
+        blockedAt: user.blockedAt,
+        blockedReason: user.blockedReason,
+        blockedById: user.blockedById,
+      })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1)
+  ).at(0)
   if (!person) throw new NotFoundError(m.server_user_not_found())
 
   const [blocker] = person.blockedById
@@ -81,16 +82,20 @@ export async function getUserDetail(userId: string) {
     )
     .limit(1)
 
-  const [activeSessions] = await db
-    .select({ value: count() })
-    .from(session)
-    .where(and(eq(session.userId, userId), gt(session.expiresAt, new Date())))
+  const activeSessions = (
+    await db
+      .select({ value: count() })
+      .from(session)
+      .where(and(eq(session.userId, userId), gt(session.expiresAt, new Date())))
+  ).at(0)
   // The same definition as the people list (see last-active.ts).
   const lastActive = lastActiveSubquery()
-  const [lastActiveRow] = await db
-    .select({ at: lastActive.at })
-    .from(lastActive)
-    .where(eq(lastActive.userId, userId))
+  const lastActiveRow = (
+    await db
+      .select({ at: lastActive.at })
+      .from(lastActive)
+      .where(eq(lastActive.userId, userId))
+  ).at(0)
   const lastActiveAt = lastActiveRow?.at ?? null
 
   const memberRows = await db
@@ -107,15 +112,17 @@ export async function getUserDetail(userId: string) {
     .orderBy(organization.name)
   const memberships = []
   for (const row of memberRows) {
-    const [owners] = await db
-      .select({ value: count() })
-      .from(membership)
-      .where(
-        and(
-          eq(membership.organizationId, row.organizationId),
-          eq(membership.role, 'owner'),
-        ),
-      )
+    const owners = (
+      await db
+        .select({ value: count() })
+        .from(membership)
+        .where(
+          and(
+            eq(membership.organizationId, row.organizationId),
+            eq(membership.role, 'owner'),
+          ),
+        )
+    ).at(0)
     memberships.push({
       ...row,
       isOnlyOwner: row.role === 'owner' && Number(owners?.value ?? 0) <= 1,
@@ -211,13 +218,13 @@ export async function setUserClientAccess(
         added.push({ name, role: step.role })
         result.added += 1
       } else if (step.kind === 'change') {
-        const updated = await applyMemberRole(tx, {
+        await applyMemberRole(tx, {
           organizationId: step.organizationId,
           userId: person.id,
           role: step.role,
           actorId: input.actorId,
         })
-        if (updated) result.changed += 1
+        result.changed += 1
       } else {
         await applyMemberRemoval(tx, {
           organizationId: step.organizationId,
@@ -247,11 +254,13 @@ export async function setUserClientAccess(
 }
 
 async function nameOf(tx: Tx, userId: string) {
-  const [row] = await tx
-    .select({ name: user.name })
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1)
+  const row = (
+    await tx
+      .select({ name: user.name })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1)
+  ).at(0)
   return row?.name ?? ''
 }
 
@@ -269,28 +278,32 @@ async function addMembership(
 ) {
   const org = await lockOrganizationForMutation(tx, input.organizationId)
 
-  const [existing] = await tx
-    .select({ id: membership.id })
-    .from(membership)
-    .where(
-      and(
-        eq(membership.userId, input.userId),
-        eq(membership.organizationId, input.organizationId),
-      ),
-    )
-    .limit(1)
+  const existing = (
+    await tx
+      .select({ id: membership.id })
+      .from(membership)
+      .where(
+        and(
+          eq(membership.userId, input.userId),
+          eq(membership.organizationId, input.organizationId),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   if (existing) {
     throw new ConflictError(m.server_access_already_member({ org: org.name }))
   }
 
-  const [row] = await tx
-    .insert(membership)
-    .values({
-      userId: input.userId,
-      organizationId: input.organizationId,
-      role: input.role,
-    })
-    .returning({ id: membership.id })
+  const row = (
+    await tx
+      .insert(membership)
+      .values({
+        userId: input.userId,
+        organizationId: input.organizationId,
+        role: input.role,
+      })
+      .returning({ id: membership.id })
+  ).at(0)
   if (!row) throw new Error(m.server_member_not_found())
 
   await audit(

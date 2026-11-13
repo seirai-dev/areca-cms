@@ -27,6 +27,11 @@ export default [
             "Property[key.name='queryKey'] ArrayExpression[elements.0.type='Literal']",
           message: 'Build query keys with `queryKeys` from #/lib/query-keys.',
         },
+        {
+          selector:
+            "CallExpression[callee.name='invalidateQueryKeys'] ArrayExpression[elements.0.type='Literal']",
+          message: 'Build query keys with `queryKeys` from #/lib/query-keys.',
+        },
       ],
     },
   },

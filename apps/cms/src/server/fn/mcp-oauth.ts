@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .select() are checked defensively */
 import { createServerFn } from '@tanstack/react-start'
 import { eq } from 'drizzle-orm'
 import { z } from '#/lib/zod'
@@ -120,11 +119,13 @@ export const revokeMcpConnectionFn = createServerFn({
   .validator(z.object({ id: z.string().min(1).max(ID_MAX_LENGTH) }))
   .handler(async ({ data }) => {
     await requireUser()
-    const [connection] = await db
-      .select({ siteId: mcpConnection.siteId })
-      .from(mcpConnection)
-      .where(eq(mcpConnection.id, data.id))
-      .limit(1)
+    const connection = (
+      await db
+        .select({ siteId: mcpConnection.siteId })
+        .from(mcpConnection)
+        .where(eq(mcpConnection.id, data.id))
+        .limit(1)
+    ).at(0)
     // Agency connections have no site; they are revoked from the Agency page.
     if (!connection?.siteId)
       throw new NotFoundError(m.server_mcp_connection_not_found())

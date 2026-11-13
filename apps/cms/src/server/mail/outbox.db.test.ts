@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import type * as MailConfig from '#/server/mail/config'
 import type * as MailTransport from '#/server/mail/transport'
 
@@ -81,11 +80,9 @@ beforeEach(() => {
 })
 
 async function rowOf(id: string) {
-  const [row] = await db
-    .select()
-    .from(emailOutbox)
-    .where(eq(emailOutbox.id, id))
-    .limit(1)
+  const row = (
+    await db.select().from(emailOutbox).where(eq(emailOutbox.id, id)).limit(1)
+  ).at(0)
   if (!row) throw new Error(`outbox row ${id} missing`)
   return row
 }
@@ -390,15 +387,17 @@ describe.skipIf(!hasDb)('email outbox', () => {
   })
 
   it('records a test send with its final status and never retries it', async () => {
-    const [sender] = await db
-      .insert(user)
-      .values({
-        id: crypto.randomUUID(),
-        name: 'Mail admin',
-        email: `mail-admin-${crypto.randomUUID()}@test.local`,
-        emailVerified: true,
-      })
-      .returning()
+    const sender = (
+      await db
+        .insert(user)
+        .values({
+          id: crypto.randomUUID(),
+          name: 'Mail admin',
+          email: `mail-admin-${crypto.randomUUID()}@test.local`,
+          emailVerified: true,
+        })
+        .returning()
+    ).at(0)
     if (!sender) throw new Error('fixture failed')
     const to = `test-${crypto.randomUUID()}@areca.local`
     try {

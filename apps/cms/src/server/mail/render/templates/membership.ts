@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import { eq } from 'drizzle-orm'
 
 import { db } from '#/db'
@@ -49,11 +48,13 @@ export async function renderRoleChanged(
 ): Promise<RenderedMail> {
   const { locale, brand } = ctx
   await loadRecipient(params.userId, ctx.connection)
-  const [org] = await (ctx.connection ?? db)
-    .select({ name: organization.name })
-    .from(organization)
-    .where(eq(organization.id, String(params.organizationId ?? '')))
-    .limit(1)
+  const org = (
+    await (ctx.connection ?? db)
+      .select({ name: organization.name })
+      .from(organization)
+      .where(eq(organization.id, String(params.organizationId ?? '')))
+      .limit(1)
+  ).at(0)
   if (!org) throw new MailRenderError('the organization no longer exists')
   const role = roleLabel(String(params.role ?? ''), locale)
   const previousRole = roleLabel(String(params.previousRole ?? ''), locale)

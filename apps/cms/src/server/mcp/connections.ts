@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 
 import { Pool } from 'pg'
@@ -120,24 +119,26 @@ export async function saveConnectionApproval(
           ),
         )
     }
-    const [saved] = await tx
-      .insert(mcpConnection)
-      .values({
-        id,
-        userId: input.userId,
-        scope,
-        siteId: input.siteId,
-        clientId: input.clientId,
-        clientName,
-        allowGoLive: input.allowGoLive,
-        createdAt: now,
-      })
-      .onConflictDoUpdate({
-        target: mcpConnection.id,
-        set: { clientName, allowGoLive: input.allowGoLive },
-        setWhere: isNull(mcpConnection.revokedAt),
-      })
-      .returning()
+    const saved = (
+      await tx
+        .insert(mcpConnection)
+        .values({
+          id,
+          userId: input.userId,
+          scope,
+          siteId: input.siteId,
+          clientId: input.clientId,
+          clientName,
+          allowGoLive: input.allowGoLive,
+          createdAt: now,
+        })
+        .onConflictDoUpdate({
+          target: mcpConnection.id,
+          set: { clientName, allowGoLive: input.allowGoLive },
+          setWhere: isNull(mcpConnection.revokedAt),
+        })
+        .returning()
+    ).at(0)
     if (!saved) throw new Error('Connection was disconnected during approval')
     await audit(
       {
@@ -209,16 +210,18 @@ export async function revokeConnection(input: {
   canRevokeOthers: boolean
   now?: Date
 }): Promise<void> {
-  const [row] = await db
-    .select()
-    .from(mcpConnection)
-    .where(
-      and(
-        eq(mcpConnection.id, input.id),
-        eq(mcpConnection.siteId, input.siteId),
-      ),
-    )
-    .limit(1)
+  const row = (
+    await db
+      .select()
+      .from(mcpConnection)
+      .where(
+        and(
+          eq(mcpConnection.id, input.id),
+          eq(mcpConnection.siteId, input.siteId),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   if (!row || (row.userId !== input.actorId && !input.canRevokeOthers)) {
     throw new NotFoundError(m.server_mcp_connection_not_found())
   }
@@ -238,17 +241,19 @@ export async function revokeAgencyConnection(input: {
   actorId: string
   now?: Date
 }): Promise<void> {
-  const [row] = await db
-    .select()
-    .from(mcpConnection)
-    .where(
-      and(
-        eq(mcpConnection.id, input.id),
-        eq(mcpConnection.scope, 'agency'),
-        eq(mcpConnection.userId, input.actorId),
-      ),
-    )
-    .limit(1)
+  const row = (
+    await db
+      .select()
+      .from(mcpConnection)
+      .where(
+        and(
+          eq(mcpConnection.id, input.id),
+          eq(mcpConnection.scope, 'agency'),
+          eq(mcpConnection.userId, input.actorId),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   if (!row) throw new NotFoundError(m.server_mcp_connection_not_found())
   await revokeRow(row, {
     actorId: input.actorId,
@@ -265,13 +270,15 @@ async function revokeRow(
   await withConnectionLock(row, async () => {
     const now = input.now ?? new Date()
     await db.transaction(async (tx) => {
-      const [revoked] = await tx
-        .update(mcpConnection)
-        .set({ revokedAt: now })
-        .where(
-          and(eq(mcpConnection.id, row.id), isNull(mcpConnection.revokedAt)),
-        )
-        .returning()
+      const revoked = (
+        await tx
+          .update(mcpConnection)
+          .set({ revokedAt: now })
+          .where(
+            and(eq(mcpConnection.id, row.id), isNull(mcpConnection.revokedAt)),
+          )
+          .returning()
+      ).at(0)
       if (!revoked) return
       // Include legacy site references so deployment also invalidates pre-upgrade tokens.
       const refs = connectionRefs(row)
@@ -428,22 +435,26 @@ export async function revokeReplayedGrant(row: McpConnectionRow) {
   await withConnectionLock(row, async () => {
     await db.transaction(async (tx) => {
       const now = new Date()
-      const [revoked] = await tx
-        .update(mcpConnection)
-        .set({ revokedAt: now })
-        .where(
-          and(eq(mcpConnection.id, row.id), isNull(mcpConnection.revokedAt)),
-        )
-        .returning()
+      const revoked = (
+        await tx
+          .update(mcpConnection)
+          .set({ revokedAt: now })
+          .where(
+            and(eq(mcpConnection.id, row.id), isNull(mcpConnection.revokedAt)),
+          )
+          .returning()
+      ).at(0)
       await revokeGenerationTokens(tx, row, [row.id], now)
       await tx.delete(oauthConsent).where(eq(oauthConsent.referenceId, row.id))
       // An agency connection has no site to audit against.
-      const [target] = row.siteId
-        ? await tx
-            .select({ organizationId: site.organizationId })
-            .from(site)
-            .where(eq(site.id, row.siteId))
-        : []
+      const target = (
+        row.siteId
+          ? await tx
+              .select({ organizationId: site.organizationId })
+              .from(site)
+              .where(eq(site.id, row.siteId))
+          : []
+      ).at(0)
       if (revoked && target)
         await audit(
           {
@@ -476,18 +487,20 @@ export async function findUsableConnection(input: {
   now?: Date
 }): Promise<McpConnectionRow | null> {
   const now = input.now ?? new Date()
-  const [row] = await db
-    .select()
-    .from(mcpConnection)
-    .where(
-      and(
-        eq(mcpConnection.userId, input.userId),
-        eq(mcpConnection.siteId, input.siteId),
-        eq(mcpConnection.clientId, input.clientId),
-        isNull(mcpConnection.revokedAt),
-      ),
-    )
-    .limit(1)
+  const row = (
+    await db
+      .select()
+      .from(mcpConnection)
+      .where(
+        and(
+          eq(mcpConnection.userId, input.userId),
+          eq(mcpConnection.siteId, input.siteId),
+          eq(mcpConnection.clientId, input.clientId),
+          isNull(mcpConnection.revokedAt),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   if (!row || !isConnectionUsable(row, now)) return null
   return row
 }
@@ -502,18 +515,20 @@ export async function findUsableAgencyConnection(input: {
   now?: Date
 }): Promise<McpConnectionRow | null> {
   const now = input.now ?? new Date()
-  const [row] = await db
-    .select()
-    .from(mcpConnection)
-    .where(
-      and(
-        eq(mcpConnection.userId, input.userId),
-        eq(mcpConnection.scope, 'agency'),
-        eq(mcpConnection.clientId, input.clientId),
-        isNull(mcpConnection.revokedAt),
-      ),
-    )
-    .limit(1)
+  const row = (
+    await db
+      .select()
+      .from(mcpConnection)
+      .where(
+        and(
+          eq(mcpConnection.userId, input.userId),
+          eq(mcpConnection.scope, 'agency'),
+          eq(mcpConnection.clientId, input.clientId),
+          isNull(mcpConnection.revokedAt),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   if (!row || !isConnectionUsable(row, now)) return null
   return row
 }

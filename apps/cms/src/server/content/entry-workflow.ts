@@ -15,6 +15,7 @@ import { isDevSite } from '#/server/security/site-visibility'
 import { archiveDeletedContent } from './deletion-archive'
 import {
   CLEARED_SCHEDULE,
+  archivedColumns,
   assertContentOwnership,
   entryTransaction,
   recordEntryChange,
@@ -134,11 +135,7 @@ export async function archiveEntry(id: string, actorId: string) {
   assertCollectionEntry(ctx.collection)
   const now = new Date()
   return entryTransaction(ctx.site.id, async (tx) => {
-    const updated = await updateEntryRow(tx, id, {
-      status: 'archived',
-      updatedBy: actorId,
-      updatedAt: now,
-    })
+    const updated = await updateEntryRow(tx, id, archivedColumns(actorId, now))
     await recordEntryChange(tx, ctx.site, {
       entryId: id,
       actorId,

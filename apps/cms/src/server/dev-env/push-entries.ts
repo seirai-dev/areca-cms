@@ -15,6 +15,7 @@ import { entryTitle } from '#/lib/content/utils'
 import { carryFieldValues } from '#/lib/field-content'
 import { stableStringify } from '#/lib/stable-json'
 import type { EntryData } from '#/lib/types'
+import { archivedColumns } from '#/server/content/entry-commit'
 import { ConflictError, ValidationError } from '#/server/content/errors'
 import type { SiteCore } from '#/server/content/site-core'
 
@@ -358,10 +359,8 @@ export async function pushEntriesPassTwo(
       await tx
         .update(entry)
         .set({
-          status: 'archived',
           contentVersion: sql`${entry.contentVersion} + 1`,
-          updatedBy: actor.id,
-          updatedAt: now,
+          ...archivedColumns(actor.id, now),
         })
         .where(eq(entry.id, row.id))
       state.written.set(item.id, row.id)

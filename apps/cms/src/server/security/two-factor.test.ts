@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { createHmac } from 'node:crypto'
 
 import { eq } from 'drizzle-orm'
@@ -94,7 +93,9 @@ describe.skipIf(!hasDb)('two-factor (Better Auth)', () => {
     expect(enabled.backupCodes.length).toBeGreaterThan(0)
 
     // Not enabled until the first code is confirmed.
-    const [pending] = await db.select().from(user).where(eq(user.id, userId))
+    const pending = (
+      await db.select().from(user).where(eq(user.id, userId))
+    ).at(0)
     expect(pending?.twoFactorEnabled).toBe(false)
 
     const secret = new URL(enabled.totpURI).searchParams.get('secret') ?? ''
@@ -115,7 +116,9 @@ describe.skipIf(!hasDb)('two-factor (Better Auth)', () => {
       }),
     ).toBeInstanceOf(Date)
 
-    const [enrolled] = await db.select().from(user).where(eq(user.id, userId))
+    const enrolled = (
+      await db.select().from(user).where(eq(user.id, userId))
+    ).at(0)
     expect(enrolled?.twoFactorEnabled).toBe(true)
     const rows = await db
       .select()
@@ -136,10 +139,9 @@ describe.skipIf(!hasDb)('two-factor (Better Auth)', () => {
       body: { code: totp(secret) },
       headers: cookieHeader(challenged.headers),
     })
-    const [signedInSession] = await db
-      .select()
-      .from(session)
-      .where(eq(session.token, passed.token))
+    const signedInSession = (
+      await db.select().from(session).where(eq(session.token, passed.token))
+    ).at(0)
     if (!signedInSession) throw new Error('expected the signed-in session')
     const principal = {
       session: signedInSession,
@@ -205,15 +207,17 @@ describe.skipIf(!hasDb)('two-factor without a password', () => {
 /** A session row as a social or SSO sign-in leaves it: no code entered. */
 async function providerSession(userId: string) {
   const token = crypto.randomUUID()
-  const [row] = await db
-    .insert(session)
-    .values({
-      id: crypto.randomUUID(),
-      userId,
-      token,
-      expiresAt: new Date(Date.now() + 60 * 60_000),
-    })
-    .returning()
+  const row = (
+    await db
+      .insert(session)
+      .values({
+        id: crypto.randomUUID(),
+        userId,
+        token,
+        expiresAt: new Date(Date.now() + 60 * 60_000),
+      })
+      .returning()
+  ).at(0)
   if (!row) throw new Error('session insert failed')
   return row
 }

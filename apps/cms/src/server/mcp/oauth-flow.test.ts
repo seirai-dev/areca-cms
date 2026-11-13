@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups are checked defensively */
 import { createHash, createHmac, randomBytes } from 'node:crypto'
 
 import {
@@ -691,16 +690,18 @@ describe.skipIf(!hasDb)(
           .where(eq(oauthResource.identifier, mcpResourceUrl(ctx.site.slug)))
         expect(resource).toBeDefined()
 
-        const [connection] = await db
-          .select()
-          .from(mcpConnection)
-          .where(
-            and(
-              eq(mcpConnection.userId, ownerId),
-              eq(mcpConnection.siteId, ctx.site.id),
-              eq(mcpConnection.clientId, clientId),
-            ),
-          )
+        const connection = (
+          await db
+            .select()
+            .from(mcpConnection)
+            .where(
+              and(
+                eq(mcpConnection.userId, ownerId),
+                eq(mcpConnection.siteId, ctx.site.id),
+                eq(mcpConnection.clientId, clientId),
+              ),
+            )
+        ).at(0)
         expect(connection?.allowGoLive).toBe(true)
         expect(connection?.revokedAt).toBeNull()
         ownerConnectionId = connection?.id ?? ''
@@ -890,27 +891,31 @@ describe.skipIf(!hasDb)(
         expect(refused.status).toBe(400)
         expect(refused.json.error).toBe('invalid_grant')
 
-        const [revokedAccess] = await db
-          .select({ revoked: oauthAccessToken.revoked })
-          .from(oauthAccessToken)
-          .where(
-            and(
-              eq(oauthAccessToken.clientId, clientId),
-              eq(oauthAccessToken.userId, ownerId),
-            ),
-          )
-          .limit(1)
+        const revokedAccess = (
+          await db
+            .select({ revoked: oauthAccessToken.revoked })
+            .from(oauthAccessToken)
+            .where(
+              and(
+                eq(oauthAccessToken.clientId, clientId),
+                eq(oauthAccessToken.userId, ownerId),
+              ),
+            )
+            .limit(1)
+        ).at(0)
         expect(revokedAccess?.revoked).not.toBeNull()
-        const [revokedRefresh] = await db
-          .select({ revoked: oauthRefreshToken.revoked })
-          .from(oauthRefreshToken)
-          .where(
-            and(
-              eq(oauthRefreshToken.clientId, clientId),
-              eq(oauthRefreshToken.userId, ownerId),
-            ),
-          )
-          .limit(1)
+        const revokedRefresh = (
+          await db
+            .select({ revoked: oauthRefreshToken.revoked })
+            .from(oauthRefreshToken)
+            .where(
+              and(
+                eq(oauthRefreshToken.clientId, clientId),
+                eq(oauthRefreshToken.userId, ownerId),
+              ),
+            )
+            .limit(1)
+        ).at(0)
         expect(revokedRefresh?.revoked).not.toBeNull()
         const remainingConsent = await db
           .select()

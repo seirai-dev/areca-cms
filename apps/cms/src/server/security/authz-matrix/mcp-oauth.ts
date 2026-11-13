@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 import type * as mcpOauthFns from '#/server/fn/mcp-oauth'
 import { and, eq, isNull } from 'drizzle-orm'
 import { db } from '#/db'
@@ -60,15 +59,17 @@ export const mcpOauthRows = {
         redirectUris: ['http://localhost:9999/callback'],
         name: 'Authz app',
       })
-      const [connection] = await db
-        .insert(mcpConnection)
-        .values({
-          userId: w.users.ownerX.id,
-          siteId: w.X.site.id,
-          clientId,
-          clientName: 'Authz app',
-        })
-        .returning()
+      const connection = (
+        await db
+          .insert(mcpConnection)
+          .values({
+            userId: w.users.ownerX.id,
+            siteId: w.X.site.id,
+            clientId,
+            clientName: 'Authz app',
+          })
+          .returning()
+      ).at(0)
       if (!connection) throw new Error('mcp connection insert failed')
       return {
         data: { id: connection.id },
@@ -108,16 +109,18 @@ export const mcpOauthRows = {
         redirectUris: ['http://localhost:9999/callback'],
         name: 'Authz agency app',
       })
-      const [connection] = await db
-        .insert(mcpConnection)
-        .values({
-          userId: w.users.adminMfa.id,
-          scope: 'agency',
-          siteId: null,
-          clientId,
-          clientName: 'Authz agency app',
-        })
-        .returning()
+      const connection = (
+        await db
+          .insert(mcpConnection)
+          .values({
+            userId: w.users.adminMfa.id,
+            scope: 'agency',
+            siteId: null,
+            clientId,
+            clientName: 'Authz agency app',
+          })
+          .returning()
+      ).at(0)
       if (!connection) throw new Error('agency mcp connection insert failed')
       return {
         data: { id: connection.id },

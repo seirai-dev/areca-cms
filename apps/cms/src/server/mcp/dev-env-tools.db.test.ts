@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- outcome fields are read loosely in assertions */
 import { eq, inArray } from 'drizzle-orm'
 import {
   Client,
@@ -214,10 +213,12 @@ describe.skipIf(!hasDb)('development environment tools over MCP', () => {
   })
 
   afterAll(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unset when beforeAll failed
     if (prod) {
       await db.delete(site).where(eq(site.id, prod.site.id))
       await cleanupTestSite(prod)
     }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unset when beforeAll failed
     if (other) await cleanupTestSite(other)
     await db
       .delete(user)
@@ -403,7 +404,7 @@ describe.skipIf(!hasDb)('development environment tools over MCP', () => {
       ]),
     )
 
-    const [pushed] = await entriesWithSlug(prod.site.id, 'spring-menu')
+    const pushed = (await entriesWithSlug(prod.site.id, 'spring-menu')).at(0)
     expect(pushed).toBeDefined()
     expect(pushed?.status).toBe('draft')
     expect(pushed?.draftData).toMatchObject({ title: 'Spring menu' })
@@ -444,7 +445,7 @@ describe.skipIf(!hasDb)('development environment tools over MCP', () => {
     expect(missing?.ok).toBe(false)
     expect(missing?.error).toContain('No entry with id')
 
-    const [rowA] = await db.select().from(entry).where(eq(entry.id, a.id))
+    const rowA = (await db.select().from(entry).where(eq(entry.id, a.id))).at(0)
     expect(rowA?.publishedData).not.toBeNull()
 
     const single = await createEntry({
@@ -481,10 +482,9 @@ describe.skipIf(!hasDb)('development environment tools over MCP', () => {
     expect(copied.data?.created).toBe(true)
     const productionId = String(copied.data?.productionId)
 
-    const [row] = await db
-      .select()
-      .from(entry)
-      .where(eq(entry.id, productionId))
+    const row = (
+      await db.select().from(entry).where(eq(entry.id, productionId))
+    ).at(0)
     expect(row?.siteId).toBe(prod.site.id)
     expect(row?.draftData).toMatchObject({ title: 'Copy me' })
     expect(row?.publishedData).toBeNull()
@@ -531,10 +531,12 @@ describe.skipIf(!hasDb)('development environment tools over MCP', () => {
     })
     expect(copied.isError).toBe(false)
     expect(copied.data?.warnings).toEqual([])
-    const [row] = await db
-      .select()
-      .from(entry)
-      .where(eq(entry.id, String(copied.data?.productionId)))
+    const row = (
+      await db
+        .select()
+        .from(entry)
+        .where(eq(entry.id, String(copied.data?.productionId)))
+    ).at(0)
     expect(row?.status).toBe('published')
     expect(row?.publishedData).toMatchObject({ title: 'Copy ready' })
   })

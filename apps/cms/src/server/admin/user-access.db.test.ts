@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .select() are checked defensively */
 import { and, eq } from 'drizzle-orm'
 import { hashPassword } from 'better-auth/crypto'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -51,15 +50,17 @@ async function client(label: string) {
 }
 
 async function roleIn(userId: string, organizationId: string) {
-  const [row] = await db
-    .select({ role: membership.role })
-    .from(membership)
-    .where(
-      and(
-        eq(membership.userId, userId),
-        eq(membership.organizationId, organizationId),
-      ),
-    )
+  const row = (
+    await db
+      .select({ role: membership.role })
+      .from(membership)
+      .where(
+        and(
+          eq(membership.userId, userId),
+          eq(membership.organizationId, organizationId),
+        ),
+      )
+  ).at(0)
   return row?.role ?? null
 }
 

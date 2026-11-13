@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { eq, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
@@ -48,11 +47,9 @@ export async function listOrganizations() {
 }
 
 export async function getOrganization(id: string) {
-  const [row] = await db
-    .select()
-    .from(organization)
-    .where(eq(organization.id, id))
-    .limit(1)
+  const row = (
+    await db.select().from(organization).where(eq(organization.id, id)).limit(1)
+  ).at(0)
   return row ?? null
 }
 
@@ -61,20 +58,24 @@ export async function createOrganization(input: {
   slug: string
   actorId: string
 }) {
-  const [existing] = await db
-    .select({ id: organization.id })
-    .from(organization)
-    .where(eq(organization.slug, input.slug))
-    .limit(1)
+  const existing = (
+    await db
+      .select({ id: organization.id })
+      .from(organization)
+      .where(eq(organization.slug, input.slug))
+      .limit(1)
+  ).at(0)
   if (existing) {
     throw new ConflictError(m.server_slug_already_exists())
   }
 
   return db.transaction(async (tx) => {
-    const [created] = await tx
-      .insert(organization)
-      .values({ name: input.name, slug: input.slug })
-      .returning()
+    const created = (
+      await tx
+        .insert(organization)
+        .values({ name: input.name, slug: input.slug })
+        .returning()
+    ).at(0)
     if (!created) {
       throw new Error(m.server_failed_to_create_organization())
     }
@@ -106,11 +107,13 @@ export async function updateOrganization(
   }
 
   return db.transaction(async (tx) => {
-    const [updated] = await tx
-      .update(organization)
-      .set({ name: input.name, updatedAt: new Date() })
-      .where(eq(organization.id, id))
-      .returning()
+    const updated = (
+      await tx
+        .update(organization)
+        .set({ name: input.name, updatedAt: new Date() })
+        .where(eq(organization.id, id))
+        .returning()
+    ).at(0)
     if (!updated) {
       throw new NotFoundError(m.server_organization_not_found())
     }
@@ -134,11 +137,13 @@ export async function updateOrganization(
 export async function deleteOrganization(id: string, actorId: string) {
   await db.transaction(async (tx) => {
     const existing = await lockOrganizationForMutation(tx, id)
-    const [siteRow] = await tx
-      .select({ id: site.id })
-      .from(site)
-      .where(eq(site.organizationId, id))
-      .limit(1)
+    const siteRow = (
+      await tx
+        .select({ id: site.id })
+        .from(site)
+        .where(eq(site.organizationId, id))
+        .limit(1)
+    ).at(0)
     if (siteRow)
       throw new ConflictError(m.server_cannot_delete_org_with_sites())
     await assetExclusiveLock(tx, id)

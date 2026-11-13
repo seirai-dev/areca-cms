@@ -141,7 +141,11 @@ export const queryKeys = {
   cloudflareDeployTargets: (organizationId: string) =>
     ['cloudflare-credentials', organizationId, 'deploy-targets'] as const,
   devEnvironment: (siteId: string) => ['dev-environment', siteId] as const,
+  /** Prefix of every dev site's push plan. */
+  allPushPlans: () => ['push-plan'] as const,
   pushPlan: (devSiteId: string) => ['push-plan', devSiteId] as const,
+  /** Prefix of every dev site's sync banner. */
+  allDevSyncs: () => ['dev-sync'] as const,
   devSync: (devSiteId: string) => ['dev-sync', devSiteId] as const,
 
   // People

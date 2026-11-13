@@ -31,6 +31,11 @@ export const CLEARED_SCHEDULE = {
   scheduledBy: null,
 } as const
 
+/** The columns an archive writes, next to the content version bump. */
+export function archivedColumns(actorId: string, now: Date) {
+  return { status: 'archived', updatedBy: actorId, updatedAt: now } as const
+}
+
 /**
  * Runs `write` in a transaction whose first statement is the site's link-index
  * lock, so two writes of one site cannot deadlock on the index rows.

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 import { randomBytes } from 'node:crypto'
 import { and, count, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 
@@ -104,11 +103,13 @@ async function userNameOf(
   userId: string,
   connection: Pick<typeof db, 'select'> = db,
 ) {
-  const [found] = await connection
-    .select({ name: user.name })
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1)
+  const found = (
+    await connection
+      .select({ name: user.name })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1)
+  ).at(0)
   return found?.name ?? null
 }
 
@@ -152,19 +153,21 @@ async function lockKeySlot(tx: Tx, userId: string, slot: string) {
  */
 async function insertKey(tx: Tx, spec: NewKey) {
   const siteKey = spec.scope === 'site' ? spec : null
-  const [active] = await tx
-    .select({ value: count() })
-    .from(mcpKey)
-    .where(
-      and(
-        eq(mcpKey.userId, spec.userId),
-        siteKey
-          ? eq(mcpKey.siteId, siteKey.siteId)
-          : eq(mcpKey.scope, 'agency'),
-        isNull(mcpKey.revokedAt),
-        or(isNull(mcpKey.expiresAt), gt(mcpKey.expiresAt, spec.now)),
-      ),
-    )
+  const active = (
+    await tx
+      .select({ value: count() })
+      .from(mcpKey)
+      .where(
+        and(
+          eq(mcpKey.userId, spec.userId),
+          siteKey
+            ? eq(mcpKey.siteId, siteKey.siteId)
+            : eq(mcpKey.scope, 'agency'),
+          isNull(mcpKey.revokedAt),
+          or(isNull(mcpKey.expiresAt), gt(mcpKey.expiresAt, spec.now)),
+        ),
+      )
+  ).at(0)
   if (Number(active?.value ?? 0) >= MAX_ACTIVE_KEYS_PER_USER_PER_SITE) {
     throw new ConflictError(m.server_mcp_key_limit_reached())
   }
@@ -175,20 +178,22 @@ async function insertKey(tx: Tx, spec: NewKey) {
       : new Date(spec.now.getTime() + spec.expiresInDays * DAY_MS)
   const allowGoLive = siteKey?.allowGoLive ?? false
   const generated = generateMcpKey()
-  const [row] = await tx
-    .insert(mcpKey)
-    .values({
-      userId: spec.userId,
-      scope: spec.scope,
-      siteId: siteKey?.siteId ?? null,
-      name: spec.name,
-      tokenPrefix: generated.tokenPrefix,
-      tokenHash: generated.tokenHash,
-      allowGoLive,
-      expiresAt,
-      createdAt: spec.now,
-    })
-    .returning()
+  const row = (
+    await tx
+      .insert(mcpKey)
+      .values({
+        userId: spec.userId,
+        scope: spec.scope,
+        siteId: siteKey?.siteId ?? null,
+        name: spec.name,
+        tokenPrefix: generated.tokenPrefix,
+        tokenHash: generated.tokenHash,
+        allowGoLive,
+        expiresAt,
+        createdAt: spec.now,
+      })
+      .returning()
+  ).at(0)
   if (!row) throw new Error('Failed to create MCP key')
 
   await audit(
@@ -301,11 +306,13 @@ export async function revokeMcpKey(input: {
   organizationId: string
   canRevokeOthers: boolean
 }): Promise<void> {
-  const [row] = await db
-    .select()
-    .from(mcpKey)
-    .where(and(eq(mcpKey.id, input.id), eq(mcpKey.siteId, input.siteId)))
-    .limit(1)
+  const row = (
+    await db
+      .select()
+      .from(mcpKey)
+      .where(and(eq(mcpKey.id, input.id), eq(mcpKey.siteId, input.siteId)))
+      .limit(1)
+  ).at(0)
   if (!row) throw new NotFoundError(m.server_mcp_key_not_found())
   if (row.userId !== input.actorId && !input.canRevokeOthers) {
     throw new NotFoundError(m.server_mcp_key_not_found())
@@ -373,13 +380,15 @@ export async function resolveMcpActorResult(
   const invalid = { ok: false as const, reason: 'invalid' as const }
   if (!token.startsWith(MCP_KEY_PREFIX)) return invalid
 
-  const [found] = await db
-    .select({ key: mcpKey, owner: user, target: site })
-    .from(mcpKey)
-    .innerJoin(user, eq(user.id, mcpKey.userId))
-    .innerJoin(site, eq(site.id, mcpKey.siteId))
-    .where(eq(mcpKey.tokenHash, hashMcpKey(token)))
-    .limit(1)
+  const found = (
+    await db
+      .select({ key: mcpKey, owner: user, target: site })
+      .from(mcpKey)
+      .innerJoin(user, eq(user.id, mcpKey.userId))
+      .innerJoin(site, eq(site.id, mcpKey.siteId))
+      .where(eq(mcpKey.tokenHash, hashMcpKey(token)))
+      .limit(1)
+  ).at(0)
   if (!found) return invalid
 
   const { key, owner, target } = found
@@ -501,17 +510,19 @@ export async function createAgencyMcpKey(input: {
 
   return db.transaction(async (tx) => {
     await lockKeySlot(tx, input.userId, 'agency')
-    const [owner] = await tx
-      .select({
-        id: user.id,
-        name: user.name,
-        isAgencyAdmin: user.isAgencyAdmin,
-        twoFactorEnabled: user.twoFactorEnabled,
-        blockedAt: user.blockedAt,
-      })
-      .from(user)
-      .where(eq(user.id, input.userId))
-      .limit(1)
+    const owner = (
+      await tx
+        .select({
+          id: user.id,
+          name: user.name,
+          isAgencyAdmin: user.isAgencyAdmin,
+          twoFactorEnabled: user.twoFactorEnabled,
+          blockedAt: user.blockedAt,
+        })
+        .from(user)
+        .where(eq(user.id, input.userId))
+        .limit(1)
+    ).at(0)
     if (!owner) throw new NotFoundError(m.server_user_not_found())
     const status = agencyAdminStatus(owner)
     if (status !== 'active') {
@@ -554,17 +565,19 @@ export async function revokeAgencyMcpKey(input: {
   userId: string
   now?: Date
 }): Promise<void> {
-  const [row] = await db
-    .select()
-    .from(mcpKey)
-    .where(
-      and(
-        eq(mcpKey.id, input.id),
-        eq(mcpKey.scope, 'agency'),
-        eq(mcpKey.userId, input.userId),
-      ),
-    )
-    .limit(1)
+  const row = (
+    await db
+      .select()
+      .from(mcpKey)
+      .where(
+        and(
+          eq(mcpKey.id, input.id),
+          eq(mcpKey.scope, 'agency'),
+          eq(mcpKey.userId, input.userId),
+        ),
+      )
+      .limit(1)
+  ).at(0)
   if (!row) throw new NotFoundError(m.server_mcp_key_not_found())
   if (row.revokedAt) return
 
@@ -632,12 +645,14 @@ export async function resolveAgencyPrincipal(
   const invalid = { ok: false as const, reason: 'invalid' as const }
   if (!token.startsWith(MCP_KEY_PREFIX)) return invalid
 
-  const [found] = await db
-    .select({ key: mcpKey, owner: user })
-    .from(mcpKey)
-    .innerJoin(user, eq(user.id, mcpKey.userId))
-    .where(eq(mcpKey.tokenHash, hashMcpKey(token)))
-    .limit(1)
+  const found = (
+    await db
+      .select({ key: mcpKey, owner: user })
+      .from(mcpKey)
+      .innerJoin(user, eq(user.id, mcpKey.userId))
+      .where(eq(mcpKey.tokenHash, hashMcpKey(token)))
+      .limit(1)
+  ).at(0)
   if (!found) return invalid
 
   const { key, owner } = found

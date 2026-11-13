@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { sql } from 'drizzle-orm'
 
 import { db } from '#/db'
@@ -54,7 +53,9 @@ export async function completeSetup(input: {
   const result = await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(${SETUP_LOCK_KEY})`)
 
-    const [existing] = await tx.select({ id: user.id }).from(user).limit(1)
+    const existing = (await tx.select({ id: user.id }).from(user).limit(1)).at(
+      0,
+    )
     if (existing) {
       throw new ConflictError(m.server_setup_already_completed())
     }
@@ -64,23 +65,25 @@ export async function completeSetup(input: {
     const authContext = await auth.$context
     const id = crypto.randomUUID()
     const password = await authContext.password.hash(input.password)
-    const [updated] = await tx
-      .insert(user)
-      .values({
-        id,
-        name: input.name.trim(),
-        email: input.email.trim().toLowerCase(),
-        emailVerified: false,
-        isAgencyAdmin: true,
-        // Stored now so the verification email goes out in this language.
-        locale: mailLocale(input.locale ?? getLocale()),
-      })
-      .returning({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        isAgencyAdmin: user.isAgencyAdmin,
-      })
+    const updated = (
+      await tx
+        .insert(user)
+        .values({
+          id,
+          name: input.name.trim(),
+          email: input.email.trim().toLowerCase(),
+          emailVerified: false,
+          isAgencyAdmin: true,
+          // Stored now so the verification email goes out in this language.
+          locale: mailLocale(input.locale ?? getLocale()),
+        })
+        .returning({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          isAgencyAdmin: user.isAgencyAdmin,
+        })
+    ).at(0)
     if (!updated) throw new Error(m.server_failed_to_create_user())
     await tx.insert(account).values({
       id: crypto.randomUUID(),
