@@ -12,7 +12,6 @@ export function useAccountSessions() {
   return useQuery({
     queryKey: SESSIONS_QUERY_KEY,
     queryFn: () => listMySessionsFn(),
-    staleTime: 0,
     retry: false,
   })
 }

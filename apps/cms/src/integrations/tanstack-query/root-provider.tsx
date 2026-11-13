@@ -2,15 +2,11 @@ import { QueryClient } from '@tanstack/react-query'
 
 import type { Me } from '#/server/fn/me'
 
-/** How long a query result counts as fresh: no refetch on mount or focus. */
-export const QUERY_STALE_MS = 30_000
-
 export function getContext() {
-  // Data that must be current on every mount (the open entry, live build
-  // state) sets `staleTime: 0` itself; mutations invalidate the rest.
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { staleTime: QUERY_STALE_MS } },
-  })
+  // Results stay stale by default, so opening a screen always shows current
+  // data. Queries that are heavy and kept fresh by invalidation opt out of
+  // the window-focus refetch instead (`refetchOnWindowFocus: false`).
+  const queryClient = new QueryClient()
 
   return {
     queryClient,
