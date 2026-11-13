@@ -32,6 +32,7 @@ import { audit } from '#/server/audit'
 import { createLogger } from '#/server/log'
 import {
   recordLocalMfaForToken,
+  owesLocalMfa,
   requireAdminLocalMfa,
   requireLocalMfa,
 } from '#/server/security/local-mfa'
@@ -449,11 +450,25 @@ const authBase = betterAuth({
       // the row when the authorization request names one, so the plugin accepts it.
       if (ctx.path === '/oauth2/authorize') {
         const session = await getSessionFromCtx(ctx)
-        if (session) await assertAuthLocalMfa(session)
+        // A session that still owes a code is sent to the consent screen by
+        // `postLogin.shouldRedirect` below, where the code dialog runs. This
+        // refuses what a code cannot fix: an admin who has not enrolled.
+        if (session && !(await owesLocalMfa(session)))
+          await assertAuthLocalMfa(session, requireLocalMfa)
         assertSingleMcpResource(ctx.query?.resource, true)
         for (const resource of resourceParams(ctx.query?.resource)) {
           await ensureMcpResource(resource)
         }
+      }
+      // The consent screen asks for the code before it accepts. A direct call
+      // to the plugin's endpoint must not skip that.
+      if (
+        ctx.path === '/oauth2/consent' &&
+        isRecord(ctx.body) &&
+        ctx.body.accept === true
+      ) {
+        const session = await getSessionFromCtx(ctx)
+        if (session) await assertAuthLocalMfa(session, requireLocalMfa)
       }
       if (ctx.path === '/oauth2/token' && isRecord(ctx.body)) {
         assertSingleMcpResource(
@@ -631,9 +646,12 @@ const authBase = betterAuth({
         mcp_connection_id: referenceId,
       }),
       postLogin: {
-        // Never redirects: the plugin only needs `consentReferenceId` here.
+        // Sends a session that still owes a two-factor code (a provider
+        // sign-in) to the consent screen, whose code dialog runs before any
+        // approval. Without it, a remembered consent would issue a code at
+        // once. Otherwise the plugin only needs `consentReferenceId` here.
         page: '/oauth/consent',
-        shouldRedirect: () => false,
+        shouldRedirect: ({ user, session }) => owesLocalMfa({ user, session }),
         // Consent is remembered per (app, user, site), not per app, so an
         // approval for one site never covers another.
         consentReferenceId: async ({ user }) =>

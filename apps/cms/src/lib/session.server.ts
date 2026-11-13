@@ -71,8 +71,9 @@ export async function requireSignedIn() {
 
 /**
  * A signed-in user whose session counts. Someone with two-factor on must have
- * entered a code in this session (`requireMemberLocalMfa`). Agency admins are
- * held to their own rule by the admin and membership guards below.
+ * entered a code in this session (`requireMemberLocalMfa`). While
+ * `ADMIN_MFA_REQUIRED` is on, agency admins are held to their own rule by the
+ * admin and membership guards below.
  */
 export async function requireUser() {
   const session = await requireSignedIn()
