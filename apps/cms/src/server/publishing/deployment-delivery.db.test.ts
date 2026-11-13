@@ -15,7 +15,7 @@ import {
   reconcileDeploymentJob,
   recoverStaleJobs,
   resolveUncertainDeploymentJob,
-} from './worker'
+} from './job-run'
 import { createMockDeploymentAdapter } from './test-helpers'
 
 const target = {

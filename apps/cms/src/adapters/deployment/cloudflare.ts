@@ -7,12 +7,16 @@ import type {
 import { createHealthChecker } from './health-check'
 import type { HealthCheckOptions } from './health-check'
 import {
-  POLL_RETRY_DELAYS_MS,
-  formatRetryDelay,
-  retryTransient,
-  sleep as defaultSleep,
-} from './shared'
-import { DeploymentNotDispatchedError, DeploymentUncertainError } from './types'
+  createdSince,
+  dispatchOnce,
+  dispatchedSince,
+  logReconciled,
+  pollUntilMatch,
+  waitForDeployment,
+} from './dispatch'
+import type { DeploymentPoll } from './dispatch'
+import { retryTransient, sleep as defaultSleep } from './shared'
+import { DeploymentUncertainError } from './types'
 import type {
   CloudflarePagesDeploymentTarget,
   CloudflareWorkersDeploymentTarget,
@@ -21,8 +25,6 @@ import type {
   DeploymentTarget,
 } from './types'
 
-/** Tolerated CMS-to-Cloudflare clock skew when comparing created_on. */
-const DISPATCH_CLOCK_SKEW_MS = 5_000
 const LOG_TAIL_LINES = 100
 const DEFAULT_RECONCILE_TIMEOUT_MS = 30_000
 const DEFAULT_RECONCILE_POLL_MS = 1_000
@@ -44,7 +46,7 @@ export type CloudflareAdapterOptions = HealthCheckOptions & {
 type CloudflareTarget =
   CloudflarePagesDeploymentTarget | CloudflareWorkersDeploymentTarget
 
-type Poll = { state: 'running' | 'done' | 'error'; status: string }
+type Poll = DeploymentPoll & { status: string }
 
 /**
  * Deploys a Cloudflare Pages project (git build of a branch) or a Worker
@@ -150,25 +152,24 @@ export function createCloudflareAdapter(
     target: CloudflareTarget,
     context: DeploymentContext,
   ): Promise<{ deploymentId: string } | null> {
-    if (!context.dispatchedAt) return null
-    const since = context.dispatchedAt.getTime() - DISPATCH_CLOCK_SKEW_MS
-    const deadline =
-      now() + (options.reconciliationTimeoutMs ?? DEFAULT_RECONCILE_TIMEOUT_MS)
-    for (;;) {
-      const matches = await readWithRetry(() => matchesSince(target, since))
-      if (matches.length > 1)
-        throw new DeploymentUncertainError(
-          `Multiple upstream builds match job=${context.jobId}; manual investigation required`,
-        )
-      const only = matches[0]
-      if (only) return { deploymentId: only }
-      const wait = Math.min(
-        options.reconciliationPollMs ?? DEFAULT_RECONCILE_POLL_MS,
-        deadline - now(),
-      )
-      if (wait <= 0) return null
-      await sleep(wait)
-    }
+    const since = dispatchedSince(context)
+    if (since === null) return null
+    return pollUntilMatch({
+      timeoutMs:
+        options.reconciliationTimeoutMs ?? DEFAULT_RECONCILE_TIMEOUT_MS,
+      pollMs: options.reconciliationPollMs ?? DEFAULT_RECONCILE_POLL_MS,
+      now,
+      sleep,
+      async find() {
+        const matches = await readWithRetry(() => matchesSince(target, since))
+        if (matches.length > 1)
+          throw new DeploymentUncertainError(
+            `Multiple upstream builds match job=${context.jobId}; manual investigation required`,
+          )
+        const only = matches[0]
+        return only ? { deploymentId: only } : null
+      },
+    })
   }
 
   async function poll(
@@ -211,88 +212,50 @@ export function createCloudflareAdapter(
   return {
     async deploy(target, log, context) {
       const cf = requireCloudflare(target)
-      log(
-        `Deploying ${describeTarget(cf)} job=${context.jobId} publication=${context.publicationId} snapshot=${context.snapshotHash}`,
+      const found = await dispatchOnce(
+        {
+          describe: describeTarget(cf),
+          async prepare() {
+            await setSnapshotVariable(cf, context.publicationId)
+            log(`build variable ${SNAPSHOT_VARIABLE}=${context.publicationId}`)
+          },
+          // This POST is deliberately never retried: a lost response or a 5xx
+          // can follow queueing the build.
+          post: () => dispatch(cf),
+          notDispatched: (error) =>
+            error instanceof CloudflareApiError && error.notDispatched,
+          reconcile: () => reconcileDispatch(cf, context),
+        },
+        context,
+        log,
       )
-      try {
-        await setSnapshotVariable(cf, context.publicationId)
-      } catch (error) {
-        throw new DeploymentNotDispatchedError(
-          error instanceof Error ? error.message : String(error),
-        )
-      }
-      log(`build variable ${SNAPSHOT_VARIABLE}=${context.publicationId}`)
-      let started: string
-      try {
-        // This POST is deliberately never retried: a lost response or a 5xx
-        // can follow queueing the build.
-        started = await dispatch(cf)
-      } catch (error) {
-        if (error instanceof CloudflareApiError && error.notDispatched) {
-          throw new DeploymentNotDispatchedError(error.message)
-        }
-        log(
-          'Deploy response uncertain; reconciling the same dispatch before proceeding',
-        )
-        const found = await reconcileDispatch(cf, context)
-        if (!found)
-          throw new DeploymentUncertainError(
-            `Deployment acceptance unknown for job=${context.jobId} publication=${context.publicationId}; reconcile manually, do not redeploy`,
-          )
-        log(`upstream deployment=${found.deploymentId}`)
-        log(`dashboard ${dashboardUrl(cf, found.deploymentId, accountId)}`)
-        return found
-      }
-      log(`upstream deployment=${started}`)
-      log(`dashboard ${dashboardUrl(cf, started, accountId)}`)
-      return { deploymentId: started }
+      log(`dashboard ${dashboardUrl(cf, found.deploymentId, accountId)}`)
+      return found
     },
 
     async reconcile(target, context, log) {
       const cf = requireCloudflare(target)
       const found = await reconcileDispatch(cf, context)
-      log(
-        found
-          ? `Reconciled upstream deployment=${found.deploymentId}`
-          : `No matching dispatch job=${context.jobId}; acceptance remains unknown`,
-      )
+      logReconciled(found, context, log)
       if (found)
         log(`dashboard ${dashboardUrl(cf, found.deploymentId, accountId)}`)
       return found
     },
 
-    async waitForCompletion(target, deploymentId, { timeoutMs, pollMs }, log) {
+    waitForCompletion(target, deploymentId, { timeoutMs, pollMs }, log) {
       const cf = requireCloudflare(target)
-      const deadline = now() + timeoutMs
-      let lastStatus: string | undefined
-      while (now() < deadline) {
-        // A status poll survives about 30 seconds of transient failures, capped
-        // to this wait's deadline, before the error is thrown as before.
-        const state = await retryTransient(() => poll(cf, deploymentId), {
-          delays: POLL_RETRY_DELAYS_MS,
-          isTransient,
-          sleep,
-          now,
-          deadline,
-          onRetry: (error, delay) =>
-            log(
-              `poll failed (${failureReason(error)}); retrying in ${formatRetryDelay(delay)}`,
-            ),
-        })
-        if (state.status !== lastStatus) {
-          log(`deployment=${deploymentId} status=${state.status}`)
-          lastStatus = state.status
-        }
-        if (state.state === 'error') {
-          await logFailureTail(cf, deploymentId, log)
-          return 'error'
-        }
-        if (state.state === 'done') return 'done'
-        const wait = Math.min(pollMs, deadline - now())
-        if (wait <= 0) break
-        await sleep(wait)
-      }
-      return 'timeout'
+      return waitForDeployment({
+        deploymentId,
+        poll: () => poll(cf, deploymentId),
+        timeoutMs,
+        pollMs,
+        now,
+        sleep,
+        isTransient,
+        failureReason,
+        log,
+        onError: () => logFailureTail(cf, deploymentId, log),
+      })
     },
 
     healthCheck,
@@ -355,12 +318,6 @@ export function workersPoll(build: CloudflareWorkerBuild): Poll {
   const status = `${build.status ?? 'unknown'}/${build.buildOutcome ?? 'none'}`
   if (build.status !== 'stopped') return { state: 'running', status }
   return { state: build.buildOutcome === 'success' ? 'done' : 'error', status }
-}
-
-function createdSince(createdOn: string | null, sinceMs: number) {
-  if (createdOn === null) return false
-  const created = Date.parse(createdOn)
-  return Number.isFinite(created) && created >= sinceMs
 }
 
 /**

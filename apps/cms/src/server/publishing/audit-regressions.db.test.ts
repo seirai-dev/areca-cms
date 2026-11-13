@@ -24,12 +24,8 @@ import {
 } from '#/server/content/test-utils'
 import { createEntry, scheduleEntry } from '#/server/content/entries'
 import { requestPublication } from './publications'
-import {
-  CLAIM_SQL,
-  resourceBlockerSql,
-  processJob,
-  recoverStaleJobs,
-} from './worker'
+import { CLAIM_SQL, resourceBlockerSql } from './job-claim'
+import { processJob, recoverStaleJobs } from './job-run'
 import { runSchedulerTick } from './scheduler'
 import { createMockDeploymentAdapter, jobOf } from './test-helpers'
 

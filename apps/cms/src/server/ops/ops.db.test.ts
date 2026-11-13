@@ -9,7 +9,7 @@ import {
   LOG_TRUNCATED_MARKER,
   MAX_JOB_LOG_CHARS,
   appendLog,
-} from '#/server/publishing/worker'
+} from '#/server/publishing/job-run'
 
 import { defaultQueueStats } from './health'
 import { collectMetrics, renderPrometheus } from './metrics'

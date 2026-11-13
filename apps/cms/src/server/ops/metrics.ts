@@ -8,6 +8,7 @@ import type { PoolStats } from '#/db/pool-registry'
 import { env } from '#/env'
 import { createLogger } from '#/server/log'
 import type { BuildJobStatus, PublicationStatus } from '#/lib/types'
+import { RUNNING_JOB_STATUSES } from '#/lib/job-status'
 
 import { cachedReadinessChecks } from './health'
 import type { CheckName, ReadinessReport } from './health'
@@ -43,7 +44,6 @@ export const PUBLICATION_STATUSES: PublicationStatus[] = [
   'superseded',
   'rolled_back',
 ]
-const ACTIVE: BuildJobStatus[] = ['building', 'validating', 'deploying']
 
 export type MetricsSnapshot = {
   publicationFailuresTotal: number
@@ -109,7 +109,7 @@ export function renderPrometheus(snapshot: MetricsSnapshot): string {
     'Build jobs currently building, validating or deploying.',
     [
       {
-        value: ACTIVE.reduce(
+        value: RUNNING_JOB_STATUSES.reduce(
           (sum, status) => sum + (snapshot.jobsByStatus[status] ?? 0),
           0,
         ),

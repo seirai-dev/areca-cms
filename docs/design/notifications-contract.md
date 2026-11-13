@@ -146,7 +146,7 @@ The worker never notifies directly. Each path below queues a publication event
 the outcome; the events loop (`processPublicationEvents`) then calls
 `deliverPublicationLive` or `deliverPublicationFailed` and retries on failure.
 
-- `publishing/worker.ts` success path → a live event for the publication.
+- `publishing/job-run.ts` success path → a live event for the publication.
 - `failJob` (when `recorded`) → a failed event (`stuck: dispatchUncertain`).
 - `recoverStaleJobs` → a failed event for each stale job (`stuck: <dispatch uncertain>`).
 - `resolveUncertainDeploymentJob` → a failed event (`stuck: false`)

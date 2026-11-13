@@ -117,51 +117,41 @@ export const PUBLICATION_STATUS: Record<
   },
 }
 
-export const JOB_STATUS: Record<
-  BuildJobStatus,
-  StatusMeta & { active: boolean }
-> = {
+export const JOB_STATUS: Record<BuildJobStatus, StatusMeta> = {
   queued: {
     label: () => m.golive_job_queued(),
     tone: 'neutral',
     icon: 'queued',
-    active: true,
   },
   building: {
     label: () => m.golive_job_building(),
     tone: 'accent',
     icon: 'spinner',
-    active: true,
   },
   validating: {
     label: () => m.golive_job_validating(),
     tone: 'accent',
     icon: 'spinner',
-    active: true,
   },
   deploying: {
     label: () => m.golive_job_deploying(),
     tone: 'accent',
     icon: 'spinner',
-    active: true,
   },
   succeeded: {
     label: () => m.golive_job_succeeded(),
     tone: 'success',
     icon: 'check',
-    active: false,
   },
   failed: {
     label: () => m.golive_job_failed(),
     tone: 'error',
     icon: 'failed',
-    active: false,
   },
   cancelled: {
     label: () => m.golive_job_cancelled(),
     tone: 'neutral',
     icon: 'cancelled',
-    active: false,
   },
 }
 
@@ -173,6 +163,4 @@ export const GO_LIVE_STEPS: readonly BuildJobStatus[] = [
   'deploying',
 ]
 
-export function isActiveJobStatus(status: BuildJobStatus) {
-  return JOB_STATUS[status].active
-}
+export { isActiveJobStatus } from '#/lib/job-status'

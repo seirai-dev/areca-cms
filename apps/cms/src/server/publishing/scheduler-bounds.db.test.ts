@@ -15,7 +15,7 @@ import {
   removeUsers,
 } from '#/server/notifications/test-utils'
 
-import { recoverStaleJobs } from './worker.ts'
+import { recoverStaleJobs } from './job-run.ts'
 import { runSchedulerTick } from './scheduler.ts'
 
 const requested = vi.hoisted(() => ({ siteIds: [] as string[] }))
