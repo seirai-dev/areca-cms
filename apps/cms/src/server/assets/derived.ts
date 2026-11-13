@@ -1,6 +1,9 @@
+import { eq } from 'drizzle-orm'
 import sharp from 'sharp'
 
 import { getStorage } from '#/adapters'
+import { db } from '#/db'
+import { asset } from '#/db/schema'
 import { THUMBNAIL_WIDTHS } from '#/lib/content/utils'
 import { createLogger } from '#/server/log'
 
@@ -17,6 +20,8 @@ const THUMBNAIL_FORMATS: ThumbnailFormat[] = ['avif', 'webp']
  * Images derived from an asset (thumbnails, the MCP preview) are rendered once
  * and stored under `derived/<storageKey>/`. Storage keys never change, so a
  * stored copy never goes stale; deleting the asset queues every derived key.
+ * A render that finishes after the delete removes its own copy, and the
+ * thumbnail route serves a stored copy only while the asset row exists.
  */
 export function thumbnailKey(
   storageKey: string,
@@ -76,10 +81,19 @@ export async function readAll(
   return Buffer.concat(chunks)
 }
 
+async function assetExists(storageKey: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: asset.id })
+    .from(asset)
+    .where(eq(asset.storageKey, storageKey))
+    .limit(1)
+  return rows.length > 0
+}
+
 /**
  * The stored derived image, or one rendered from the original and stored for
- * next time. Null when the original does not exist. Concurrent requests for
- * the same derived key share one render.
+ * next time. Null when the original or its asset row does not exist.
+ * Concurrent requests for the same derived key share one render.
  */
 export async function derivedImage(input: {
   key: string
@@ -100,8 +114,20 @@ export async function derivedImage(input: {
       await storage.put(input.key, bytes, input.contentType)
     } catch (error) {
       log.warn('could not store derived image', { key: input.key, err: error })
+      return bytes
     }
-    return bytes
+    // The asset may have been deleted, and its derived keys cleaned up,
+    // while this rendered.
+    if (await assetExists(input.sourceKey)) return bytes
+    try {
+      await storage.delete(input.key)
+    } catch (error) {
+      log.warn('could not delete derived image of a deleted asset', {
+        key: input.key,
+        err: error,
+      })
+    }
+    return null
   }).finally(() => rendering.delete(input.key))
   rendering.set(input.key, task)
   return task

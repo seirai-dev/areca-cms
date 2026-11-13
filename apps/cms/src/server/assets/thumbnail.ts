@@ -70,10 +70,8 @@ export async function streamAssetThumbnail(
   }
   const format = thumbnailFormat(accept)
   if (!format) return original(storageKey)
-  const key = thumbnailKey(storageKey, width, format)
-  const stored = await getStorage().get(key)
-  if (stored) return thumbnailResponse(await readAll(stored.body), format)
-
+  // A stored thumbnail is served only while its asset exists, so one that
+  // outlived a delete is never public.
   const row = (
     await db
       .select({ mimeType: asset.mimeType, width: asset.width })
@@ -88,6 +86,9 @@ export async function streamAssetThumbnail(
   ) {
     return original(storageKey)
   }
+  const key = thumbnailKey(storageKey, width, format)
+  const stored = await getStorage().get(key)
+  if (stored) return thumbnailResponse(await readAll(stored.body), format)
   try {
     const bytes = await derivedImage({
       key,
