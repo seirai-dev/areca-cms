@@ -24,7 +24,7 @@ import {
 import { SEO_KEY } from '#/lib/seo'
 import { isDevSite } from '#/server/security/site-visibility'
 import { m } from '#/paraglide/messages'
-import { audit } from '#/server/audit'
+import { audit, auditAutosave } from '#/server/audit'
 import { importExternalImages } from '#/server/assets/external-images'
 import { assetAttachLock } from '#/server/assets/usage'
 
@@ -702,18 +702,31 @@ export async function updateDraft(
 
     await syncEntryLinkIndex(tx, id)
     await writeRevision(id, parsed.data, actorId, 'update', tx)
-    await audit(
-      {
-        organizationId: ctx.site.organizationId,
-        siteId: ctx.site.id,
-        actorId,
-        action: 'entry.update',
-        targetType: 'entry',
-        targetId: id,
-      },
-      tx,
-      ctx.site,
-    )
+    if (options.explicit) {
+      await audit(
+        {
+          organizationId: ctx.site.organizationId,
+          siteId: ctx.site.id,
+          actorId,
+          action: 'entry.update',
+          targetType: 'entry',
+          targetId: id,
+        },
+        tx,
+        ctx.site,
+      )
+    } else {
+      await auditAutosave(
+        {
+          organizationId: ctx.site.organizationId,
+          siteId: ctx.site.id,
+          actorId,
+          entryId: id,
+        },
+        tx,
+        ctx.site,
+      )
+    }
 
     return {
       ...updated,

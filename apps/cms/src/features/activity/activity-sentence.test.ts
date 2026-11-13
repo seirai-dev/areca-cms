@@ -255,6 +255,18 @@ describe('collapseRepeats', () => {
     ]
     expect(collapseRepeats(rows).map((group) => group.count)).toEqual([3, 1, 1])
   })
+
+  it('counts the autosaves a shared row holds, and groups from its first save', () => {
+    const rows = [
+      row({
+        createdAt: '2026-09-30T11:00:00Z',
+        meta: { saves: 12, firstSavedAt: '2026-09-30T10:05:00Z' },
+      }),
+      row({ createdAt: '2026-09-30T10:00:00Z' }),
+      row({ createdAt: '2026-09-30T09:00:00Z', meta: { saves: 1 } }),
+    ]
+    expect(collapseRepeats(rows).map((group) => group.count)).toEqual([13, 1])
+  })
 })
 
 describe('entryTargetIds', () => {

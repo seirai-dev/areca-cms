@@ -399,6 +399,24 @@ export type ActivityGroup<T extends ActivityLike> = {
   count: number
 }
 
+/**
+ * Autosaves share one row (see `auditAutosave`): `meta.saves` counts them and
+ * `meta.firstSavedAt` keeps when the first one happened. Other rows are one
+ * event at `createdAt`.
+ */
+function repeatsOf(row: ActivityLike) {
+  const meta = metaOf(row)
+  const at = new Date(row.createdAt).getTime()
+  const saves = meta?.saves
+  if (typeof saves !== 'number' || saves < 1)
+    return { count: 1, at, firstAt: at }
+  const first =
+    typeof meta?.firstSavedAt === 'string'
+      ? new Date(meta.firstSavedAt).getTime()
+      : NaN
+  return { count: saves, at, firstAt: Number.isNaN(first) ? at : first }
+}
+
 /** Collapses consecutive repeats in a newest-first list. */
 export function collapseRepeats<T extends ActivityLike>(
   rows: ReadonlyArray<T>,
@@ -406,7 +424,7 @@ export function collapseRepeats<T extends ActivityLike>(
   const out: Array<ActivityGroup<T>> = []
   let lastAt = 0
   for (const row of rows) {
-    const at = new Date(row.createdAt).getTime()
+    const { count, at, firstAt } = repeatsOf(row)
     const prev = out.at(-1)
     if (
       prev &&
@@ -415,11 +433,11 @@ export function collapseRepeats<T extends ActivityLike>(
       prev.row.actorId === row.actorId &&
       Math.abs(lastAt - at) <= REPEAT_WINDOW_MS
     ) {
-      prev.count += 1
+      prev.count += count
     } else {
-      out.push({ row, count: 1 })
+      out.push({ row, count })
     }
-    lastAt = at
+    lastAt = firstAt
   }
   return out
 }
