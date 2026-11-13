@@ -2,6 +2,16 @@
 
 All notable changes to `@areca-cms/site-sdk`.
 
+## 0.11.1 (2026-11-13)
+
+### Bug fixes
+
+- **site-sdk:** warn once when the click-to-edit overlay fails to load (44525e9)
+
+### Performance
+
+- **site-sdk:** load the visual overlay only inside the CMS frame (c3b886b)
+
 ## 0.11.0 (2026-11-07)
 
 ### Features
