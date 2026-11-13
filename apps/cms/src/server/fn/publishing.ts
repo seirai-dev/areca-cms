@@ -6,7 +6,7 @@ import { m } from '#/paraglide/messages'
 import {
   reconcileDeploymentJob,
   resolveUncertainDeploymentJob,
-} from '#/server/publishing/worker'
+} from '#/server/publishing/job-run'
 import { requireSiteAccess } from '#/server/content/access'
 import { NotFoundError } from '#/server/content/errors'
 import { AppError } from '#/server/http/app-error'

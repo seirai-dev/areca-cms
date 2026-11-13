@@ -7,7 +7,7 @@ import { db } from '#/db'
 import { buildJob, cloudflareCredential, publication, site } from '#/db/schema'
 import type { DeploymentTarget, Snapshot } from '#/lib/types'
 import { withTestSite } from '#/server/content/test-utils'
-import { processJob } from './worker'
+import { processJob } from './job-run'
 import { createMockDeploymentAdapter } from './test-helpers'
 
 const ACCOUNT_ID = '0123456789abcdef0123456789abcdef'

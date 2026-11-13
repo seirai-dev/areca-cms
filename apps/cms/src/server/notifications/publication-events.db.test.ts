@@ -14,7 +14,7 @@ import {
   site,
 } from '#/db/schema'
 import type { Snapshot } from '#/lib/types'
-import { processJob } from '#/server/publishing/worker'
+import { processJob } from '#/server/publishing/job-run'
 
 import {
   createTestSite,

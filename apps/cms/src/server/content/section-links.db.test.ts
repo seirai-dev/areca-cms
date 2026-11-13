@@ -12,7 +12,7 @@ import {
 } from '#/db/schema'
 import { saveDokployCredentials } from '#/server/admin/dokploy-credentials'
 import { requestPublication } from '#/server/publishing/publications'
-import { processJob } from '#/server/publishing/worker'
+import { processJob } from '#/server/publishing/job-run'
 import { isEditedSinceReady } from '#/lib/content/edited-since-ready'
 import { I18N_KEY } from '#/lib/content-locale'
 

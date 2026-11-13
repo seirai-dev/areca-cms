@@ -37,7 +37,7 @@ import {
 import { applyLocaleWrite } from '#/server/mcp/locales'
 import { hashToken } from '#/server/security/token-hash'
 import { requestPublication } from '#/server/publishing/publications'
-import { processJob } from '#/server/publishing/worker'
+import { processJob } from '#/server/publishing/job-run'
 
 import { assertLocalDevDatabase } from './lib/local-db-guard'
 import { harborAndPine } from './demo-data/harbor-and-pine'

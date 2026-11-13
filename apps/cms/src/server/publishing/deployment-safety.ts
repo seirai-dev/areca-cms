@@ -2,6 +2,7 @@ import { and, eq, inArray, or } from 'drizzle-orm'
 
 import type { DbReader, Tx } from '#/db'
 import { buildJob, site } from '#/db/schema'
+import { ACTIVE_JOB_STATUSES } from '#/lib/job-status'
 import { ConflictError } from '#/server/content/errors'
 
 /** Whether a site has a release queued, running, or with an uncertain dispatch. */
@@ -52,7 +53,7 @@ export async function assertOrganizationHasNoPendingDeployment(
 
 function pendingDeployment() {
   return or(
-    inArray(buildJob.status, ['queued', 'building', 'validating', 'deploying']),
+    inArray(buildJob.status, ACTIVE_JOB_STATUSES),
     eq(buildJob.dispatchUncertain, true),
   )
 }

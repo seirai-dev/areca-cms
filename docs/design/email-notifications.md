@@ -43,7 +43,7 @@ Recipient roles: `owner`, `editor` (org members), `agency` (agency admins).
 
 | Key | Trigger (server) | Recipients | Default |
 |---|---|---|---|
-| `release.live` | worker success path (`publishing/worker.ts`, publication → live) | the requester (`publication.requestedBy`) | on |
+| `release.live` | worker success path (`publishing/job-run.ts`, publication → live) | the requester (`publication.requestedBy`) | on |
 | `release.live.others` | same | other owners of the org | off |
 | `release.failed` | `failJob`, stale recovery failure, uncertain dispatch resolved as failed | requester + owners | on |
 | `release.stuck` | job left `dispatch_uncertain` / `building` past the wait window | requester + owners | on |

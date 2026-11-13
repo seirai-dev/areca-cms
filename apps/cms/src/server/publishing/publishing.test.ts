@@ -34,12 +34,8 @@ import {
   requestRollback,
 } from './publications.ts'
 import { runSchedulerTick } from './scheduler.ts'
-import {
-  CLAIM_SQL,
-  claimNextJob,
-  processJob,
-  recoverStaleJobs,
-} from './worker.ts'
+import { CLAIM_SQL, claimNextJob } from './job-claim.ts'
+import { processJob, recoverStaleJobs } from './job-run.ts'
 import { createMockDeploymentAdapter, jobOf } from './test-helpers'
 
 const hasDb = Boolean(process.env.DATABASE_URL)

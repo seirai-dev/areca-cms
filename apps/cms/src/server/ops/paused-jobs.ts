@@ -20,7 +20,7 @@ import {
 } from '#/server/assets/storage-cleanup'
 import { audit } from '#/server/audit'
 import { createLogger, redactString } from '#/server/log'
-import { SCHEDULER_MAX_FAILURES } from '#/server/publishing/scheduler'
+import { SCHEDULER_MAX_FAILURES } from '#/server/publishing/scheduler-backoff'
 
 const log = createLogger('ops')
 const LIST_LIMIT = 100
