@@ -61,7 +61,7 @@ import {
   useRecentEmails,
 } from './use-mail-settings'
 import type { MailActionFailure, MailStatus } from './use-mail-settings'
-import type { RecentEmail } from '#/server/mail/outbox'
+import type { RecentEmail } from '#/server/mail/outbox-views'
 
 function secureLabel(secure: MailSecure) {
   if (secure === 'starttls') return m.agency_mail_secure_starttls()
