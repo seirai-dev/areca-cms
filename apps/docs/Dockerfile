@@ -16,9 +16,13 @@ RUN --mount=type=cache,id=docs-pnpm,target=/pnpm/store \
     pnpm install --filter @areca/docs --no-include-workspace-root --frozen-lockfile --store-dir=/pnpm/store
 COPY apps/docs ./apps/docs
 COPY packages/site-sdk/package.json ./packages/site-sdk/package.json
-RUN pnpm --filter @areca/docs build
+RUN pnpm --filter @areca/docs build \
+    && find apps/docs/dist/client -type f -size +1k \
+        \( -name '*.html' -o -name '*.js' -o -name '*.css' -o -name '*.json' \
+           -o -name '*.txt' -o -name '*.md' -o -name '*.xml' -o -name '*.svg' -o -path '*/api/search' \) \
+        -exec gzip -9 -k {} +
 
-FROM nginx:1.31-alpine AS runner
+FROM nginx:1.31-alpine@sha256:713fc2ebfd92e8217db451477182ee91944b123d2b1ee9fd5a8c6e91ca6c3a11 AS runner
 LABEL org.opencontainers.image.source="https://github.com/seirai-dev/areca-cms"
 COPY apps/docs/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/docs/dist/client /usr/share/nginx/html
