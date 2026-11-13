@@ -1,13 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 import '@tanstack/react-start'
 
-import { MFA_REQUIRED, MfaRequiredError } from '#/lib/security-errors'
-import { getSession } from '#/lib/session.server'
+import { requireAgencyAdmin } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { setBrandingImage } from '#/server/admin/branding'
 import { AssetValidationError } from '#/server/assets'
+import { guardErrorResponse } from '#/server/http/guard-response'
 import { parseLimitedFormData, UploadTooLargeError } from '#/server/http/upload'
-import { requireAdminLocalMfa } from '#/server/security/local-mfa'
 
 // Allow multipart framing and the `kind` field in addition to the 2 MiB image.
 const MAX_UPLOAD_BODY_BYTES = 2 * 1024 * 1024 + 256 * 1024
@@ -16,21 +15,12 @@ export const Route = createFileRoute('/api/admin/branding/upload')({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const session = await getSession()
-        if (!session) {
-          return new Response(m.server_unauthorized(), { status: 401 })
-        }
-        if (!session.user.isAgencyAdmin) {
-          return new Response(m.server_forbidden(), { status: 403 })
-        }
-        // Same guard as `requireAgencyAdmin` for the server functions: two-factor
-        // enrolled and verified locally for this session.
+        let session: Awaited<ReturnType<typeof requireAgencyAdmin>>
         try {
-          await requireAdminLocalMfa(session)
+          session = await requireAgencyAdmin()
         } catch (error) {
-          if (error instanceof MfaRequiredError) {
-            return new Response(MFA_REQUIRED, { status: 403 })
-          }
+          const refused = guardErrorResponse(error)
+          if (refused) return refused
           throw error
         }
 

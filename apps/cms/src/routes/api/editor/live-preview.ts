@@ -6,7 +6,7 @@ import { withRequiredSlugField } from '#/lib/collection-fields'
 import { localeTagSchema } from '#/lib/locale-tag-schema'
 import { SLUG_PATTERN } from '#/lib/slug'
 import { z } from '#/lib/zod'
-import { securityErrorCode } from '#/lib/security-errors'
+import { guardErrorResponse } from '#/server/http/guard-response'
 import { getSession } from '#/lib/session.server'
 import {
   requireEntryAccess,
@@ -214,11 +214,8 @@ export async function postLivePreview(request: Request): Promise<Response> {
     return await previewUnsaved(parsed.data)
   } catch (error) {
     if (error instanceof NotFoundError) return notFound()
-    if (error instanceof Response) return error
-    // Agency admin without two-factor, or a stale step-up: the same 403 codes
-    // the upload routes send.
-    const code = securityErrorCode(error)
-    if (code) return new Response(code, { status: 403, headers: NO_STORE })
+    const refused = guardErrorResponse(error, NO_STORE)
+    if (refused) return refused
     throw error
   }
 }
