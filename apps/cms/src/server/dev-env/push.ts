@@ -66,7 +66,7 @@ import type { DevEnvActor, SiteRow } from './rows'
 import { getSiteOrThrow } from '#/server/content/site-core'
 import type { SiteCore } from '#/server/content/site-core'
 import {
-  keepDraftRevision,
+  keepDraftRevisions,
   nextOriginBaseline,
   productionReferenceLookup,
   readyProblems,
@@ -828,8 +828,9 @@ async function pushEntriesPassOne(
 
 /**
  * Pass 2: writes each selected entry's draft, and its ready version as a
- * candidate. The production row is locked and its `content_version` checked
- * against the plan; the draft it replaces is kept as a revision first.
+ * candidate. The production rows are locked in id order and each one's
+ * `content_version` checked against the plan; the drafts they replace are
+ * kept as revisions first, in one insert.
  */
 async function pushEntriesPassTwo(
   state: PushState,
@@ -846,29 +847,54 @@ async function pushEntriesPassTwo(
   )
   const now = new Date()
 
-  for (const item of entryItems) {
+  const work = entryItems.flatMap((item) => {
     const targetId = state.targets.get(item.id)
-    if (!targetId) continue
     const dev = item.devId ? devById.get(item.devId) : undefined
-    if (!dev) continue
-    const isCreated = createdItemIds.has(item.id)
-
-    const row = (
-      await tx
-        .select()
-        .from(entry)
-        .where(eq(entry.id, targetId))
-        .for('update')
-        .limit(1)
-    ).at(0)
+    return targetId && dev
+      ? [{ item, dev, targetId, isCreated: createdItemIds.has(item.id) }]
+      : []
+  })
+  const targetIds = [...new Set(work.map((step) => step.targetId))].sort()
+  const rows = new Map(
+    (targetIds.length
+      ? await tx
+          .select()
+          .from(entry)
+          .where(inArray(entry.id, targetIds))
+          .orderBy(asc(entry.id))
+          .for('update')
+      : []
+    ).map((row) => [row.id, row]),
+  )
+  const seenTargets = new Set<string>()
+  for (const { targetId, isCreated } of work) {
+    const row = rows.get(targetId)
     if (!row) throw new ConflictError(PLAN_CHANGED_MESSAGE)
-    // Checked in lockAndVerifyAffected, then against this transaction's own writes.
-    if (!isCreated && row.contentVersion !== state.lockedVersions.get(row.id)) {
+    // Checked in lockAndVerifyAffected. A second write to one row would find
+    // the version this push already raised.
+    if (
+      !isCreated &&
+      (seenTargets.has(targetId) ||
+        row.contentVersion !== state.lockedVersions.get(row.id))
+    ) {
       throw new ConflictError(PLAN_CHANGED_MESSAGE)
     }
+    seenTargets.add(targetId)
+  }
+  await keepDraftRevisions(
+    tx,
+    work.flatMap(({ item, targetId, isCreated }) => {
+      const row = rows.get(targetId)
+      return row && (item.kind === 'entry.archive' || !isCreated) ? [row] : []
+    }),
+    actor.id,
+  )
+
+  for (const { item, dev, targetId } of work) {
+    const row = rows.get(targetId)
+    if (!row) throw new ConflictError(PLAN_CHANGED_MESSAGE)
 
     if (item.kind === 'entry.archive') {
-      await keepDraftRevision(tx, row, actor.id)
       await tx
         .update(entry)
         .set({
@@ -884,9 +910,6 @@ async function pushEntriesPassTwo(
 
     const col = productionCollections.find((c) => c.id === row.collectionId)
     if (!col) throw new ConflictError(PLAN_CHANGED_MESSAGE)
-    if (!isCreated) {
-      await keepDraftRevision(tx, row, actor.id)
-    }
 
     const seen = new Set<string>()
     // Fields a pending removal keeps: production's values stay in draft and ready.

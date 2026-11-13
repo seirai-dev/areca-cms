@@ -58,13 +58,27 @@ export async function keepDraftRevision(
   row: { id: string; draftData: EntryData },
   actorId: string,
 ) {
-  await tx.insert(entryRevision).values({
-    entryId: row.id,
-    data: row.draftData,
-    createdBy: actorId,
-    note: 'before dev push',
-    kind: 'milestone',
-  })
+  await keepDraftRevisions(tx, [row], actorId)
+}
+
+/** `keepDraftRevision` for several rows, in one insert. */
+export async function keepDraftRevisions(
+  tx: Tx,
+  rows: { id: string; draftData: EntryData }[],
+  actorId: string,
+) {
+  // Chunks stay under the driver's bind-parameter limit.
+  for (let start = 0; start < rows.length; start += 1000) {
+    await tx.insert(entryRevision).values(
+      rows.slice(start, start + 1000).map((row) => ({
+        entryId: row.id,
+        data: row.draftData,
+        createdBy: actorId,
+        note: 'before dev push',
+        kind: 'milestone' as const,
+      })),
+    )
+  }
 }
 
 export async function slugTaken(
