@@ -308,11 +308,11 @@ function trimRun(run: PMNode[]): PMNode[] {
   const content = run.map((node) => ({ ...node }))
   const first = content.length > 0 ? content[0] : undefined
   if (first?.type === 'text') {
-    first.text = (first.text ?? '').replace(/^\s+/, '')
+    first.text = (first.text ?? '').trimStart()
   }
   const last = content.at(-1)
   if (last?.type === 'text') {
-    last.text = (last.text ?? '').replace(/\s+$/, '')
+    last.text = (last.text ?? '').trimEnd()
   }
   return content.filter(
     (node) => node.type !== 'text' || (node.text ?? '').length > 0,
