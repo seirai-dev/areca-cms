@@ -78,6 +78,25 @@ import { pickDeclaredFields, validateEntryData } from './validation.ts'
 import { findSite, getSiteOrThrow } from './site-core.ts'
 import type { SiteCore } from './site-core.ts'
 
+/** The entry columns a snapshot reads. Drafts and baselines are left out. */
+const snapshotEntryColumns = {
+  id: entry.id,
+  collectionId: entry.collectionId,
+  slug: entry.slug,
+  status: entry.status,
+  publishedData: entry.publishedData,
+  publishedSlug: entry.publishedSlug,
+  publishedAt: entry.publishedAt,
+  scheduledData: entry.scheduledData,
+  scheduledSlug: entry.scheduledSlug,
+  scheduledVersion: entry.scheduledVersion,
+  scheduledAt: entry.scheduledAt,
+}
+
+type SnapshotEntryRow = {
+  [K in keyof typeof snapshotEntryColumns]: (typeof entry.$inferSelect)[K]
+}
+
 type IncludedEntry = {
   collectionKey: string
   routePattern: string
@@ -86,7 +105,7 @@ type IncludedEntry = {
   /** Languages besides main that must be complete. */
   requiredLanguages?: string[]
   fields: Field[]
-  row: typeof entry.$inferSelect
+  row: SnapshotEntryRow
   data: EntryData
   slug: string
   publishedAt: Date | null
@@ -161,21 +180,55 @@ export async function buildSnapshot(
     { enabledOnly: true },
     connection,
   )
+  const sections = await listGlobals(siteId, { enabledOnly: true }, connection)
   const errors: string[] = []
   const entryVersions: { entryId: string; scheduledVersion: string }[] = []
   const included: IncludedEntry[] = []
 
+  // One read for every enabled collection and section, grouped below.
+  const entryRows =
+    enabled.length + sections.length === 0
+      ? []
+      : await connection
+          .select(snapshotEntryColumns)
+          .from(entry)
+          .where(
+            and(
+              eq(entry.siteId, siteId),
+              or(
+                enabled.length > 0
+                  ? and(
+                      inArray(
+                        entry.collectionId,
+                        enabled.map((col) => col.id),
+                      ),
+                      or(
+                        eq(entry.status, 'published'),
+                        eq(entry.status, 'scheduled'),
+                      ),
+                    )
+                  : undefined,
+                sections.length > 0
+                  ? and(
+                      inArray(
+                        entry.collectionId,
+                        sections.map((section) => section.id),
+                      ),
+                      eq(entry.slug, GLOBAL_ENTRY_SLUG),
+                    )
+                  : undefined,
+              ),
+            ),
+          )
+  const rowsByCollection = new Map<string, SnapshotEntryRow[]>()
+  for (const row of entryRows) {
+    const list = rowsByCollection.get(row.collectionId)
+    if (list) list.push(row)
+    else rowsByCollection.set(row.collectionId, [row])
+  }
+
   for (const col of enabled) {
-    const rows = await connection
-      .select()
-      .from(entry)
-      .where(
-        and(
-          eq(entry.siteId, siteId),
-          eq(entry.collectionId, col.id),
-          or(eq(entry.status, 'published'), eq(entry.status, 'scheduled')),
-        ),
-      )
+    const rows = rowsByCollection.get(col.id) ?? []
 
     for (const row of rows) {
       const isScheduledDue =
@@ -241,23 +294,10 @@ export async function buildSnapshot(
 
   // Site content sections: one `$global` entry each. A section with no ready
   // data blocks go live only when it has required fields; otherwise it ships `{}`.
-  const sections = await listGlobals(siteId, { enabledOnly: true }, connection)
   const sectionItems = new Map<string, IncludedEntry>()
   const unreadySections = new Map<string, string>()
   for (const section of sections) {
-    const row = (
-      await connection
-        .select()
-        .from(entry)
-        .where(
-          and(
-            eq(entry.siteId, siteId),
-            eq(entry.collectionId, section.id),
-            eq(entry.slug, GLOBAL_ENTRY_SLUG),
-          ),
-        )
-        .limit(1)
-    ).at(0)
+    const row = rowsByCollection.get(section.id)?.at(0)
     if (!row) {
       errors.push(`Site content "${section.label}": entry is missing`)
       continue

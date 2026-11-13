@@ -34,6 +34,7 @@ import {
   ValidationError,
 } from '#/server/content/errors'
 import { diffApprovedRelease } from '#/server/publishing/release-diff'
+import type { ApprovedReleaseDiff } from '#/server/publishing/release-diff'
 import { isDevSite } from '#/server/security/site-visibility'
 import { getSiteOrThrow, siteCoreColumns } from '#/server/content/site-core'
 import type { SiteCore } from '#/server/content/site-core'
@@ -698,7 +699,11 @@ async function latestPublicationSummary(
   return row ?? null
 }
 
-export async function getSiteReleaseStatus(siteId: string) {
+/** Pass the release diff when the caller already has it. */
+export async function getSiteReleaseStatus(
+  siteId: string,
+  known?: ApprovedReleaseDiff,
+) {
   const existingSite = await getSiteOrThrow(siteId)
   const live = await latestPublicationSummary(siteId, 'live')
   const demo = await latestPublicationSummary(siteId, 'demo')
@@ -729,7 +734,7 @@ export async function getSiteReleaseStatus(siteId: string) {
           .limit(1)
   ).at(0)
 
-  const diff = await diffApprovedRelease(siteId)
+  const diff = known ?? (await diffApprovedRelease(siteId))
   const blockers = [
     ...deploymentBlockers(existingSite),
     ...(await sectionBlockers(siteId)),
