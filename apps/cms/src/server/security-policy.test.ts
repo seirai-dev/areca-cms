@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { assertAgencyAdminCanBeRemoved } from '#/server/admin/members'
+import { assertAgencyAdminCanBeRemoved } from '#/server/admin/agency-admin-roster'
 import {
   MAX_PAGE_OFFSET,
   MAX_PAGE_SIZE,

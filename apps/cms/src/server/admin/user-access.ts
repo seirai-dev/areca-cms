@@ -24,11 +24,8 @@ import { lastActiveSubquery } from './last-active'
 import { sendAccountEmail } from '#/server/mail/account-emails'
 import type { MembershipRole } from '#/lib/types'
 
-import {
-  applyMemberRemoval,
-  applyMemberRole,
-  lockOrganization,
-} from './members'
+import { applyMemberRemoval, applyMemberRole } from './members'
+import { lockOrganizationForMutation } from './organization-lock'
 import { lockPerson, runBulk } from './users'
 import type { BulkResult } from './users'
 
@@ -270,13 +267,7 @@ async function addMembership(
     actorId: string
   },
 ) {
-  await lockOrganization(tx, input.organizationId)
-  const [org] = await tx
-    .select({ id: organization.id, name: organization.name })
-    .from(organization)
-    .where(eq(organization.id, input.organizationId))
-    .limit(1)
-  if (!org) throw new NotFoundError(m.server_organization_not_found())
+  const org = await lockOrganizationForMutation(tx, input.organizationId)
 
   const [existing] = await tx
     .select({ id: membership.id })

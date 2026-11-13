@@ -6,7 +6,8 @@ import { db } from '#/db'
 import { auditLog, emailOutbox, mcpKey, membership, user } from '#/db/schema'
 import { cleanupTestSite, createTestSite } from '#/server/content/test-utils'
 
-import { removeMember, setAgencyAdmin } from './members.ts'
+import { removeMember } from './members.ts'
+import { setAgencyAdmin } from './agency-admins.ts'
 
 const hasDb = Boolean(process.env.DATABASE_URL)
 

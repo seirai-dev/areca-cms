@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { db } from '#/db'
 import { auditLog, session } from '#/db/schema'
 
-import { listUsers } from './members.ts'
+import { listUsers } from './user-directory.ts'
 import { getUserDetail } from './user-access.ts'
 import { makePerson, removePeople } from './account-fixtures.test-utils.ts'
 

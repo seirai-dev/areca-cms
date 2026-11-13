@@ -24,12 +24,11 @@ import {
   acceptInvitation,
   inviteMember,
   regenerateInvitationLink,
-  removeMember,
   resendInvitation,
   revokeInvitation,
-  setAgencyAdmin,
-  updateMemberRole,
-} from './members.ts'
+} from './invitations.ts'
+import { removeMember, updateMemberRole } from './members.ts'
+import { setAgencyAdmin } from './agency-admins.ts'
 import {
   createOrganization,
   deleteOrganization,

@@ -18,10 +18,9 @@ import { hashToken } from '#/server/security/token-hash'
 import {
   acceptInvitation,
   regenerateInvitationLink,
-  removeMember,
   resendInvitation,
-  updateMemberRole,
-} from './members.ts'
+} from './invitations.ts'
+import { removeMember, updateMemberRole } from './members.ts'
 
 // `unreadable` makes the delivery-time config read fail like a wrong key would.
 const mail = vi.hoisted(() => ({ unreadable: false }))

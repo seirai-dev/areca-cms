@@ -3,10 +3,11 @@ import { eq } from 'drizzle-orm'
 
 import { m } from '#/paraglide/messages'
 import { db } from '#/db'
-import { user, verification } from '#/db/schema'
+import { user } from '#/db/schema'
 import { audit } from '#/server/audit'
 import { ForbiddenError, NotFoundError } from '#/server/content/errors'
 import { withFactorLock } from './factor-lock'
+import { clearFactorLockout } from './step-up'
 
 /** Recovery changes only the failure budget, never the factor or its proof. */
 export async function resetAdminFactorLockout(userId: string, actorId: string) {
@@ -21,9 +22,7 @@ export async function resetAdminFactorLockout(userId: string, actorId: string) {
         .limit(1)
       if (!target?.isAgencyAdmin)
         throw new NotFoundError(m.server_user_not_found())
-      await tx
-        .delete(verification)
-        .where(eq(verification.identifier, `step-up-failures:${userId}`))
+      await clearFactorLockout(tx, userId)
       await audit(
         {
           organizationId: null,

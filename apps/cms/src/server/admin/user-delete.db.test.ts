@@ -31,7 +31,7 @@ import { generateMcpKey } from '#/server/mcp/keys'
 import { renderTemplate } from '#/server/mail/render'
 import { cancelAllQueuedNotificationEmails } from '#/server/mail/outbox'
 
-import { LastAgencyAdminError } from './members.ts'
+import { LastAgencyAdminError } from './agency-admin-roster.ts'
 import {
   deleteOwnAccount,
   deleteUser,
