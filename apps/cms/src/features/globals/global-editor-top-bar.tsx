@@ -85,10 +85,6 @@ export function GlobalEditorTopBar({
   const scheduled = backendStatus === 'scheduled'
   const canDiscard = discardReason === null
   const onDiscard = () => void editor.discard().catch(() => undefined)
-  const onScheduleOpenChange = schedule.onOpenChange
-  const previewAvailable = preview.available
-  const previewReason = preview.reason
-  const onPreview = preview.open
   const mobile = useIsMobile()
   // Full-bleed (Visual mode) drops the page padding the header compensates for.
   const fullBleed = useVisualModeActive()
@@ -107,7 +103,7 @@ export function GlobalEditorTopBar({
   // Reasons for disabled secondary actions, shown in the ⋯ menu on phones
   // (where there is no hover tooltip).
   const menuNotes = [
-    previewReason,
+    preview.reason,
     discardReason,
     !canManage ? editorPublishReason() : null,
   ].filter((note): note is string => Boolean(note))
@@ -118,7 +114,7 @@ export function GlobalEditorTopBar({
       variant="quiet"
       size="sm"
       disabled={busy || !hasReady || readyBlock !== null}
-      onClick={() => onScheduleOpenChange(true)}
+      onClick={() => schedule.onOpenChange(true)}
       data-testid="schedule-global"
       className="hidden md:inline-flex"
     >
@@ -186,19 +182,22 @@ export function GlobalEditorTopBar({
 
         {/* Phones: this group is flattened (contents) so Ready and the ⋯ menu
             sit on the first line and the save status wraps below them. */}
-        <Popover open={schedule.open} onOpenChange={onScheduleOpenChange}>
+        <Popover open={schedule.open} onOpenChange={schedule.onOpenChange}>
           <div className="flex shrink-0 items-center gap-1 max-md:contents">
             <div className="order-last w-full min-w-0 md:order-none md:mr-1 md:w-auto">
               <EditorSaveIndicator editor={editor} />
             </div>
 
-            <Hint label={previewReason ?? ''} className="hidden md:inline-flex">
+            <Hint
+              label={preview.reason ?? ''}
+              className="hidden md:inline-flex"
+            >
               <Button
                 type="button"
                 variant="quiet"
                 size="sm"
-                disabled={!previewAvailable || !previewUrl}
-                onClick={onPreview}
+                disabled={!preview.available || !previewUrl}
+                onClick={preview.open}
                 data-testid="preview-global"
                 className="hidden md:inline-flex"
               >
@@ -304,8 +303,8 @@ export function GlobalEditorTopBar({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
                 <DropdownMenuItem
-                  disabled={!previewAvailable || !previewUrl}
-                  onSelect={onPreview}
+                  disabled={!preview.available || !previewUrl}
+                  onSelect={preview.open}
                   data-testid="preview-global-menu"
                 >
                   <Eye />
@@ -351,7 +350,7 @@ export function GlobalEditorTopBar({
                     ) : (
                       <DropdownMenuItem
                         disabled={busy || !hasReady || readyBlock !== null}
-                        onSelect={() => onScheduleOpenChange(true)}
+                        onSelect={() => schedule.onOpenChange(true)}
                         data-testid="schedule-global-menu"
                       >
                         <CalendarDots />
@@ -398,7 +397,7 @@ export function GlobalEditorTopBar({
                 }
                 initialTimeZone={entry?.scheduleTimezone}
                 pending={editor.schedulePending}
-                onCancel={() => onScheduleOpenChange(false)}
+                onCancel={() => schedule.onOpenChange(false)}
                 onSubmit={schedule.onSubmit}
               />
             </PopoverContent>
