@@ -4,7 +4,9 @@
  * callers pass `params: { siteId, globalKey }`.
  */
 
-export const GLOBAL_ROUTE = '/sites/$siteId/globals/$globalKey' as const
+import { GLOBAL_ROUTE } from '#/lib/content-route'
+
+export { GLOBAL_ROUTE }
 
 export type SiteContentNavItem = {
   key: string
