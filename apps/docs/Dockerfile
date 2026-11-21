@@ -22,7 +22,7 @@ RUN pnpm --filter @areca/docs build \
            -o -name '*.txt' -o -name '*.md' -o -name '*.xml' -o -name '*.svg' -o -path '*/api/search' \) \
         -exec gzip -9 -k {} +
 
-FROM nginx:1.31-alpine@sha256:713fc2ebfd92e8217db451477182ee91944b123d2b1ee9fd5a8c6e91ca6c3a11 AS runner
+FROM nginx:1.31-alpine@sha256:fed7e14be83cbd2661a75cdc5b872d936cf155d46c327084d30b8df19ae88d72 AS runner
 LABEL org.opencontainers.image.source="https://github.com/seirai-dev/areca-cms"
 COPY apps/docs/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/docs/dist/client /usr/share/nginx/html
