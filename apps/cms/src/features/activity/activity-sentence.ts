@@ -85,6 +85,8 @@ const SENTENCES: Partial<Record<string, Sentence>> = {
   'user.delete': (target) => m.activity_user_delete({ target }),
   'user.rename': (target) => m.activity_user_rename({ target }),
   'user.sign_in': () => m.activity_user_sign_in(),
+  'user.email_change_request': () => m.activity_user_email_change_request(),
+  'user.email_change': () => m.activity_user_email_change(),
   'user.sessions_revoke': (target) =>
     m.activity_user_sessions_revoke({ target }),
   'user.two_factor_reset': (target) =>

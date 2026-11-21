@@ -10,7 +10,7 @@ Status: implemented. This is the design note written before the feature was buil
 4. Agency admins can add a user to one or more clients, with a separate role in each client (`owner` | `editor`), change that role, and remove them from a client.
 5. Extras: edit display name (self and admin), change own password, admin "Sign out everywhere", admin "Reset 2FA", status filter + last active on the people list, pending invitations in the people list, invite to several clients from the agency people page, bulk actions, Cmd+K people search.
 
-Out of scope: changing email addresses, grace period before deletion, bulk delete.
+Out of scope: changing someone else's email address, grace period before deletion, bulk delete. Changing your own email address was added later for agency admins (issue #157), see "Changing your own email address" below.
 
 ## Vocabulary
 
@@ -154,3 +154,13 @@ All copy in en, nl, tr via `scripts/i18n-add.mjs`.
 
 - PR 1 DB tests (`*.db.test.ts`): block blocks session creation and MCP auth; unblock restores; last active admin protections incl. concurrent case; delete keeps content with null authors; oauthClient survives; self-delete refused for sole owner; client access batch incl. last-owner error; reset 2FA; emails queued; audit rows.
 - PR 2/3 unit tests for UI helpers (staged diff summary, filters) and Playwright specs: block → blocked user cannot sign in → unblock; admin delete; access table add/change/remove; invite to several clients; bulk block; self rename, password change, self delete; mobile viewport (390) for the per-user page.
+
+## Changing your own email address
+
+Added for issue #157: a Starter account is its own agency, so "ask your agency" was a dead end. Agency admins only; everyone else still sees that note.
+
+- **Flow.** Account → Profile → **Change email**: new address and current password. With two-factor on, `useStepUp` asks for a code. The new address gets a link (`email_change_verify`), the current one a notice (`email_change_notice`, its button starts a password reset). The address only changes when the link is opened.
+- **Checks** (`assertMayChangeEmail` in `lib/auth.ts`, before Better Auth's `/change-email`): unblocked agency admin (from the database), a different address, mail configured, the admin two-factor policy (an admin who must enrol cannot), 10 attempts per hour per person (wrong passwords count), the password (a passwordless account without two-factor needs a sign-in from the last ten minutes, code `SIGN_IN_AGAIN`), with two-factor a code typed in the last two minutes (`REAUTH_REQUIRED`, used up on success), and 3 confirmation mails per hour.
+- **Pending change** (`server/security/email-change.ts`): one `verification` row `email-change:<userId>` holding the new address, 24 hours. A new request replaces it, a password reset or change removes it. The confirmation mail derives its link from this row when it renders, so a worker retry still works and a cancelled change sends nothing.
+- **Opening the link** (`databaseHooks.user.update` on `/verify-email`): the change must still be the pending one, the person still an unblocked agency admin, and the address free (compared lowercased). Otherwise the link returns to `/account?emailChange=done&error=<code>`. On success the address is stored lowercased and verified, other sessions end, the person's other emailed one-time links (password reset) stop working, `user.email_change` is audited with both addresses, and the old address gets `email_changed`.
+- **Not handled.** Pending invitations sent to the old address still name it; linked Google or Microsoft accounts stay linked (they are matched by provider id, not email).

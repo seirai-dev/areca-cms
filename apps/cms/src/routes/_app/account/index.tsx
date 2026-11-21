@@ -29,6 +29,7 @@ function AccountPage() {
       me={me}
       hasPassword={signIn.hasPassword}
       reauth={signIn.reauth}
+      mailConfigured={account?.mailConfigured ?? false}
       deletion={account?.deletion ?? null}
     />
   )

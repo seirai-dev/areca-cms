@@ -31,6 +31,8 @@ export type AccountEmailKind =
   | 'password_reset'
   | 'password_reset_sso'
   | 'verify_email'
+  | 'email_change_notice'
+  | 'email_changed'
   | 'password_changed'
   | 'two_factor_enabled'
   | 'two_factor_disabled'
@@ -68,6 +70,8 @@ const log = createLogger('mail')
 export async function sendAccountEmail(input: {
   kind: AccountEmailKind
   userId: string
+  /** Overrides the address on the account (the old one, after it changed). */
+  to?: string
   params?: Record<string, unknown>
   renderParams?: Record<string, unknown>
   immediate?: boolean
@@ -94,6 +98,7 @@ export async function sendAccountEmail(input: {
 async function queueAccountEmail(input: {
   kind: AccountEmailKind
   userId: string
+  to?: string
   params?: Record<string, unknown>
   renderParams?: Record<string, unknown>
   immediate?: boolean
@@ -119,7 +124,7 @@ async function queueAccountEmail(input: {
     {
       kind: input.kind,
       template: input.kind,
-      to: recipient.email,
+      to: input.to ?? recipient.email,
       params: { userId: input.userId, ...input.params },
       renderParams: input.renderParams,
       locale: mailLocale(recipient.locale),
@@ -204,6 +209,36 @@ export async function sendVerificationEmail(
     immediate: true,
   })
   if (!queued) return null
+  return sendNow(queued.id, { claimedAttempt: queued.claimedAttempt })
+}
+
+/**
+ * Confirmation link for a new address, sent to that address (not the one on
+ * the account). Only the new address is stored; the template derives the link
+ * from the pending change when it renders, so a retry sends a working link
+ * and a cancelled change sends none.
+ */
+export async function sendEmailChangeLink(input: {
+  userId: string
+  newEmail: string
+}): Promise<SendResult | null> {
+  if (!(await isMailConfigured())) return null
+  const locale = (
+    await db
+      .select({ locale: user.locale })
+      .from(user)
+      .where(eq(user.id, input.userId))
+      .limit(1)
+  ).at(0)?.locale
+  const queued = await enqueueEmail({
+    kind: 'email_change_verify',
+    template: 'email_change_verify',
+    to: input.newEmail,
+    params: { userId: input.userId, newEmail: input.newEmail },
+    locale: mailLocale(locale),
+    userId: input.userId,
+    immediate: true,
+  })
   return sendNow(queued.id, { claimedAttempt: queued.claimedAttempt })
 }
 

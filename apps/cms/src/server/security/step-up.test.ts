@@ -10,6 +10,8 @@ import {
   assertFreshSession,
   clearFactorLockout,
   clearStepUpFailures,
+  consumeStepUp,
+  hasRecentStepUp,
   isStepUpLocked,
   recordStepUp,
   recordStepUpFailure,
@@ -50,6 +52,17 @@ describe.skipIf(!hasDb)('step-up', () => {
     }
     throw new Error('expected a rejection')
   }
+
+  it('counts only a code typed in the last two minutes, until it is used up', async () => {
+    await recordStepUp(sessionId, userId, minutesAgo(3))
+    expect(await hasRecentStepUp(sessionId)).toBe(false)
+
+    await recordStepUp(sessionId, userId)
+    expect(await hasRecentStepUp(sessionId)).toBe(true)
+
+    await consumeStepUp(sessionId)
+    expect(await hasRecentStepUp(sessionId)).toBe(false)
+  })
 
   it('passes for a local factor verified in the last ten minutes', async () => {
     const id = `local-mfa:${sessionId}`

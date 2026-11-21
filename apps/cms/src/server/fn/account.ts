@@ -243,6 +243,8 @@ export const getMyAccountFn = createServerFn({
   const blockers = await selfDeleteBlockers(id)
   return {
     hasPassword: credentials.some((row) => Boolean(row.password)),
+    // The email change needs mail to send its confirmation link.
+    mailConfigured: await isMailConfigured(),
     deletion: {
       soleOwnerOf: blockers.soleOwnerClients,
       lastAdmin: blockers.lastAdmin,

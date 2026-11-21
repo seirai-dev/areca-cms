@@ -3,23 +3,35 @@ import { useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
 import { Button } from '#/components/ui/button'
-import { FormField } from '#/components/ui/form-field'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { SettingsSection } from '#/components/ui/settings-section'
 import { PERSON_NAME_MAX_LENGTH } from '#/lib/person-name'
+import type { ReauthProvider } from '#/lib/reauth-provider'
 import { m } from '#/paraglide/messages'
 import { updateMyNameFn } from '#/server/fn/account'
 import type { Me } from '#/server/fn/me'
 
 import { canSaveName } from './account-logic'
+import { ProfileEmail } from './profile-email'
 
 /**
- * Profile: the display name is editable (Enter saves, Escape reverts); the
- * email is read-only. Saving refreshes the router, which drops the cached
- * `me`, so the navbar account menu shows the new name without a reload.
+ * Profile: the display name is editable (Enter saves, Escape reverts). The
+ * email is shown read-only; agency admins can ask to change it
+ * (`ProfileEmail`). Saving the name refreshes the router, which drops the
+ * cached `me`, so the navbar account menu shows the new name without a reload.
  */
-export function ProfileSection({ me }: { me: Me }) {
+export function ProfileSection({
+  me,
+  hasPassword,
+  reauth,
+  mailConfigured,
+}: {
+  me: Me
+  hasPassword: boolean
+  reauth: ReauthProvider | null
+  mailConfigured: boolean
+}) {
   const router = useRouter()
   const [saved, setSaved] = React.useState(me.user.name)
   const [draft, setDraft] = React.useState(me.user.name)
@@ -103,20 +115,12 @@ export function ProfileSection({ me }: { me: Me }) {
           </p>
         ) : null}
       </form>
-      <FormField
-        label={m.auth_email()}
-        htmlFor="account-email"
-        hint={m.account_email_note()}
-      >
-        <Input
-          id="account-email"
-          name="email"
-          value={me.user.email}
-          readOnly
-          data-testid="account-email"
-          className="text-text-secondary"
-        />
-      </FormField>
+      <ProfileEmail
+        me={me}
+        hasPassword={hasPassword}
+        reauth={reauth}
+        mailConfigured={mailConfigured}
+      />
     </SettingsSection>
   )
 }

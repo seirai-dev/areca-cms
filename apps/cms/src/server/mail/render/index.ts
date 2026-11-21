@@ -5,6 +5,7 @@ import type { MailTemplate } from '../outbox.ts'
 
 import * as accountDeleted from './templates/account-deleted.ts'
 import * as agencyAdmin from './templates/agency-admin.ts'
+import * as emailChange from './templates/email-change.ts'
 import * as invitation from './templates/invitation.ts'
 import * as membership from './templates/membership.ts'
 import * as notification from './templates/notification.ts'
@@ -38,6 +39,9 @@ const RENDERERS: Record<MailTemplate, Renderer> = {
   password_reset: passwordReset.render,
   password_reset_sso: passwordResetSso.render,
   verify_email: verifyEmail.render,
+  email_change_verify: emailChange.renderVerify,
+  email_change_notice: emailChange.renderNotice,
+  email_changed: emailChange.renderChanged,
   password_changed: passwordChanged.render,
   two_factor_enabled: twoFactor.renderEnabled,
   two_factor_disabled: twoFactor.renderDisabled,

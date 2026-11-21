@@ -5,8 +5,10 @@ import {
   PASSWORD_MIN_LENGTH,
   canSaveName,
   deleteProofFor,
+  emailChangeOutcome,
   emailMatches,
   validatePasswordChange,
+  withoutEmailChangeParams,
 } from './account-logic'
 
 describe('validatePasswordChange', () => {
@@ -109,5 +111,41 @@ describe('emailMatches', () => {
   it('rejects a different address', () => {
     expect(emailMatches('jane@acme.co', 'jane@acme.com')).toBe(false)
     expect(emailMatches('', 'jane@acme.com')).toBe(false)
+  })
+})
+
+describe('emailChangeOutcome', () => {
+  it('reads a confirmed change', () => {
+    expect(emailChangeOutcome('?emailChange=done')).toEqual({
+      kind: 'changed',
+    })
+  })
+
+  it('names the failures the page explains, and calls the rest invalid', () => {
+    expect(emailChangeOutcome('?emailChange=done&error=TOKEN_EXPIRED')).toEqual(
+      { kind: 'failed', reason: 'expired' },
+    )
+    expect(emailChangeOutcome('?emailChange=done&error=EMAIL_TAKEN')).toEqual({
+      kind: 'failed',
+      reason: 'taken',
+    })
+    expect(
+      emailChangeOutcome('?emailChange=done&error=EMAIL_CHANGE_NOT_ALLOWED'),
+    ).toEqual({ kind: 'failed', reason: 'not_allowed' })
+    expect(emailChangeOutcome('?emailChange=done&error=INVALID_USER')).toEqual({
+      kind: 'failed',
+      reason: 'invalid',
+    })
+  })
+
+  it('ignores other pages and parameters', () => {
+    expect(emailChangeOutcome('')).toBeNull()
+    expect(emailChangeOutcome('?error=TOKEN_EXPIRED')).toBeNull()
+  })
+
+  it('drops only the link parameters', () => {
+    expect(
+      withoutEmailChangeParams({ emailChange: 'done', error: 'X', tab: 'a' }),
+    ).toEqual({ tab: 'a' })
   })
 })

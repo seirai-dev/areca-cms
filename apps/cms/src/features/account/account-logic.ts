@@ -61,3 +61,38 @@ export function deleteProofFor(account: {
 export function emailMatches(typed: string, email: string) {
   return typed.trim().toLowerCase() === email.trim().toLowerCase()
 }
+
+export type EmailChangeOutcome =
+  | { kind: 'changed' }
+  | { kind: 'failed'; reason: 'expired' | 'taken' | 'not_allowed' | 'invalid' }
+
+const EMAIL_CHANGE_FAILURES: Record<
+  string,
+  Extract<EmailChangeOutcome, { kind: 'failed' }>['reason']
+> = {
+  TOKEN_EXPIRED: 'expired',
+  EMAIL_TAKEN: 'taken',
+  EMAIL_CHANGE_NOT_ALLOWED: 'not_allowed',
+}
+
+/**
+ * The confirmation link returns to `/account?emailChange=done`, with
+ * `error=<code>` added when the change did not apply.
+ */
+export function emailChangeOutcome(
+  searchString: string,
+): EmailChangeOutcome | null {
+  const params = new URLSearchParams(searchString)
+  if (params.get('emailChange') !== 'done') return null
+  const error = params.get('error')
+  if (!error) return { kind: 'changed' }
+  return { kind: 'failed', reason: EMAIL_CHANGE_FAILURES[error] ?? 'invalid' }
+}
+
+/** The search object without the link's parameters, so a refresh is quiet. */
+export function withoutEmailChangeParams<T extends Record<string, unknown>>(
+  search: T,
+): Omit<T, 'emailChange' | 'error'> {
+  const { emailChange: _emailChange, error: _error, ...rest } = search
+  return rest
+}

@@ -5,6 +5,10 @@ import { db } from '#/db'
 import { organization, user } from '#/db/schema'
 import { m } from '#/paraglide/messages'
 import { getBranding } from '#/server/admin/branding'
+import {
+  cancelPendingEmailChange,
+  recordPendingEmailChange,
+} from '#/server/security/email-change'
 import { encryptSecret } from '#/server/security/secret-encryption'
 import { secretsEncryptionKey } from '#/server/security/secrets-key'
 
@@ -37,10 +41,13 @@ async function fixture(options: { verified: boolean }) {
       .returning()
   ).at(0)
   if (!org || !person) throw new Error('fixture failed')
+  // The email change confirmation renders only while a change is pending.
+  await recordPendingEmailChange(person.id, 'new@example.com')
   return {
     org,
     person,
     cleanup: async () => {
+      await cancelPendingEmailChange(person.id)
       await db.delete(user).where(eq(user.id, person.id))
       await db.delete(organization).where(eq(organization.id, org.id))
     },
@@ -68,6 +75,26 @@ describe.skipIf(!hasDb)('account email templates', () => {
             { userId: unverified.person.id, providers: ['Microsoft'] },
           ],
           ['verify_email', { userId: unverified.person.id }],
+          [
+            'email_change_verify',
+            { userId: unverified.person.id, newEmail: 'new@example.com' },
+          ],
+          [
+            'email_change_notice',
+            {
+              userId: unverified.person.id,
+              newEmail: 'new@example.com',
+              at: '2026-10-21T10:00:00Z',
+            },
+          ],
+          [
+            'email_changed',
+            {
+              userId: unverified.person.id,
+              newEmail: 'new@example.com',
+              at: '2026-10-21T10:00:00Z',
+            },
+          ],
           [
             'password_changed',
             { userId: unverified.person.id, at: '2026-10-21T10:00:00Z' },
@@ -115,6 +142,9 @@ describe.skipIf(!hasDb)('account email templates', () => {
     'password_reset',
     'password_reset_sso',
     'verify_email',
+    'email_change_verify',
+    'email_change_notice',
+    'email_changed',
     'password_changed',
     'two_factor_enabled',
     'two_factor_disabled',
@@ -126,6 +156,7 @@ describe.skipIf(!hasDb)('account email templates', () => {
       const params: Record<string, unknown> = {
         userId: fx.person.id,
         token: 'tok-abc',
+        newEmail: 'new@example.com',
         providers: ['Microsoft'],
         at: '2026-10-21T10:00:00Z',
         orgName: 'Northbound',
@@ -164,6 +195,45 @@ describe.skipIf(!hasDb)('account email templates', () => {
       )
       expect(mail.text).toContain(m.people_role_owner({}, { locale }))
       expect(mail.text).toContain(m.people_role_editor({}, { locale }))
+    } finally {
+      await fx.cleanup()
+    }
+  })
+
+  it('derives the email change link when it renders, only while pending', async () => {
+    const fx = await fixture({ verified: true })
+    const options = { locale: 'en' as const, brand: await brand() }
+    try {
+      const mail = await renderTemplate(
+        'email_change_verify',
+        { userId: fx.person.id, newEmail: 'New@Example.com' },
+        options,
+      )
+      const link = mail.html.match(/verify-email\?token=([^&"]+)/)?.[1]
+      expect(link).toBeTruthy()
+      expect(mail.html).toContain(
+        encodeURIComponent('/account?emailChange=done'),
+      )
+      expect(mail.secrets).toHaveLength(2)
+
+      // A newer request replaces it; a retry of the old mail sends no link.
+      await recordPendingEmailChange(fx.person.id, 'other@example.com')
+      await expect(
+        renderTemplate(
+          'email_change_verify',
+          { userId: fx.person.id, newEmail: 'new@example.com' },
+          options,
+        ),
+      ).rejects.toBeInstanceOf(MailRenderError)
+
+      await cancelPendingEmailChange(fx.person.id)
+      await expect(
+        renderTemplate(
+          'email_change_verify',
+          { userId: fx.person.id, newEmail: 'other@example.com' },
+          options,
+        ),
+      ).rejects.toBeInstanceOf(MailRenderError)
     } finally {
       await fx.cleanup()
     }

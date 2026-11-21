@@ -9,12 +9,10 @@ import { Input } from '#/components/ui/input'
 import { SettingsSection } from '#/components/ui/settings-section'
 import { Tag } from '#/components/ui/tag'
 import { PasswordInput } from '#/features/auth/password-input'
-import { providerRequest } from '#/features/auth/provider-request'
-import { authClient } from '#/lib/auth-client'
 import type { ReauthProvider } from '#/lib/reauth-provider'
-import { signOutClient } from '#/lib/sign-out'
 import { m } from '#/paraglide/messages'
 
+import { ReauthStep } from './reauth-step'
 import { useTwoFactor } from './use-two-factor'
 import type { PasswordAction } from './use-two-factor'
 
@@ -85,95 +83,6 @@ function PasswordStep({
         </Button>
       </div>
     </form>
-  )
-}
-
-/** Brand names are proper nouns, so they are not translated. */
-const PROVIDER_LABELS = {
-  github: () => m.auth_continue_with_github(),
-  google: () => m.auth_continue_with_google(),
-  discord: () => m.auth_continue_with_discord(),
-}
-
-/**
- * A provider-only account whose sign-in is too old to change two-factor.
- * Signing in again with the same provider starts a fresh session and comes
- * back to this page. Without a usable provider, sign out and back in.
- */
-function ReauthStep({
-  reauth,
-  onCancel,
-}: {
-  reauth: ReauthProvider | null
-  onCancel: () => void
-}) {
-  const [pending, setPending] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
-  const label =
-    reauth?.kind === 'sso'
-      ? m.auth_continue_with_microsoft()
-      : reauth
-        ? PROVIDER_LABELS[reauth.provider]()
-        : m.account_two_factor_reauth_sign_in()
-
-  async function signInAgain() {
-    setPending(true)
-    setError(null)
-    const back = `${window.location.pathname}#two-factor`
-    try {
-      if (!reauth) {
-        await signOutClient()
-        window.location.assign(`/login?redirect=${encodeURIComponent(back)}`)
-        return
-      }
-      await providerRequest(() =>
-        reauth.kind === 'sso'
-          ? authClient.signIn.sso({
-              providerId: reauth.providerId,
-              callbackURL: back,
-              errorCallbackURL: back,
-            })
-          : authClient.signIn.social({
-              provider: reauth.provider,
-              callbackURL: back,
-              errorCallbackURL: back,
-            }),
-      )
-    } catch (failure) {
-      setError(
-        failure instanceof Error && failure.message
-          ? failure.message
-          : m.auth_could_not_sign_in(),
-      )
-      setPending(false)
-    }
-  }
-
-  return (
-    <div className="grid gap-4" data-testid="two-factor-reauth">
-      <div className="grid gap-1">
-        <p className="text-headline text-text-primary">
-          {m.account_two_factor_reauth_title()}
-        </p>
-        <p className="text-callout text-text-secondary">
-          {m.account_two_factor_reauth_body()}
-        </p>
-      </div>
-      {error ? <InlineError>{error}</InlineError> : null}
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          loading={pending}
-          onClick={() => void signInAgain()}
-          data-testid="two-factor-reauth-sign-in"
-        >
-          {label}
-        </Button>
-        <Button type="button" variant="ghost" onClick={onCancel}>
-          {m.shared_cancel()}
-        </Button>
-      </div>
-    </div>
   )
 }
 
@@ -368,7 +277,13 @@ export function TwoFactorSection({
           {tf.error ? <InlineError>{tf.error}</InlineError> : null}
         </div>
       ) : mode.kind === 'reauth' ? (
-        <ReauthStep reauth={reauth} onCancel={tf.reset} />
+        <ReauthStep
+          reauth={reauth}
+          body={m.account_two_factor_reauth_body()}
+          returnHash="two-factor"
+          testId="two-factor-reauth"
+          onCancel={tf.reset}
+        />
       ) : mode.kind === 'password' ? (
         <PasswordStep
           action={mode.action}

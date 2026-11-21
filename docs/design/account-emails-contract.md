@@ -26,6 +26,9 @@ Every template reads the recipient from `params.userId` at render time
 | `password_reset` | `{ userId, encryptedToken? }` | `{ token }` | `${APP_URL}/reset-password?token=…` (valid 1 h, once) |
 | `password_reset_sso` | `{ userId, providers: string[] }` | — | `${APP_URL}/login` ("You sign in with Microsoft") |
 | `verify_email` | `{ userId }` | — | Better Auth verify link, derived at render (24 h) |
+| `email_change_verify` | `{ userId, newEmail }` | — | Sent to `newEmail`. Better Auth change link, derived at render from the pending change (24 h); `MailRenderError` once it was replaced or cancelled |
+| `email_change_notice` | `{ userId, newEmail, at }` | — | `${APP_URL}/forgot-password` (a reset cancels the pending change) |
+| `email_changed` | `{ userId, newEmail, at }` | — | none. Sent to the old address after the change |
 | `password_changed` | `{ userId, at }` | — | `${APP_URL}/forgot-password` ("Wasn't you? Reset it") |
 | `two_factor_enabled` | `{ userId, at }` | — | `${APP_URL}/account` |
 | `two_factor_disabled` | `{ userId, at }` | — | `${APP_URL}/account` |
@@ -57,6 +60,7 @@ Already verified → `MailRenderError`.
 ```ts
 export type AccountEmailKind =
   | 'password_reset' | 'password_reset_sso' | 'verify_email'
+  | 'email_change_notice' | 'email_changed'
   | 'password_changed' | 'two_factor_enabled' | 'two_factor_disabled'
   | 'membership_removed' | 'membership_role_changed'
 
@@ -66,6 +70,7 @@ export type AccountEmailKind =
 export async function sendAccountEmail(input: {
   kind: AccountEmailKind
   userId: string
+  to?: string             // overrides the account address (old address after a change)
   params?: Record<string, unknown>
   renderParams?: Record<string, unknown>
   immediate?: boolean
@@ -90,7 +95,12 @@ export async function sendVerificationEmail(userId: string): Promise<SendResult 
   `resetPasswordTokenExpiresIn: 3600`, `revokeSessionsOnPasswordReset: true`,
   `onPasswordReset: ({ user }) => sendAccountEmail({ kind: 'password_changed', ... })`.
 - `emailVerification.sendVerificationEmail` → `sendVerificationEmail(user.id)`;
-  `expiresIn: 86400`; `sendOnSignUp: false`.
+  `expiresIn: 86400`; `sendOnSignUp: false`. When the address it gets differs
+  from the stored one it is an email change: record the pending change and
+  `sendEmailChangeLink({ userId, newEmail })` instead.
+- `hooks.after` on `/change-email` success → `email_change_notice` to the
+  current address. Opening the link → `email_changed` to the old address
+  (see account-management.md, "Changing your own email address").
 - `hooks.after` on `/change-password` success → `password_changed`.
 - Two-factor on/off → `two_factor_enabled` / `two_factor_disabled`
   (detect the actual change of `user.two_factor_enabled`).

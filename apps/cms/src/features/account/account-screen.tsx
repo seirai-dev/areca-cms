@@ -29,6 +29,7 @@ export function AccountScreen({
   me,
   hasPassword,
   reauth,
+  mailConfigured,
   deletion,
 }: {
   me: Me
@@ -36,6 +37,8 @@ export function AccountScreen({
   hasPassword: boolean
   /** Provider a passwordless account signs in again with, if any. */
   reauth: ReauthProvider | null
+  /** Mail can be sent (the email change needs it). */
+  mailConfigured: boolean
   /** Null while an agency admin still has to enrol in two-factor. */
   deletion: MyAccountDeletion | null
 }) {
@@ -123,7 +126,12 @@ export function AccountScreen({
         </div>
       ) : null}
 
-      <ProfileSection me={me} />
+      <ProfileSection
+        me={me}
+        hasPassword={hasPassword}
+        reauth={reauth}
+        mailConfigured={mailConfigured}
+      />
 
       {hasPassword ? <PasswordSection /> : null}
 
