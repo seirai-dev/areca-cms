@@ -86,7 +86,7 @@
   "devDependencies": {
     "@types/node": "^24.19.2",
     "typescript": "^6.0.3",
-    "vitest": "^5.1.0",
+    "vitest": "^5.1.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "@types/react": "^19.3.0",
@@ -94,7 +94,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.9.0",
-    "@tanstack/markdown": "1.2.0"
+    "@tanstack/markdown": "1.2.1"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0"
