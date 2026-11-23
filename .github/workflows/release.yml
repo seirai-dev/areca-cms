@@ -158,7 +158,7 @@ jobs:
       # An App token, so CI runs on the release PR (GITHUB_TOKEN events don't trigger workflows).
       - if: steps.prepare.outputs.next != '' && steps.mode.outputs.mode == 'prepare'
         id: app
-        uses: actions/create-github-app-token@v3.3.0
+        uses: actions/create-github-app-token@v3.4.0
         with:
           client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
